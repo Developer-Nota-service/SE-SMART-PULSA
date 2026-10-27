@@ -12,6 +12,10 @@ Route::prefix('v1')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout']);
 
+    // Verifikasi akun lewat kode OTP WhatsApp (Fonnte).
+    Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
+    Route::post('resend-otp', [AuthController::class, 'resendOtp']);
+
     // Webhook pembayaran Midtrans: publik, diverifikasi lewat signature_key.
     Route::post('midtrans/notification', [MidtransController::class, 'notification']);
 

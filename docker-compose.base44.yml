@@ -77,6 +77,9 @@ services:
       PORT: "8000"
       # Halaman balik setelah pembayaran Midtrans di preview sandbox.
       MIDTRANS_FINISH_URL: https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/transaksi
+      # Bare pass-through: OtpService hanya menampilkan kode OTP di respons
+      # ketika nilainya "1" dan FONNTE_TOKEN belum diisi (sandbox).
+      BASE44_PREVIEW_MODE:
     depends_on:
       db:
         condition: service_healthy

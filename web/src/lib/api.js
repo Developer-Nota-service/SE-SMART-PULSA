@@ -26,11 +26,12 @@ function setToken(value) {
 }
 
 export class ApiError extends Error {
-  constructor(message, status, errors) {
+  constructor(message, status, errors, data) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.errors = errors || {}
+    this.data = data || null
   }
 }
 
@@ -96,6 +97,7 @@ async function request(path, { method = 'GET', body, headers } = {}) {
       payload?.message || 'Terjadi kesalahan pada server.',
       response.status,
       payload?.errors,
+      payload?.data,
     )
   }
 
@@ -108,17 +110,22 @@ export const api = {
     if (data?.token) setToken(data.token)
     return data
   },
-  register: async (payload) => {
-    // Laravel requires password_confirmation; the form only asks for one password.
+  // Registrasi tidak langsung membuat sesi: akun harus diverifikasi lewat OTP
+  // WhatsApp dulu, jadi responsnya hanya berisi data verifikasi.
+  register: (payload) =>
+    request('/register', {
+      method: 'POST',
+      // Laravel requires password_confirmation; the form only asks for one password.
+      body: { ...payload, password_confirmation: payload.password },
+    }),
+  verifyOtp: async (email, code) => {
     const data = normalizeUser(
-      await request('/register', {
-        method: 'POST',
-        body: { ...payload, password_confirmation: payload.password },
-      }),
+      await request('/verify-otp', { method: 'POST', body: { email, code } }),
     )
     if (data?.token) setToken(data.token)
     return data
   },
+  resendOtp: (email) => request('/resend-otp', { method: 'POST', body: { email } }),
   me: async () => normalizeUser(await request('/me')),
   logout: async () => {
     try {

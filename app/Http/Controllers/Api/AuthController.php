@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\AuthenticateSessionToken;
+use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,8 @@ class AuthController extends Controller
     private const MAX_FAILED_ATTEMPTS = 5;
 
     private const ATTEMPT_WINDOW_MINUTES = 15;
+
+    public function __construct(private OtpService $otp) {}
 
     public function register(Request $request): JsonResponse
     {
@@ -53,31 +56,66 @@ class AuthController extends Controller
             ], 422);
         }
 
-        if (DB::table('users')->where('email', $input['email'])->exists()) {
+        $existing = DB::table('users')->where('email', $input['email'])->first();
+
+        if ($existing !== null && $existing->email_verified_at !== null) {
             return response()->json([
                 'message' => 'Email sudah terdaftar.',
                 'errors' => ['email' => ['Email sudah terdaftar.']],
             ], 422);
         }
 
-        $id = DB::table('users')->insertGetId([
-            'name' => $input['name'],
-            'email' => $input['email'],
-            'phone' => $input['phone'],
-            'password_hash' => Hash::make($input['password']),
-            'role' => 'user',
-            'account_type' => $input['accountType'],
-            'balance' => 0,
-            'created_at' => now(),
-        ]);
+        // Satu nomor WhatsApp hanya boleh menjadi bukti verifikasi satu akun.
+        $phoneTaken = DB::table('users')
+            ->where('phone', $input['phone'])
+            ->where('email', '!=', $input['email'])
+            ->whereNotNull('phone_verified_at')
+            ->exists();
 
-        $user = DB::table('users')
-            ->select('id', 'name', 'email', 'phone', 'role', 'account_type', 'balance')
-            ->find($id);
+        if ($phoneTaken) {
+            return response()->json([
+                'message' => 'Data pendaftaran belum lengkap.',
+                'errors' => ['phone' => ['Nomor HP sudah dipakai akun lain.']],
+            ], 422);
+        }
 
-        $this->writeAudit($id, 'auth.register');
+        if ($existing !== null) {
+            // Pendaftaran sebelumnya belum terverifikasi: perbarui datanya lalu
+            // kirim kode baru, jangan buat akun kedua.
+            DB::table('users')->where('id', $existing->id)->update([
+                'name' => $input['name'],
+                'phone' => $input['phone'],
+                'password_hash' => Hash::make($input['password']),
+                'account_type' => $input['accountType'],
+            ]);
 
-        return $this->sessionResponse($user, 201);
+            $id = (int) $existing->id;
+            $this->writeAudit($id, 'auth.register.retry');
+        } else {
+            $id = DB::table('users')->insertGetId([
+                'name' => $input['name'],
+                'email' => $input['email'],
+                'phone' => $input['phone'],
+                'password_hash' => Hash::make($input['password']),
+                'role' => 'user',
+                'account_type' => $input['accountType'],
+                'balance' => 0,
+                'created_at' => now(),
+            ]);
+
+            $this->writeAudit($id, 'auth.register');
+        }
+
+        $user = DB::table('users')->find($id);
+        $verification = $this->otp->issue($user);
+
+        return response()->json([
+            'message' => $this->verificationMessage($verification),
+            'data' => [
+                'email' => $user->email,
+                'verification' => $verification,
+            ],
+        ], $existing === null ? 201 : 200);
     }
 
     public function login(Request $request): JsonResponse
@@ -123,9 +161,116 @@ class AuthController extends Controller
             ], 401);
         }
 
+        if ($user->email_verified_at === null || $user->phone_verified_at === null) {
+            $verification = $this->otp->issue($user);
+
+            return response()->json([
+                'message' => 'Akun belum terverifikasi. '.$this->verificationMessage($verification),
+                'errors' => ['verification' => ['Selesaikan verifikasi kode OTP WhatsApp untuk masuk.']],
+                'data' => [
+                    'needsVerification' => true,
+                    'email' => $user->email,
+                    'verification' => $verification,
+                ],
+            ], 403);
+        }
+
         $this->writeAudit($user->id, 'auth.login');
 
         return $this->sessionResponse($user);
+    }
+
+    /**
+     * Menyelesaikan verifikasi akun dengan kode OTP WhatsApp, lalu memberi sesi.
+     */
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        $email = strtolower(trim((string) $request->input('email')));
+        $code = preg_replace('/\D/', '', (string) $request->input('code')) ?? '';
+
+        $user = $email === '' ? null : DB::table('users')->where('email', $email)->first();
+
+        if ($user === null) {
+            return response()->json([
+                'message' => 'Email belum terdaftar.',
+                'errors' => ['email' => ['Email belum terdaftar.']],
+            ], 422);
+        }
+
+        if ($user->email_verified_at !== null && $user->phone_verified_at !== null) {
+            return response()->json([
+                'message' => 'Akun sudah terverifikasi. Silakan masuk dengan password.',
+                'errors' => ['code' => ['Akun sudah terverifikasi.']],
+            ], 422);
+        }
+
+        if (strlen($code) !== 6) {
+            return response()->json([
+                'message' => 'Kode OTP terdiri dari 6 angka.',
+                'errors' => ['code' => ['Kode OTP terdiri dari 6 angka.']],
+            ], 422);
+        }
+
+        $result = $this->otp->verify($user, $code);
+
+        if (! $result['ok']) {
+            return response()->json([
+                'message' => $result['message'],
+                'errors' => ['code' => [$result['message']]],
+            ], 422);
+        }
+
+        $this->writeAudit((int) $user->id, 'auth.verified');
+
+        return $this->sessionResponse(DB::table('users')->find($user->id));
+    }
+
+    /**
+     * Kirim ulang kode OTP ke WhatsApp nomor pengguna.
+     */
+    public function resendOtp(Request $request): JsonResponse
+    {
+        $email = strtolower(trim((string) $request->input('email')));
+        $user = $email === '' ? null : DB::table('users')->where('email', $email)->first();
+
+        if ($user === null) {
+            return response()->json([
+                'message' => 'Email belum terdaftar.',
+                'errors' => ['email' => ['Email belum terdaftar.']],
+            ], 422);
+        }
+
+        if ($user->email_verified_at !== null && $user->phone_verified_at !== null) {
+            return response()->json([
+                'message' => 'Akun sudah terverifikasi. Silakan masuk dengan password.',
+                'errors' => ['email' => ['Akun sudah terverifikasi.']],
+            ], 422);
+        }
+
+        $verification = $this->otp->issue($user);
+
+        return response()->json([
+            'message' => $this->verificationMessage($verification),
+            'data' => ['verification' => $verification],
+        ]);
+    }
+
+    /**
+     * @param  array{phoneMasked:string,status:string,resendAfterSeconds:int,devCode:string|null}  $verification
+     */
+    private function verificationMessage(array $verification): string
+    {
+        $phone = $verification['phoneMasked'];
+
+        if ($verification['devCode'] !== null) {
+            return "Mode sandbox (Fonnte belum terhubung): kode OTP untuk {$phone} adalah {$verification['devCode']}.";
+        }
+
+        return match ($verification['status']) {
+            'cooldown' => "Kode sebelumnya baru dikirim. Tunggu {$verification['resendAfterSeconds']} detik untuk minta kode baru.",
+            'not_configured' => 'Kode OTP gagal dikirim: gateway WhatsApp (Fonnte) belum dikonfigurasi.',
+            default => "Kode OTP dikirim ke WhatsApp {$phone}.",
+        };
     }
 
     public function me(Request $request): JsonResponse
@@ -207,6 +352,8 @@ class AuthController extends Controller
             'role' => $row->role,
             'accountType' => $row->account_type ?? 'reseller',
             'balance' => (int) $row->balance,
+            'emailVerified' => ($row->email_verified_at ?? null) !== null,
+            'phoneVerified' => ($row->phone_verified_at ?? null) !== null,
         ];
     }
 }

@@ -70,10 +70,19 @@ class DatabaseSeeder extends Seeder
                     'password_hash' => Hash::make($account['password']),
                     'role' => $account['role'],
                     'balance' => 0,
+                    'email_verified_at' => now(),
+                    'phone_verified_at' => now(),
                     'created_at' => now(),
                 ]);
             }
         }
+
+        // Akun demo & admin dianggap sudah terverifikasi supaya tetap bisa masuk
+        // tanpa OTP setelah verifikasi diaktifkan.
+        DB::table('users')
+            ->whereIn('email', array_column($accounts, 'email'))
+            ->whereNull('email_verified_at')
+            ->update(['email_verified_at' => now(), 'phone_verified_at' => now()]);
 
         return (int) DB::table('users')->where('email', 'demo@sesmartpulsa.id')->value('id');
     }

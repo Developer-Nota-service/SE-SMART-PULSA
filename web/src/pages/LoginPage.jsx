@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { ShieldIcon } from '../components/Icons.jsx'
+import OtpVerification from '../components/OtpVerification.jsx'
 
 const DEMO = { email: 'demo@sesmartpulsa.id', password: 'demo12345' }
 
@@ -20,6 +21,8 @@ export default function LoginPage() {
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Terisi setelah pendaftaran / login akun belum verifikasi: tampilkan langkah OTP.
+  const [verification, setVerification] = useState(null)
 
   if (user) return <Navigate to={location.state?.from || '/'} replace />
 
@@ -36,15 +39,29 @@ export default function LoginPage() {
     setErrors({})
     try {
       if (mode === 'login') {
-        await login(form.email.trim(), form.password)
+        try {
+          await login(form.email.trim(), form.password)
+        } catch (error) {
+          // Akun belum terverifikasi: server sudah mengirim kode OTP baru.
+          if (error.data?.verification) {
+            setVerification(error.data.verification)
+            setMessage(error.message)
+            return
+          }
+          throw error
+        }
       } else {
-        await register({
+        // Pendaftaran baru selesai setelah kode OTP WhatsApp diverifikasi.
+        const data = await register({
           name: form.name.trim(),
           email: form.email.trim(),
           phone: form.phone.replace(/\D/g, ''),
           password: form.password,
           accountType: form.accountType,
         })
+        setVerification(data.verification)
+        setMessage(data.message || '')
+        return
       }
       navigate(location.state?.from || '/', { replace: true })
     } catch (error) {
@@ -66,7 +83,18 @@ export default function LoginPage() {
       </div>
 
       <div className="auth__card">
-        <div className="segmented" role="tablist" aria-label="Pilih mode">
+        {verification ? (
+          <OtpVerification
+            email={form.email.trim()}
+            initial={verification}
+            onCancel={() => {
+              setVerification(null)
+              setMessage('')
+            }}
+          />
+        ) : (
+          <>
+            <div className="segmented" role="tablist" aria-label="Pilih mode">
           <button
             type="button"
             role="tab"
@@ -221,10 +249,12 @@ export default function LoginPage() {
             Isi akun demo
           </button>
         </div>
+          </>
+        )}
 
         <p className="auth__note">
-          <ShieldIcon /> Autentikasi tahap 1 memakai backend demo lokal. Verifikasi akhir tetap di
-          server.
+          <ShieldIcon /> Akun baru wajib diverifikasi lewat kode OTP WhatsApp sebelum bisa masuk.
+          Akun demo sudah terverifikasi.
         </p>
       </div>
     </div>

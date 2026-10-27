@@ -38,10 +38,20 @@ export function AuthProvider({ children }) {
     return data.user
   }, [])
 
-  const register = useCallback(async (payload) => {
-    const data = await api.register(payload)
+  // Registrasi berhenti di tahap verifikasi OTP; sesi baru dibuat setelah kode benar.
+  const register = useCallback(async (payload) => api.register(payload), [])
+
+  const verifyOtp = useCallback(async (email, code) => {
+    await api.verifyOtp(email, code)
+    const data = await api.me()
     setUser(data.user)
+    setLastLoginAt(data.lastLoginAt ?? null)
     return data.user
+  }, [])
+
+  const resendOtp = useCallback(async (email) => {
+    const data = await api.resendOtp(email)
+    return data.verification
   }, [])
 
   const logout = useCallback(async () => {
@@ -58,8 +68,18 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, lastLoginAt, login, register, logout, refresh, updateBalance }),
-    [user, lastLoginAt, login, register, logout, refresh, updateBalance],
+    () => ({
+      user,
+      lastLoginAt,
+      login,
+      register,
+      verifyOtp,
+      resendOtp,
+      logout,
+      refresh,
+      updateBalance,
+    }),
+    [user, lastLoginAt, login, register, verifyOtp, resendOtp, logout, refresh, updateBalance],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
