@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\AuthenticateSessionToken;
 use App\Services\OtpService;
+use App\Support\LoginContext;
 use App\Support\OtpMessage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -179,7 +180,7 @@ class AuthController extends Controller
             ], 403);
         }
 
-        $this->writeAudit($user->id, 'auth.login');
+        $this->writeAudit($user->id, 'auth.login', LoginContext::capture($request));
 
         return $this->sessionResponse($user);
     }
@@ -409,12 +410,24 @@ class AuthController extends Controller
             ->where('user_id', $user->id)
             ->where('action', 'auth.login')
             ->orderByDesc('created_at')
-            ->value('created_at');
+            ->first(['created_at', 'detail']);
+
+        $detail = $lastLogin && is_string($lastLogin->detail)
+            ? json_decode($lastLogin->detail, true)
+            : [];
+        $detail = is_array($detail) ? $detail : [];
+        $at = $lastLogin ? \Illuminate\Support\Carbon::parse($lastLogin->created_at)->toIso8601String() : null;
 
         return response()->json([
             'data' => [
                 'user' => self::publicUser($user),
-                'lastLoginAt' => $lastLogin ? \Illuminate\Support\Carbon::parse($lastLogin)->toIso8601String() : null,
+                'lastLoginAt' => $at,
+                'lastLogin' => $at === null ? null : [
+                    'at' => $at,
+                    'ip' => $detail['ip'] ?? null,
+                    'location' => $detail['location'] ?? null,
+                    'device' => $detail['device'] ?? null,
+                ],
             ],
         ]);
     }

@@ -32,8 +32,15 @@ function verificationBadge(verified) {
 }
 
 export default function ProfilePage() {
-  const { user, lastLoginAt, logout } = useAuth()
+  const { user, lastLoginAt, lastLogin, logout } = useAuth()
   const navigate = useNavigate()
+  const device = lastLogin?.device
+  const deviceLabel =
+    device?.label && device.label !== device.type
+      ? [device.label, device.type].filter(Boolean).join(' · ')
+      : (device?.label ?? '')
+  const systemLabel = [device?.os, device?.browser].filter(Boolean).join(' · ')
+  const hasLoginDetail = Boolean(lastLogin && (lastLogin.ip || lastLogin.location || device))
   const [signingOut, setSigningOut] = useState(false)
   const [editingContact, setEditingContact] = useState(false)
 
@@ -123,21 +130,47 @@ export default function ProfilePage() {
           </div>
 
           <div className="summary__grid">
-            <div className="summary__tile">
+            <div className="summary__tile summary__tile--wide">
               <span className="summary__label">
                 <ClockIcon /> Terakhir masuk
               </span>
               <span className="summary__value">
-                {lastLoginAt ? dateTime(lastLoginAt) : '—'}
+                {lastLogin?.at || lastLoginAt ? dateTime(lastLogin?.at || lastLoginAt) : '—'}
               </span>
+
+              {hasLoginDetail ? (
+                <dl className="summary__facts">
+                  <div className="summary__fact">
+                    <dt>Lokasi</dt>
+                    <dd>{lastLogin?.location || 'Tidak terlacak'}</dd>
+                  </div>
+                  <div className="summary__fact">
+                    <dt>Perangkat</dt>
+                    <dd>{deviceLabel || 'Tidak diketahui'}</dd>
+                  </div>
+                  <div className="summary__fact">
+                    <dt>Sistem</dt>
+                    <dd>{systemLabel || 'Tidak diketahui'}</dd>
+                  </div>
+                  <div className="summary__fact">
+                    <dt>Alamat IP</dt>
+                    <dd>{lastLogin?.ip || '—'}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="summary__note">
+                  Detail perangkat &amp; lokasi mulai tercatat pada login berikutnya.
+                </p>
+              )}
             </div>
+
             <div className="summary__tile">
               <span className="summary__label">
                 <ClockIcon /> Jam layanan
               </span>
               <span className="summary__value">{support.hours}</span>
             </div>
-            <div className="summary__tile summary__tile--wide">
+            <div className="summary__tile">
               <span className="summary__label">
                 <HelpIcon /> Dukungan
               </span>

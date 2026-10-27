@@ -953,6 +953,43 @@ select.input {
   color: var(--ink);
 }
 
+.summary__facts {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  border-top: 1px dashed #dbe4f0;
+  padding-top: 8px;
+}
+
+.summary__fact {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.summary__fact dt {
+  flex: none;
+  width: 62px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.summary__fact dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.summary__note {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 /* ---------- sheet ---------- */
 .overlay {
   position: fixed;

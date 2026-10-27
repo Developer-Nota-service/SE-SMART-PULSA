@@ -66,8 +66,15 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body.
   Akun yang belum terverifikasi dijawab **403** `{ data: { needsVerification: true,
   email, verification } }` dan kode OTP baru dikirim.
-- `GET /me` → `{ user, lastLoginAt }` (`user.emailVerified`, `user.phoneVerified`,
-  `user.avatarUrl`) · `POST /logout`
+- `GET /me` → `{ user, lastLoginAt, lastLogin }` (`user.emailVerified`,
+  `user.phoneVerified`, `user.avatarUrl`) · `POST /logout`
+  `lastLogin` = `{ at, ip, location, device: { label, type, os, browser } }` dari
+  login terakhir (`app/Support/LoginContext.php`). Perangkat diurai dari
+  User-Agent; lokasi diperkirakan dari IP publik lewat ipwho.is (null bila gagal,
+  `"Jaringan lokal"` untuk IP privat). IP klien diambil dari `X-Forwarded-For` /
+  `X-Real-IP` dulu — proxy Vite memakai `xfwd: true` — jadi pastikan proxy
+  produksi ikut mengirim header itu. Data ini hanya informasi untuk pengguna,
+  bukan dasar keputusan keamanan.
 - `PATCH /profile` `{name}` — ubah nama tampilan (2-60 karakter).
 - `POST /profile/contact` `{email,phone}` → 200 `{ pending }`: setiap kontak yang
   berubah mendapat kode sendiri — email baru lewat **email** (`channel: email`),
