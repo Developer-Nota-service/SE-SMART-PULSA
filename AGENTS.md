@@ -96,6 +96,15 @@ kosongkan `SESSION_DOMAIN` di Laravel atau strip atribut itu di proxy. Sanctum S
 juga butuh `/sanctum/csrf-cookie` + header `X-XSRF-TOKEN`, yang belum ada di
 `web/src/lib/api.js`.
 
+## Produksi satu domain
+
+`Dockerfile` + `package.json` root membangun `web/dist` lalu menjalankan satu proses
+Node (`api/src/server.js`) yang menyajikan React di `/` (fallback SPA) dan API di
+`/api/v1`. Di dev hal ini tidak aktif karena `web/dist` tidak ada di dalam mount
+`api/` — Vite tetap yang melayani port 3000. Deploy: lihat
+`docs/DEPLOY-SATU-DOMAIN.md` dan `.env.production.example` (`DATABASE_URL`,
+`COOKIE_SECURE=1`). Seed demo idempotent, aman dijalankan setiap boot.
+
 ## Verifikasi
 
 ```bash

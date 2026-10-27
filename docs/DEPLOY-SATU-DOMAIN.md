@@ -1,88 +1,67 @@
-# Deploy satu domain (Laravel + React)
+# Deploy satu domain (React + API dalam satu app)
 
-Tujuan: satu repo, satu deploy, satu domain.
-`https://domainmu.com/` → tampilan React, `https://domainmu.com/api/v1/...` → Laravel.
-Frontend memanggil API lewat path relatif `/api/v1`, jadi tidak perlu CORS.
+Satu repo = satu app = satu domain. Tidak butuh Laravel maupun Termux.
+Satu proses Node menyajikan UI React dan API:
 
-Struktur akhir yang dituju:
+- `https://domainmu.com/` … `/transaksi` → React (build `web/dist`)
+- `https://domainmu.com/api/v1/...` → API Express (`api/`)
+- Database: Postgres milik platform; schema + seed demo dibuat otomatis saat start
+  (`api/src/setup-db.js`, idempotent — aman dijalankan setiap boot).
 
-```
-/                      # Laravel di root repo (artisan, app/, routes/, config/, public/)
-├── web/               # source React (Vite)
-├── public/app/        # hasil build React (dibuat saat build, tidak di-commit)
-└── api/               # API demo Express (tidak dipakai di produksi)
-```
-
-## 1. Unggah Laravel dari Termux ke branch baru
-
-Dari folder proyek Laravel di HP:
-
-```bash
-cd ~/se-smart-pulsa
-git checkout -b laravel-app
-```
-
-Pastikan file besar dan rahasia **tidak** ikut ter-commit:
-
-```bash
-git status --porcelain | grep -E 'vendor/|node_modules/|^.. \.env$|storage/'
-```
-
-Kalau ada yang muncul, tambahkan ke `.gitignore` lalu `git rm -r --cached <path>`.
-`vendor/`, `node_modules/`, `.env`, `storage/*.log`, dan `public/storage` tidak boleh
-masuk repo — `.env` berisi `APP_KEY` dan password database.
-
-```bash
-git add -A
-git commit -m "feat(backend): import Laravel app"
-git push -u origin laravel-app
-```
-
-## 2. Penggabungan (dikerjakan di repo ini)
-
-Setelah branch `laravel-app` ada di GitHub:
-
-1. Merge branch tersebut ke branch kerja, lalu susun ulang: file Laravel ke root repo
-   (`artisan`, `app/`, `bootstrap/`, `config/`, `database/`, `public/`, `resources/`,
-   `routes/`, `composer.json`, `composer.lock`); `web/` tetap.
-2. Tambahkan route fallback SPA di `routes/web.php`, setelah route API terdaftar:
-
-   ```php
-   Route::get('/{any?}', fn () => response()->file(public_path('app/index.html')))
-       ->where('any', '^(?!api).*$');
-   ```
-
-3. Build React → `public/app/`, aset ke `public/assets/`.
-4. Tambahkan `Dockerfile`/start command satu service + `.env.production.example`.
-
-## 3. Setelan di platform deploy
+## 1. Deploy lewat platform (pilih Node.js)
 
 | Setelan | Nilai |
 | --- | --- |
-| Framework | Laravel |
+| Framework | **Node.js** (bukan Laravel/React/Static) |
 | Root directory | `/` |
-| Build command | `composer install --no-dev --optimize-autoloader && npm --prefix web ci && npm --prefix web run build && mkdir -p public/app && cp -r web/dist/* public/app/ && cp -r public/app/assets public/assets` |
-| Start command | `php artisan migrate --force && php artisan config:cache && php artisan serve --host 0.0.0.0 --port $PORT` |
+| Build command | `npm run build` |
+| Start command | `npm start` |
 
-Environment variable wajib:
+`npm run build` (= `npm --prefix web ci && npm --prefix web run build && npm --prefix api ci --omit=dev`)
+dan `npm start` (= `npm --prefix api run setup && npm --prefix api start`) ada di
+`package.json` root.
+
+Environment variable:
 
 ```
-APP_NAME="SE SMART PULSA"
-APP_ENV=production
-APP_DEBUG=false
-APP_KEY=<php artisan key:generate --show>
-APP_URL=https://domainmu.com
-DB_CONNECTION=pgsql        # atau mysql, sesuai database platform
-DB_HOST=... DB_PORT=... DB_DATABASE=... DB_USERNAME=... DB_PASSWORD=...
+DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DBNAME
+COOKIE_SECURE=1
+PORT=8000          # biasanya diisi platform
 ```
 
-Jangan pakai SQLite di platform: file database-nya hilang setiap deploy.
+Tambahkan database Postgres dari dashboard platform, lalu salin `DATABASE_URL`-nya.
+Jangan pakai SQLite — file-nya hilang setiap deploy.
 
-## 4. Cek setelah deploy
+Catatan: `PORT` harus dipakai apa adanya (server membaca `process.env.PORT`);
+jika platform meneruskan port lewat argumen (`$PORT`), start command menjadi
+`npm --prefix api run setup && node api/src/server.js`.
 
-1. `https://domainmu.com/api/v1/me` → `{"message":"Unauthenticated."}` = API hidup.
-2. Buka `/` → halaman login tampil (bukan 404 atau daftar file).
-3. Daftar akun → masuk → nama tampil di kartu saldo.
-4. Endpoint yang **belum ada** di Laravel: `/products`, `/transactions`,
-   `/balance/entries`. Selama belum dibuat, Beranda menampilkan pesan gagal memuat
-   produk dan riwayat kosong.
+## 2. Deploy lewat Docker (VPS/Railway/Fly, dsb.)
+
+`Dockerfile` di root membangun React lalu menjalankannya dari satu proses Node:
+
+```bash
+docker build -t se-smart-pulsa .
+docker run -d -p 8000:8000 \
+  -e DATABASE_URL='postgres://USER:PASSWORD@HOST:5432/DBNAME' \
+  -e COOKIE_SECURE=1 \
+  se-smart-pulsa
+```
+
+Letakkan di belakang reverse proxy HTTPS (Caddy/nginx/Traefik) yang meneruskan
+`domainmu.com` → `127.0.0.1:8000`.
+
+## 3. Cek setelah deploy
+
+1. `https://domainmu.com/api/v1/me` → `{"message":"Sesi tidak ditemukan..."}` (401) = API hidup.
+2. `https://domainmu.com/` → halaman login tampil; `https://domainmu.com/transaksi`
+   juga tampil (bukan 404) berkat fallback SPA.
+3. Login akun demo `demo@sesmartpulsa.id` / `demo12345` → Beranda menampilkan saldo
+   Rp186.900 dan 95 produk demo.
+4. Daftar akun baru → masuk → saldo Rp0 tampil.
+
+## 4. Kalau nanti tetap mau pindah ke Laravel
+
+Kontrak API-nya sudah ditulis di `AGENTS.md`; port endpoint dari `api/src/routes/`
+ke Laravel, arahkan `web` ke backend itu (base URL `/api/v1`), dan setelan deploy
+tinggal mengikuti framework Laravel.

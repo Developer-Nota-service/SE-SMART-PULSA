@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import authRoutes from './routes/auth.routes.js'
@@ -14,6 +17,20 @@ app.use('/api/v1', authRoutes)
 app.use('/api/v1', catalogRoutes)
 app.use('/api/v1', walletRoutes)
 app.use('/api/v1', transactionRoutes)
+
+// Satu domain di produksi: Node menyajikan hasil build React dari web/dist
+// (dibuat saat build deploy). Di dev folder ini tidak dipakai — Vite yang melayani.
+const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url))
+
+if (existsSync(webDist)) {
+  app.use(express.static(webDist, { index: false }))
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ message: 'Endpoint tidak ditemukan.' })
+    }
+    return res.sendFile(path.join(webDist, 'index.html'))
+  })
+}
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint tidak ditemukan.' })
