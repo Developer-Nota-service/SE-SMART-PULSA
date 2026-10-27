@@ -17,12 +17,26 @@ use Illuminate\Support\Facades\Log;
  * di dalam `data`) dan status sukses (`SUCCESS`/`VERIFIED`/`OK`). Format
  * respons Flip (`{"status":"SUCCESS","account_holder":"…"}`) langsung dikenali.
  *
- * Bila penyedia belum dikonfigurasi, hasilnya `configured: false` — pengguna
+ * Bila penyedia belum dikonfigurasi — atau menolak/mengganggu permintaan kita
+ * (halaman HTML, 401/403/5xx, timeout) — hasilnya `configured: false`: pengguna
  * tetap bisa mengajukan penarikan dengan nama yang diketik sendiri, dan
- * catatannya ditandai belum terverifikasi untuk diperiksa manual.
+ * catatannya ditandai belum terverifikasi untuk diperiksa manual. Hanya
+ * penolakan rekening yang jelas dari penyedia yang memblokir pengajuan.
  */
 class BankAccountVerifier
 {
+    /**
+     * Status penyedia yang berarti nomor rekeningnya memang tidak bisa dipakai.
+     * Status lain (401/403/5xx, HTML blokir) dianggap gangguan penyedia.
+     */
+    private const REJECTION_STATUSES = [
+        'INVALID_ACCOUNT_NUMBER',
+        'BLACK_LISTED',
+        'SUSPECTED_ACCOUNT',
+        'CLOSED',
+        'TOP_UP_LIMIT_EXCEEDED',
+    ];
+
     public function isConfigured(): bool
     {
         return trim((string) config('services.bank_inquiry.url')) !== '';
@@ -38,10 +52,19 @@ class BankAccountVerifier
         }
 
         $cacheKey = "bank-inquiry:{$channelType}:{$providerCode}:{$accountNumber}";
+        $cached = Cache::get($cacheKey);
 
-        return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($channelType, $providerCode, $accountNumber) {
-            return $this->call($channelType, $providerCode, $accountNumber);
-        });
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $result = $this->call($channelType, $providerCode, $accountNumber);
+
+        // Jawaban pasti (rekening valid/ditolak) disimpan 10 menit; gangguan
+        // penyedia hanya 1 menit supaya pengecekan cepat pulih setelah pulih.
+        Cache::put($cacheKey, $result, $result['configured'] ? now()->addMinutes(10) : now()->addMinute());
+
+        return $result;
     }
 
     /**
@@ -91,12 +114,26 @@ class BankAccountVerifier
         } catch (\Throwable $error) {
             Log::warning('Cek nama rekening gagal', ['provider' => $providerCode, 'error' => $error->getMessage()]);
 
-            return $this->result(false, 'unavailable', null, 'Pengecekan nama rekening sedang tidak tersedia. Coba lagi.');
+            return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
 
-        $payload = $response->json() ?? [];
+        $decoded = $response->json();
+        $payload = is_array($decoded) ? $decoded : [];
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
         $status = strtoupper((string) ($payload['status'] ?? $data['status'] ?? ''));
+
+        // Respons HTML/blokir atau kode error yang tidak menyebut status rekening
+        // berarti penyedia yang menolak/mengganggu, bukan nomor rekeningnya salah.
+        // Pengajuan tetap boleh memakai nama yang diketik pengguna.
+        if (! is_array($decoded)
+            || (! $response->successful() && ! in_array($status, self::REJECTION_STATUSES, true))) {
+            Log::warning('Cek nama rekening tidak tersedia', [
+                'status' => $response->status(),
+                'body' => mb_substr($response->body(), 0, 300),
+            ]);
+
+            return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
+        }
         $holder = $payload['account_holder'] ?? $payload['accountHolder'] ?? $data['account_holder']
             ?? $data['accountHolder'] ?? $data['name'] ?? $payload['name'] ?? null;
         $holder = is_string($holder) ? trim($holder) : null;
@@ -127,6 +164,24 @@ class BankAccountVerifier
         };
 
         return $this->result(false, $status === '' ? 'unknown' : strtolower($status), $holder, $message);
+    }
+
+    /**
+     * Penyedia belum/tidak bisa menjawab. Hasilnya `configured: false` supaya
+     * pengajuan penarikan tetap bisa dikirim dengan nama yang diketik pengguna
+     * (dicatat `unverified` untuk diperiksa manual).
+     *
+     * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}
+     */
+    private function unavailable(string $message): array
+    {
+        return [
+            'configured' => false,
+            'verified' => false,
+            'status' => 'unavailable',
+            'accountHolder' => null,
+            'message' => $message,
+        ];
     }
 
     /**

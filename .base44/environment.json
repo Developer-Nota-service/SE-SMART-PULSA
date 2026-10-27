@@ -14,6 +14,16 @@
       "requiredAtBoot": false
     },
     {
+      "name": "BANK_INQUIRY_URL",
+      "description": "URL endpoint cek nama pemilik rekening/e-wallet dari penyedia pengecekan (mis. Flip Big Flip, Xendit, iPaymu). Dipakai POST /withdrawals/inquiry dan validasi ulang di store(). Kontrak: POST JSON {channel_type, provider_code, account_number}, header Authorization: Bearer <BANK_INQUIRY_KEY>, respons memuat account_holder. Tanpa nilai, form penarikan jatuh ke input nama manual.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "BANK_INQUIRY_KEY",
+      "description": "Token Bearer untuk endpoint pengecekan rekening di BANK_INQUIRY_URL (dashboard penyedia pengecekan).",
+      "requiredAtBoot": false
+    },
+    {
       "name": "FONNTE_TOKEN",
       "description": "Token device Fonnte (fonnte.com > Device > Token) untuk mengirim kode OTP WhatsApp saat pendaftaran dan verifikasi akun. Tanpa token, kode OTP tidak terkirim dan akun baru tidak bisa menyelesaikan verifikasi.",
       "requiredAtBoot": false

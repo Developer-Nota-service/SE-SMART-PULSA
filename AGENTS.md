@@ -191,6 +191,26 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 `/run/base44/app.env` (nilai asli menang). Placeholder sengaja ditolak saat
 `APP_ENV=production`, jadi produksi wajib mengisi Server Key asli.
 
+## Penarikan saldo (withdraw)
+
+`GET /withdrawals/channels` · `POST /withdrawals/inquiry`
+`{channelType,providerCode,accountNumber}` · `GET /withdrawals` ·
+`POST /withdrawals` `{amount,channelType,providerCode,accountNumber,accountHolder}`.
+
+- Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
+- Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
+  masih diproses menahan perubahan tipe akun ke pribadi.
+- Cek nama pemilik rekening otomatis lewat `app/Services/BankAccountVerifier.php`
+  (`BANK_INQUIRY_URL` + `BANK_INQUIRY_KEY`): POST JSON + Bearer token, respons
+  memuat `account_holder`. Jawaban pasti di-cache 10 menit, gangguan 1 menit.
+- Bila penyedia belum diisi, membalas HTML/401/403/5xx, atau timeout, hasilnya
+  `configured: false` (`verificationAvailable: false`): frontend menampilkan input
+  nama manual dan pengajuan tetap jalan dengan tanda `unverified`. Hanya penolakan
+  rekening yang jelas (`INVALID_ACCOUNT_NUMBER`, `CLOSED`, `BLACK_LISTED`,
+  `SUSPECTED_ACCOUNT`, `TOP_UP_LIMIT_EXCEEDED`) yang memblokir pengajuan — jangan
+  mengubahnya menjadi "blokir saat penyedia error", satu kunci salah akan
+  mematikan seluruh penarikan.
+
 ## Invariant keamanan (jangan dilanggar)
 
 - Harga dan saldo ditentukan server. Charge berjalan atomik di SQL
