@@ -24,9 +24,9 @@ Repo ini adalah **aplikasi Laravel** di root. React ada di `web/` dan di-build k
 `npm run build` di root hanya membangun React ke `public/app` (lihat `package.json`).
 `--seed` idempotent, jadi aman dijalankan setiap deploy.
 
-> **Catatan branch:** auto-deploy mengikuti branch `main`. Branch itu masih berisi
-> backend Node.js lama (`api/`). Pilih/merge branch yang berisi kode Laravel dulu,
-> kalau tidak, hosting akan tetap menjalankan aplikasi Node lama.
+> **Catatan branch:** auto-deploy mengikuti branch `main`, dan `main` **sudah**
+> berisi kode Laravel (root repo: `artisan`, `app/`, `routes/api.php`) — backend
+> Node lama (`api/`) sudah tidak ada, jadi tidak perlu merge branch lagi.
 
 ### Environment wajib
 
@@ -50,7 +50,12 @@ SESSION_DRIVER=file                         # tabel `sessions` dipakai untuk tok
 CACHE_STORE=file
 QUEUE_CONNECTION=sync
 COOKIE_SECURE=1
+TRUSTED_PROXIES=*                           # TLS diterminasi proxy hosting
 ```
+
+Catatan: `APP_URL` harus domain final (dengan `https://`). Redirect `/` → `/app`
+mengikuti skema request berkat `TRUSTED_PROXIES`, jadi jangan hapus baris itu
+selama TLS masih diterminasi di proxy hosting.
 
 Alternatif: isi `DATABASE_URL` saja (format `postgres://USER:PASSWORD@HOST:5432/DB`).
 
@@ -73,6 +78,29 @@ docker run -d -p 80:80 \
 ```
 
 Cek log container: harus muncul `INFO Running migrations.` lalu Apache menyala.
+
+## Pasang domain (DNS)
+
+Repo tidak menyimpan domain — pengikatan domain ada di dashboard hosting + DNS,
+jadi langkah ini butuh akses akun pemilik:
+
+1. DockHosting → project `se-smart-pulsa` → tab **Domains**, tambahkan domain
+   (mis. `sesmartpulsa.id`) dan catat target (IP/hostname) yang ditampilkan.
+2. Di panel DNS registrar:
+
+   | Tipe | Nama | Nilai |
+   | --- | --- | --- |
+   | `A` | `@` | IP target dari hosting |
+   | `CNAME` | `www` | hostname project di hosting |
+
+3. Cek propagasi: `dig +short sesmartpulsa.id` → harus IP hosting. Lalu aktifkan
+   **SSL/HTTPS** di tab Domains (Let's Encrypt) sampai `https://` valid —
+   `COOKIE_SECURE=1` butuh HTTPS atau cookie login tidak terkirim.
+4. Set `APP_URL=https://sesmartpulsa.id` di tab **Environment**, redeploy, lalu
+   jalankan checklist di bawah.
+
+Kalau domain sudah terpasang di hosting, cukup pastikan `APP_URL` sama persis
+dengan domain tersebut (skema + host, tanpa `/` di akhir).
 
 ## Cek setelah deploy
 
