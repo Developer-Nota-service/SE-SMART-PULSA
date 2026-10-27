@@ -133,9 +133,13 @@ class BankAccountVerifier
             return $this->result(true, 'verified', $holder, null);
         }
 
-        // URL/kunci belum benar atau layanan bermasalah: bukan bukti nomor
-        // rekening salah, jadi jangan memblokir pengajuan.
-        if (! $response->successful()) {
+        // 404/422 berisi JSON `success: false` tetap berarti penyedia menjawab:
+        // rekening ditolak. 401/403/5xx atau balasan bukan JSON berarti URL/kunci
+        // belum benar atau layanan bermasalah — bukan bukti nomor rekening salah,
+        // jadi jangan memblokir pengajuan.
+        $answered = $payload !== [] && (($payload['success'] ?? null) === false || self::extractMessage($payload) !== '');
+
+        if (! $response->successful() && ! (in_array($response->status(), [404, 422], true) && $answered)) {
             Log::warning('Cek rekening CekRek tidak tersedia', [
                 'status' => $response->status(),
                 'body' => mb_substr($response->body(), 0, 300),
@@ -145,6 +149,11 @@ class BankAccountVerifier
         }
 
         $message = self::extractMessage($payload);
+
+        // Pesan penyedia berbahasa Inggris; tampilkan versi Indonesia di form.
+        if (preg_match('/^(ACCOUNT\s+)?NOT\s+(FOUND|REGISTERED)$/i', $message) === 1) {
+            $message = 'Nomor rekening tidak ditemukan. Periksa kembali nomor rekening Anda.';
+        }
 
         if ($message === '') {
             $message = 'Nomor rekening tidak dapat diverifikasi. Periksa kembali nomor rekening Anda.';

@@ -214,8 +214,8 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Bila penyedia tidak menjawab (DNS gagal, timeout, 401/403/5xx, bukan JSON),
   hasilnya `configured: false` (`verificationAvailable: false`): frontend
   menampilkan input nama manual dan pengajuan tetap jalan dengan tanda `unverified`.
-  Penolakan rekening dari penyedia (2xx tanpa nama, dengan pesan) memblokir
-  pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu URL
+  Penolakan rekening dari penyedia (2xx tanpa nama, atau 404/422 dengan
+  `success: false`) memblokir pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu URL
   atau token salah akan mematikan seluruh penarikan.
 
 ## Invariant keamanan (jangan dilanggar)
