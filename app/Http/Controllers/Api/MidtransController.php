@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\MidtransPaymentStatus;
 use App\Services\MidtransService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,8 +12,10 @@ use Illuminate\Support\Facades\Log;
 
 class MidtransController extends Controller
 {
-    public function __construct(private readonly MidtransService $midtrans)
-    {
+    public function __construct(
+        private readonly MidtransService $midtrans,
+        private readonly MidtransPaymentStatus $status,
+    ) {
     }
 
     /**
@@ -39,107 +42,124 @@ class MidtransController extends Controller
             return response()->json(['message' => 'Signature notifikasi tidak valid.'], 401);
         }
 
-        $paid = $transactionStatus === 'settlement'
-            || ($transactionStatus === 'capture' && $fraudStatus === 'accept');
+        $result = $this->status->apply($orderId, $transactionStatus, $fraudStatus, $grossAmount);
 
-        $deposit = DB::table('deposits')->where('order_number', $orderId)->first();
+        return match ($result) {
+            MidtransPaymentStatus::OK => response()->json(['message' => 'ok']),
+            MidtransPaymentStatus::AMOUNT_MISMATCH => response()->json(['message' => 'Nominal notifikasi tidak sesuai.'], 422),
+            default => response()->json(['message' => 'Pesanan tidak ditemukan.'], 404),
+        };
+    }
 
-        if ($deposit) {
-            if (! $this->amountMatches($grossAmount, (int) $deposit->amount)) {
-                return response()->json(['message' => 'Nominal notifikasi tidak sesuai.'], 422);
-            }
-
-            $this->applyDepositStatus($deposit, $transactionStatus, $paid);
-
-            return response()->json(['message' => 'ok']);
+    /**
+     * Menyelaraskan pesanan yang masih pending dengan status resmi Midtrans.
+     *
+     * Dipakai halaman Transaksi/Saldo saat dibuka (termasuk setelah kembali dari
+     * halaman pembayaran Midtrans) sebagai cadangan bila notifikasi webhook
+     * tidak sampai ke server. Status diambil langsung dari API Midtrans dengan
+     * Server Key, dan signature pada responsnya wajib valid — sama seperti
+     * webhook, saldo tidak pernah bertambah dari permintaan browser sendiri.
+     */
+    public function sync(Request $request): JsonResponse
+    {
+        if (! $this->midtrans->isConfigured()) {
+            return response()->json(['message' => 'Pembayaran Midtrans belum dikonfigurasi.'], 503);
         }
 
-        $transaction = DB::table('transactions')->where('order_number', $orderId)->first();
+        $user = $request->attributes->get('authUser');
+        $orderNumber = trim((string) $request->input('orderNumber', ''));
 
-        if ($transaction) {
-            if (! $this->amountMatches($grossAmount, (int) $transaction->amount)) {
-                return response()->json(['message' => 'Nominal notifikasi tidak sesuai.'], 422);
+        $orders = $this->pendingOrders((int) $user->id, $orderNumber);
+        $updated = 0;
+
+        foreach ($orders as $order) {
+            $status = $this->midtrans->fetchStatus($order['order_number']);
+
+            if ($status === null) {
+                continue;
             }
 
-            $this->applyTransactionStatus($transaction, $transactionStatus, $paid);
+            $remoteOrderId = (string) ($status['order_id'] ?? '');
+            $statusCode = (string) ($status['status_code'] ?? '');
+            $grossAmount = (string) ($status['gross_amount'] ?? '');
+            $signature = (string) ($status['signature_key'] ?? '');
 
-            return response()->json(['message' => 'ok']);
+            // Tanpa signature (mis. HTTP 404) Midtrans tidak mengenal pesanan ini.
+            if ($remoteOrderId !== $order['order_number'] || $signature === '') {
+                continue;
+            }
+
+            if (! $this->midtrans->verifySignature($remoteOrderId, $statusCode, $grossAmount, $signature)) {
+                Log::warning('Status Midtrans diabaikan: signature tidak valid', ['order_id' => $order['order_number']]);
+
+                continue;
+            }
+
+            $result = $this->status->apply(
+                $remoteOrderId,
+                (string) ($status['transaction_status'] ?? ''),
+                (string) ($status['fraud_status'] ?? ''),
+                $grossAmount,
+            );
+
+            if ($result !== MidtransPaymentStatus::OK) {
+                continue;
+            }
+
+            $current = DB::table($order['table'])->where('order_number', $order['order_number'])->value('status');
+
+            if ($current !== $order['status']) {
+                $updated++;
+            }
         }
 
-        return response()->json(['message' => 'Pesanan tidak ditemukan.'], 404);
+        return response()->json(['data' => ['checked' => count($orders), 'updated' => $updated]]);
     }
 
-    private function applyDepositStatus(object $deposit, string $transactionStatus, bool $paid): void
+    /**
+     * Pesanan milik pengguna yang masih bisa berubah status.
+     *
+     * @return list<array{table: string, order_number: string, status: string}>
+     */
+    private function pendingOrders(int $userId, string $orderNumber): array
     {
-        DB::transaction(function () use ($deposit, $transactionStatus, $paid): void {
-            $current = DB::table('deposits')->where('id', $deposit->id)->lockForUpdate()->first();
+        $limit = $orderNumber !== '' ? 1 : 5;
 
-            // Notifikasi Midtrans bisa dikirim berulang; hanya status pending yang diproses.
-            if ($current === null || $current->status !== 'pending') {
-                return;
-            }
+        $deposits = DB::table('deposits')
+            ->where('user_id', $userId)
+            ->where('status', 'pending')
+            ->when($orderNumber !== '', fn ($query) => $query->where('order_number', $orderNumber))
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get(['order_number', 'status']);
 
-            if ($paid) {
-                $user = DB::table('users')->where('id', $current->user_id)->lockForUpdate()->first();
-                $balance = (int) $user->balance + (int) $current->amount;
+        $transactions = DB::table('transactions')
+            ->where('user_id', $userId)
+            ->where('payment_method', 'midtrans')
+            ->where('status', 'pending')
+            ->when($orderNumber !== '', fn ($query) => $query->where('order_number', $orderNumber))
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get(['order_number', 'status']);
 
-                DB::table('users')->where('id', $user->id)->update(['balance' => $balance]);
-                DB::table('deposits')->where('id', $current->id)->update([
-                    'status' => 'paid',
-                    'paid_at' => now(),
-                ]);
-                DB::table('balance_entries')->insert([
-                    'user_id' => $current->user_id,
-                    'direction' => 'credit',
-                    'amount' => (int) $current->amount,
-                    'balance_after' => $balance,
-                    'reference' => $current->order_number,
-                    'description' => 'Deposit saldo',
-                    'created_at' => now(),
-                ]);
+        $orders = [];
 
-                return;
-            }
+        foreach ($deposits as $row) {
+            $orders[] = [
+                'table' => 'deposits',
+                'order_number' => (string) $row->order_number,
+                'status' => (string) $row->status,
+            ];
+        }
 
-            if ($transactionStatus === 'pending') {
-                return;
-            }
+        foreach ($transactions as $row) {
+            $orders[] = [
+                'table' => 'transactions',
+                'order_number' => (string) $row->order_number,
+                'status' => (string) $row->status,
+            ];
+        }
 
-            DB::table('deposits')->where('id', $current->id)->update([
-                'status' => $transactionStatus === 'expire' ? 'expired' : 'canceled',
-            ]);
-        });
-    }
-
-    private function applyTransactionStatus(object $transaction, string $transactionStatus, bool $paid): void
-    {
-        DB::transaction(function () use ($transaction, $transactionStatus, $paid): void {
-            $current = DB::table('transactions')->where('id', $transaction->id)->lockForUpdate()->first();
-
-            if ($current === null || $current->payment_method !== 'midtrans'
-                || in_array($current->status, ['success', 'failed'], true)) {
-                return;
-            }
-
-            if ($paid) {
-                DB::table('transactions')->where('id', $current->id)->update([
-                    'status' => 'success',
-                    'paid_at' => now(),
-                ]);
-
-                return;
-            }
-
-            if ($transactionStatus === 'pending') {
-                return;
-            }
-
-            DB::table('transactions')->where('id', $current->id)->update(['status' => 'failed']);
-        });
-    }
-
-    private function amountMatches(string $grossAmount, int $amount): bool
-    {
-        return abs((float) $grossAmount - $amount) < 0.01;
+        return $orders;
     }
 }

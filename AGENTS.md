@@ -60,6 +60,9 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap; hanya akun
   reseller — akun pribadi ditolak 422 karena tidak memakai saldo)
 - `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
+- `POST /midtrans/sync` `{orderNumber?}` — cek status resmi ke API Midtrans untuk
+  pesanan pending milik pengguna (cadangan bila webhook tidak sampai), signature
+  respons diverifikasi sebelum status diubah
 
 Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` /
 `admin12345`. Data demo: saldo Rp186.900, 4 transaksi (success/pending/failed),
@@ -89,7 +92,21 @@ nominal dengan pesanan, lalu:
   diabaikan karena status terminal tidak diproses lagi.
 
 Daftarkan URL notifikasi di Dashboard Midtrans (Settings > Payment > Notification
-URL) ke `https://<domain>/api/v1/midtrans/notification`.
+URL) ke `https://<domain>/api/v1/midtrans/notification`. Di sandbox Base44 URL-nya
+`https://3000-$BASE44_PUBLIC_HOST_SUFFIX/api/v1/midtrans/notification` dan **berubah
+setiap sandbox dibuat ulang** — kalau notifikasi berhenti masuk setelah sandbox
+baru, perbarui URL di dashboard Midtrans.
+
+**Cadangan bila notifikasi tidak sampai:** `POST /api/v1/midtrans/sync`
+`{orderNumber?}` (butuh sesi). Server memanggil
+`GET /v2/{order_id}/status` Midtrans dengan Server Key, memverifikasi
+`signature_key` pada respons (aturan yang sama seperti webhook), lalu memakai
+`App\Services\MidtransPaymentStatus` — kelas yang sama dengan webhook — untuk
+mengubah status. Tanpa `orderNumber`, maksimal 5 deposit pending dan 5 transaksi
+pending milik pengguna diperiksa. Frontend memanggilnya lewat
+`web/src/lib/usePaymentSync.js` setiap halaman Transaksi/Saldo dibuka (termasuk
+`/transaksi?order_id=...` dari redirect Midtrans), lalu memuat ulang data bila ada
+yang berubah.
 
 Env (`config/services.php → midtrans`): `MIDTRANS_SERVER_KEY`,
 `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION`, `MIDTRANS_FINISH_URL`. Di sandbox
@@ -105,8 +122,11 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Harga selalu `Pricing::unitPrice(price, retail_price, account_type)`. Jangan
   pernah menerima nominal dari browser, dan jangan mengambil tipe akun dari body
   request — hanya dari pengguna yang terautentikasi.
-- Satu-satunya jalur yang boleh menandai deposit `paid` (dan menambah saldo) adalah
-  webhook Midtrans yang signature-nya valid. Jangan tambahkan tombol "tandai lunas".
+- Hanya dua jalur yang boleh menandai deposit `paid` (dan menambah saldo):
+  webhook Midtrans yang `signature_key`-nya valid, dan `POST /midtrans/sync` yang
+  membaca status resmi dari API Midtrans lalu memverifikasi `signature_key` pada
+  responsnya. Jangan tambahkan tombol "tandai lunas" atau mempercayai status dari
+  browser.
 - Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.
 - Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per email.
 - `COOKIE_SECURE=1` untuk deployment HTTPS. Cookie `sesp_session` dikecualikan dari

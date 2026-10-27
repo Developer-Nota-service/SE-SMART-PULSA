@@ -4,6 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.j
 import TransactionItem from '../components/TransactionItem.jsx'
 import { api } from '../lib/api.js'
 import { CATEGORIES } from '../lib/format.js'
+import usePaymentSync from '../lib/usePaymentSync.js'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Semua status' },
@@ -36,6 +37,9 @@ export default function TransactionsPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Setelah kembali dari Midtrans, pastikan pembayaran yang lunas tercatat.
+  usePaymentSync(load)
 
   const updateFilter = (field) => (event) =>
     setFilters((current) => ({ ...current, [field]: event.target.value }))

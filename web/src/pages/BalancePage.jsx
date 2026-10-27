@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.j
 import { ArrowInIcon, ArrowOutIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
 import { dateTime, rupiah } from '../lib/format.js'
+import usePaymentSync from '../lib/usePaymentSync.js'
 
 export default function BalancePage() {
   const { user } = useAuth()
@@ -33,6 +34,9 @@ export default function BalancePage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Setelah kembali dari Midtrans, pastikan deposit yang sudah lunas tercatat.
+  usePaymentSync(load)
 
   return (
     <div className="stack">

@@ -144,4 +144,11 @@ export const api = {
   balanceEntries: () => request('/balance/entries'),
   deposits: () => request('/deposits'),
   createDeposit: (amount) => request('/deposits', { method: 'POST', body: { amount } }),
+
+  // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).
+  syncPayments: (orderNumber) =>
+    request('/midtrans/sync', {
+      method: 'POST',
+      body: orderNumber ? { orderNumber } : {},
+    }),
 }

@@ -25,6 +25,9 @@ Route::prefix('v1')->group(function () {
         Route::get('deposits', [WalletController::class, 'deposits']);
         Route::post('deposits', [WalletController::class, 'storeDeposit']);
 
+        // Cek status pembayaran langsung ke Midtrans (cadangan webhook).
+        Route::post('midtrans/sync', [MidtransController::class, 'sync']);
+
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::get('transactions/{id}', [TransactionController::class, 'show']);
         Route::post('transactions', [TransactionController::class, 'store']);

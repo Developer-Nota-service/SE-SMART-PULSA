@@ -131,7 +131,7 @@ export default function DepositForm({ onCreated }) {
           ) : null}
           <p className="note note--muted">
             {created.payment?.redirectUrl
-              ? 'Saldo bertambah otomatis setelah Midtrans mengirim notifikasi pembayaran yang sah.'
+              ? 'Saldo bertambah otomatis setelah pembayaran terkonfirmasi Midtrans — buka halaman Saldo bila saldo belum berubah.'
               : `${created.paymentError || 'Pembayaran Midtrans belum dikonfigurasi.'} Buat pesanan baru setelah konfigurasi selesai.`}
           </p>
         </div>

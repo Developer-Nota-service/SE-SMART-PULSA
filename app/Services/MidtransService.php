@@ -80,6 +80,42 @@ class MidtransService
         ];
     }
 
+    /**
+     * Status resmi pesanan menurut Midtrans (GET /v2/{order_id}/status).
+     *
+     * Dipakai saat notifikasi webhook tidak sampai ke server: respons API ini
+     * membawa `signature_key` sendiri sehingga bisa diverifikasi dengan cara
+     * yang sama seperti webhook sebelum status pesanan diubah.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function fetchStatus(string $orderId): ?array
+    {
+        if (! $this->isConfigured()) {
+            return null;
+        }
+
+        try {
+            $response = Http::withBasicAuth((string) config('services.midtrans.server_key'), '')
+                ->acceptJson()
+                ->timeout(10)
+                ->get($this->apiBaseUrl().'/v2/'.rawurlencode($orderId).'/status');
+        } catch (\Throwable $error) {
+            Log::warning('Midtrans status gagal dihubungi', [
+                'order_id' => $orderId,
+                'error' => $error->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($response->failed() || ! is_array($response->json())) {
+            return null;
+        }
+
+        return $response->json();
+    }
+
     public function verifySignature(string $orderId, string $statusCode, string $grossAmount, string $signature): bool
     {
         $key = (string) config('services.midtrans.server_key');
@@ -96,6 +132,13 @@ class MidtransService
         return config('services.midtrans.is_production')
             ? 'https://app.midtrans.com'
             : 'https://app.sandbox.midtrans.com';
+    }
+
+    private function apiBaseUrl(): string
+    {
+        return config('services.midtrans.is_production')
+            ? 'https://api.midtrans.com'
+            : 'https://api.sandbox.midtrans.com';
     }
 
     private function finishUrl(): string
