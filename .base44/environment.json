@@ -14,8 +14,8 @@
       "requiredAtBoot": false
     },
     {
-      "name": "MIDTRANS_IRIS_KEY",
-      "description": "API key Midtrans Iris (Dashboard Iris > Settings > API Key; perlu aktivasi fitur disbursement). Dipakai cek nama pemilik rekening tujuan penarikan lewat GET /iris/api/v1/account_validation. Berbeda dari Server Key Snap — Server Key tidak bisa dipakai di Iris. Tanpa nilai, form penarikan jatuh ke input nama manual.",
+      "name": "NETOVAS_CEKREK_KEY",
+      "description": "Token API CekRek Netovas (dari dashboard/penyedia layanan netovas.com) untuk cek nama pemilik rekening/e-wallet tujuan penarikan. Opsional: endpoint default dipanggil tanpa token, dan bila token diwajibkan penyedia, isi nilai ini. Tanpa token yang valid, form penarikan jatuh ke input nama manual.",
       "requiredAtBoot": false
     },
     {

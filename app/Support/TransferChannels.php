@@ -4,7 +4,7 @@ namespace App\Support;
 
 /**
  * Daftar tujuan penarikan saldo: rekening bank dan e-wallet. Kode mengikuti
- * kode bank tujuan yang dipakai layanan pengecekan rekening (Flip).
+ * kode tujuan yang dipakai layanan pengecekan rekening (CekRek Netovas).
  */
 class TransferChannels
 {

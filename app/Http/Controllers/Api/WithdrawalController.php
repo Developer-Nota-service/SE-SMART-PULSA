@@ -69,7 +69,7 @@ class WithdrawalController extends Controller
             return $error;
         }
 
-        $result = $this->verifier->verify($input['channelType'], $input['providerCode'], $input['accountNumber']);
+        $result = $this->verifier->verify($input['providerCode'], $input['accountNumber']);
 
         return response()->json([
             'data' => [
@@ -132,7 +132,7 @@ class WithdrawalController extends Controller
 
         // Nama pemilik rekening ditentukan server (hasil cek penyedia), bukan
         // dari body request, kecuali pengecekan otomatis belum dikonfigurasi.
-        $verification = $this->verifier->verify($input['channelType'], $input['providerCode'], $input['accountNumber']);
+        $verification = $this->verifier->verify($input['providerCode'], $input['accountNumber']);
 
         if ($input['accountHolder'] === '' && ! $verification['verified']) {
             return $this->unprocessable('Masukkan nama pemilik rekening.', 'accountHolder');

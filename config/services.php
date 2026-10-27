@@ -40,19 +40,16 @@ return [
         'client_key' => env('MIDTRANS_CLIENT_KEY'),
         'is_production' => env('MIDTRANS_IS_PRODUCTION', '0') === '1',
         'finish_url' => env('MIDTRANS_FINISH_URL'),
+    ],
 
-        // Pengecekan nama pemilik rekening tujuan penarikan lewat Iris
-        // (`GET /iris/api/v1/account_validation`). Kunci Iris berbeda dari
-        // Server Key Snap; lihat App\Services\BankAccountVerifier.
-        'iris' => [
-            'key' => env('MIDTRANS_IRIS_KEY'),
-            'base_url' => env(
-                'MIDTRANS_IRIS_URL',
-                env('MIDTRANS_IS_PRODUCTION', '0') === '1'
-                    ? 'https://app.midtrans.com/iris'
-                    : 'https://app.sandbox.midtrans.com/iris',
-            ),
-            'timeout' => (int) env('MIDTRANS_IRIS_TIMEOUT', 15),
+    // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan (CekRek
+    // Netovas). Kunci opsional: bila penyedia mewajibkan token, isi
+    // NETOVAS_CEKREK_KEY; lihat App\Services\BankAccountVerifier.
+    'netovas' => [
+        'cekrek' => [
+            'url' => env('NETOVAS_CEKREK_URL', 'https://netovas.com/api/cekrek/v1/account-inquiry'),
+            'key' => env('NETOVAS_CEKREK_KEY'),
+            'timeout' => (int) env('NETOVAS_CEKREK_TIMEOUT', 15),
         ],
     ],
 

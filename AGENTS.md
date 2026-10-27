@@ -200,21 +200,23 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
 - Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
   masih diproses menahan perubahan tipe akun ke pribadi.
-- Cek nama pemilik rekening otomatis memakai **Midtrans Iris** lewat
+- Cek nama pemilik rekening/e-wallet otomatis memakai **CekRek Netovas** lewat
   `app/Services/BankAccountVerifier.php`:
-  `GET {MIDTRANS_IRIS_URL|https://app[.sandbox].midtrans.com/iris}/api/v1/account_validation?bank={providerCode}&account={accountNumber}`
-  dengan Basic auth `MIDTRANS_IRIS_KEY`. Respons sukses memuat `account_name`;
-  `error_message`/`errors` berarti rekening ditolak. Kunci Iris **berbeda** dari
-  Server Key Snap dan dibuat di dashboard Iris (perlu aktivasi disbursement).
+  `POST {NETOVAS_CEKREK_URL|https://netovas.com/api/cekrek/v1/account-inquiry}`
+  form-urlencoded `account_bank={providerCode}&account_number={accountNumber}`,
+  header `Authorization: Bearer <token>` **hanya** bila `NETOVAS_CEKREK_KEY`
+  diisi (endpoint default dipanggil tanpa token). Nama pemilik dibaca dari kunci
+  JSON `account_name`/`account_holder`/`name`/`nama` (boleh bersarang di `data`),
+  pesan penolakan dari `message`/`error_message`/`error`/`remark`.
   Jawaban pasti di-cache 10 menit, gangguan 1 menit.
-- Hanya rekening bank yang dicek otomatis; Iris tidak punya endpoint e-wallet, jadi
-  kanal e-wallet langsung jatuh ke input nama manual.
-- Bila kunci belum diisi, Iris membalas 401/403/5xx, timeout, atau bank tak
-  didukung, hasilnya `configured: false` (`verificationAvailable: false`): frontend
+- Kanal bank maupun e-wallet sama-sama dicek otomatis (`account_bank` mengikuti
+  `providerCode`, mis. `gopay`).
+- Bila penyedia tidak menjawab (DNS gagal, timeout, 401/403/5xx, bukan JSON),
+  hasilnya `configured: false` (`verificationAvailable: false`): frontend
   menampilkan input nama manual dan pengajuan tetap jalan dengan tanda `unverified`.
-  Penolakan rekening dari Iris (2xx/4xx dengan `error_message`/`errors`) memblokir
-  pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu kunci
-  salah akan mematikan seluruh penarikan.
+  Penolakan rekening dari penyedia (2xx tanpa nama, dengan pesan) memblokir
+  pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu URL
+  atau token salah akan mematikan seluruh penarikan.
 
 ## Invariant keamanan (jangan dilanggar)
 

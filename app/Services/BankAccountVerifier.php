@@ -7,41 +7,52 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Pengecekan nama pemilik rekening tujuan penarikan lewat Midtrans Iris
- * (`GET /iris/api/v1/account_validation?bank=&account=`).
+ * Pengecekan nama pemilik rekening/e-wallet tujuan penarikan lewat CekRek
+ * Netovas (`POST {NETOVAS_CEKREK_URL}` dengan form `account_bank` +
+ * `account_number`).
  *
- * Iris mengembalikan `account_name` bila rekening valid, atau `error_message` /
- * `errors` bila rekening ditolak. Hanya rekening bank yang didukung — e-wallet
- * tidak punya endpoint pengecekan di Iris, jadi jatuh ke input nama manual.
+ * Penyedia mengembalikan nama pemilik rekening bila nomornya valid, atau pesan
+ * penolakan bila nomor tidak ditemukan. Bedakan dua jenis kegagalan:
  *
- * Kunci Iris (`MIDTRANS_IRIS_KEY`) berbeda dari Server Key Snap dan dibuat di
- * dashboard Iris (perlu aktivasi disbursement). Tanpa kunci itu, hasilnya
- * `configured: false`: pengguna tetap bisa mengajukan penarikan dengan nama yang
- * diketik sendiri, dan catatannya ditandai belum terverifikasi untuk diperiksa
- * manual. Hal yang sama berlaku saat Iris menolak permintaan kita (401/403/5xx,
- * bukan JSON) — itu gangguan penyedia, bukan bukti nomor rekening salah.
+ * - nomor ditolak penyedia (jawaban 2xx tanpa nama) → pengajuan diblokir;
+ * - penyedia tidak menjawab (DNS gagal, timeout, 401/403/5xx, bukan JSON) →
+ *   hasil `configured: false`: pengguna tetap bisa mengajukan penarikan dengan
+ *   nama yang diketik sendiri, dan catatannya ditandai `unverified` untuk
+ *   diperiksa manual. Satu kunci/URL salah tidak boleh mematikan penarikan.
  */
 class BankAccountVerifier
 {
+    /** Kunci JSON yang umum dipakai penyedia untuk nama pemilik rekening. */
+    private const HOLDER_KEYS = [
+        'account_name',
+        'account_holder',
+        'accountname',
+        'accountholder',
+        'holder',
+        'customer_name',
+        'customername',
+        'name',
+        'nama',
+    ];
+
+    /** Kunci JSON untuk pesan penolakan. */
+    private const MESSAGE_KEYS = ['message', 'error_message', 'errormessage', 'error', 'remark', 'detail'];
+
     public function isConfigured(): bool
     {
-        return trim((string) config('services.midtrans.iris.key')) !== '';
+        return trim((string) config('services.netovas.cekrek.url')) !== '';
     }
 
     /**
      * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}
      */
-    public function verify(string $channelType, string $providerCode, string $accountNumber): array
+    public function verify(string $providerCode, string $accountNumber): array
     {
         if (! $this->isConfigured()) {
             return $this->unavailable('Pengecekan nama rekening otomatis belum aktif.');
         }
 
-        if ($channelType !== 'bank') {
-            return $this->unavailable('Cek nama otomatis Midtrans Iris hanya berlaku untuk rekening bank.');
-        }
-
-        $cacheKey = "iris-inquiry:{$providerCode}:{$accountNumber}";
+        $cacheKey = "cekrek:{$providerCode}:{$accountNumber}";
         $cached = Cache::get($cacheKey);
 
         if (is_array($cached)) {
@@ -91,31 +102,41 @@ class BankAccountVerifier
      */
     private function call(string $providerCode, string $accountNumber): array
     {
-        $url = rtrim((string) config('services.midtrans.iris.base_url'), '/').'/api/v1/account_validation';
+        $url = (string) config('services.netovas.cekrek.url');
+        $key = trim((string) config('services.netovas.cekrek.key'));
 
         try {
-            $response = Http::withBasicAuth((string) config('services.midtrans.iris.key'), '')
-                ->acceptJson()
-                ->timeout((int) config('services.midtrans.iris.timeout', 15))
-                ->get($url, ['bank' => $providerCode, 'account' => $accountNumber]);
+            $request = Http::acceptJson()
+                ->asForm()
+                ->timeout((int) config('services.netovas.cekrek.timeout', 15));
+
+            if ($key !== '') {
+                $request = $request->withToken($key);
+            }
+
+            $response = $request->post($url, [
+                'account_bank' => $providerCode,
+                'account_number' => $accountNumber,
+            ]);
         } catch (\Throwable $error) {
-            Log::warning('Cek rekening Iris gagal', ['bank' => $providerCode, 'error' => $error->getMessage()]);
+            Log::warning('Cek rekening CekRek gagal', ['bank' => $providerCode, 'error' => $error->getMessage()]);
 
             return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
 
         $decoded = $response->json();
         $payload = is_array($decoded) ? $decoded : [];
-        $holder = trim((string) ($payload['account_name'] ?? ''));
+
+        $holder = self::extractHolder($payload);
 
         if ($response->successful() && $holder !== '') {
             return $this->result(true, 'verified', $holder, null);
         }
 
-        // Kunci belum benar, Iris belum aktif, atau layanan bermasalah: bukan
-        // bukti nomor rekening salah, jadi jangan memblokir pengajuan.
+        // URL/kunci belum benar atau layanan bermasalah: bukan bukti nomor
+        // rekening salah, jadi jangan memblokir pengajuan.
         if (! $response->successful()) {
-            Log::warning('Cek rekening Iris tidak tersedia', [
+            Log::warning('Cek rekening CekRek tidak tersedia', [
                 'status' => $response->status(),
                 'body' => mb_substr($response->body(), 0, 300),
             ]);
@@ -123,20 +144,77 @@ class BankAccountVerifier
             return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
 
-        $errors = $payload['errors'] ?? null;
-        $message = is_array($errors)
-            ? trim((string) (collect($errors)->flatten()->first() ?? ''))
-            : '';
-
-        if ($message === '') {
-            $message = trim((string) ($payload['error_message'] ?? ''));
-        }
+        $message = self::extractMessage($payload);
 
         if ($message === '') {
             $message = 'Nomor rekening tidak dapat diverifikasi. Periksa kembali nomor rekening Anda.';
         }
 
         return $this->result(false, 'rejected', null, $message);
+    }
+
+    /**
+     * Cari nama pemilik rekening di struktur JSON apa pun (bersarang di dalam
+     * `data`, `result`, dan sebagainya).
+     *
+     * @param  array<mixed>  $payload
+     */
+    private static function extractHolder(array $payload): string
+    {
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                $found = self::extractHolder($value);
+
+                if ($found !== '') {
+                    return $found;
+                }
+
+                continue;
+            }
+
+            $normalized = strtolower(str_replace(['-', ' '], '_', (string) $key));
+
+            if (in_array($normalized, self::HOLDER_KEYS, true) && is_scalar($value)) {
+                $name = trim((string) $value);
+
+                // `name` pada beberapa penyedia berisi nama bank, bukan pemilik.
+                if ($name !== '' && ! ctype_digit($name)) {
+                    return $name;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<mixed>  $payload
+     */
+    private static function extractMessage(array $payload): string
+    {
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                $found = self::extractMessage($value);
+
+                if ($found !== '') {
+                    return $found;
+                }
+
+                continue;
+            }
+
+            $normalized = strtolower(str_replace(['-', ' '], '_', (string) $key));
+
+            if (in_array($normalized, self::MESSAGE_KEYS, true) && is_scalar($value)) {
+                $message = trim((string) $value);
+
+                if ($message !== '') {
+                    return $message;
+                }
+            }
+        }
+
+        return '';
     }
 
     /**
