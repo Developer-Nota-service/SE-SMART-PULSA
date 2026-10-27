@@ -257,7 +257,7 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  array{phoneMasked:string,status:string,resendAfterSeconds:int,devCode:string|null}  $verification
+     * @param  array{channel:string,targetMasked:string,status:string,resendAfterSeconds:int,devCode:string|null}  $verification
      */
     public function me(Request $request): JsonResponse
     {

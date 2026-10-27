@@ -151,8 +151,8 @@ export const api = {
 
   updateName: (name) => request('/profile', { method: 'PATCH', body: { name } }),
   requestContactChange: (payload) => request('/profile/contact', { method: 'POST', body: payload }),
-  verifyContactChange: (code) =>
-    request('/profile/contact/verify', { method: 'POST', body: { code } }),
+  verifyContactChange: (channel, code) =>
+    request('/profile/contact/verify', { method: 'POST', body: { channel, code } }),
   updateAccountType: (accountType) =>
     request('/profile/account-type', { method: 'PATCH', body: { accountType } }),
   uploadAvatar: (file) => {

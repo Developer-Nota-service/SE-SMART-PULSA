@@ -19,7 +19,7 @@ function describe(verification) {
   }
 
   const minutes = Math.max(1, Math.round((verification.expiresInSeconds || 300) / 60))
-  return `Kode 6 angka dikirim ke WhatsApp ${verification.phoneMasked}. Berlaku ${minutes} menit.`
+  return `Kode 6 angka dikirim ke WhatsApp ${verification.targetMasked}. Berlaku ${minutes} menit.`
 }
 
 export default function OtpVerification({ email, initial, onCancel }) {

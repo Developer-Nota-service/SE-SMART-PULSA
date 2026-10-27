@@ -4,19 +4,24 @@ namespace App\Services;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 /**
- * Membuat dan memeriksa kode OTP. Kode dikirim ke WhatsApp lewat Fonnte dan
- * hanya hash-nya yang disimpan.
+ * Membuat dan memeriksa kode OTP. Kode dikirim lewat WhatsApp (Fonnte) atau
+ * email, dan hanya hash-nya yang disimpan.
  *
- * Dua tujuan: verifikasi akun baru (`account_verification`) dan konfirmasi
- * perubahan nomor WhatsApp/email (`contact_change`).
+ * Tiga tujuan: verifikasi akun baru (`account_verification`), konfirmasi email
+ * baru (`email_change`, kode dikirim ke email baru), dan konfirmasi nomor
+ * WhatsApp baru (`phone_change`, kode dikirim ke nomor baru).
  */
 class OtpService
 {
     public const PURPOSE_ACCOUNT = 'account_verification';
 
-    public const PURPOSE_CONTACT = 'contact_change';
+    public const PURPOSE_EMAIL_CHANGE = 'email_change';
+
+    public const PURPOSE_PHONE_CHANGE = 'phone_change';
 
     /** Kode berlaku 5 menit. */
     public const TTL_SECONDS = 300;
@@ -30,19 +35,22 @@ class OtpService
     public function __construct(private FonnteClient $fonnte) {}
 
     /**
-     * Terbitkan kode baru dan kirim ke WhatsApp `$phone` (default: nomor akun).
-     * `$payload` disimpan bersama kode dan dipakai saat verifikasi berhasil.
+     * Terbitkan kode baru dan kirim ke tujuan `$target` (default: email/nomor
+     * akun). `$payload` disimpan bersama kode dan dipakai saat verifikasi berhasil.
      *
      * @param  array<string,mixed>  $payload
-     * @return array{channel:string,phoneMasked:string,expiresInSeconds:int,resendAfterSeconds:int,status:string,devCode:string|null}
+     * @return array{channel:string,targetMasked:string,expiresInSeconds:int,resendAfterSeconds:int,status:string,devCode:string|null}
      */
     public function issue(
         object $user,
-        ?string $phone = null,
+        ?string $target = null,
         string $purpose = self::PURPOSE_ACCOUNT,
         array $payload = [],
     ): array {
-        $phone = $this->formatPhone($phone ?? (string) $user->phone);
+        $channel = $this->channelFor($purpose);
+        $target = $channel === 'email'
+            ? strtolower(trim((string) ($target ?? $user->email)))
+            : $this->formatPhone((string) ($target ?? $user->phone));
 
         $last = DB::table('otp_codes')
             ->where('user_id', $user->id)
@@ -51,13 +59,13 @@ class OtpService
             ->orderByDesc('id')
             ->first();
 
-        // Batasi kirim ulang agar Fonnte tidak dibanjiri permintaan. Fallback
-        // sandbox (token belum diisi) dikecualikan supaya alur tetap bisa dicoba.
-        if ($this->fonnte->isConfigured() && $last !== null) {
+        // Batasi kirim ulang agar pengiriman tidak dibanjiri permintaan. Fallback
+        // sandbox (kanal belum terhubung) dikecualikan supaya alur tetap bisa dicoba.
+        if ($this->canDeliver($channel) && $last !== null) {
             $wait = Carbon::parse($last->created_at)->addSeconds(self::RESEND_SECONDS)->getTimestamp() - now()->getTimestamp();
 
             if ($wait > 0) {
-                return $this->meta($phone, self::TTL_SECONDS, $wait, 'cooldown', null);
+                return $this->meta($channel, $target, self::TTL_SECONDS, $wait, 'cooldown', null);
             }
         }
 
@@ -71,9 +79,9 @@ class OtpService
 
         DB::table('otp_codes')->insert([
             'user_id' => $user->id,
-            'channel' => 'whatsapp',
+            'channel' => $channel,
             'purpose' => $purpose,
-            'phone' => $phone,
+            'target' => $target,
             'code_hash' => hash('sha256', $code),
             'payload' => $payload === [] ? null : json_encode($payload),
             'attempts' => 0,
@@ -81,14 +89,17 @@ class OtpService
             'created_at' => now(),
         ]);
 
-        $sent = $this->fonnte->send($phone, $this->message($code, $purpose));
+        $sent = $channel === 'email'
+            ? $this->sendEmail($target, $code, $purpose)
+            : $this->fonnte->send($target, $this->message($code, $purpose));
 
         // Bila pengiriman gagal di lingkungan preview, kode dikembalikan agar
         // alur verifikasi tetap bisa diuji. Tidak pernah aktif di luar preview.
         $devCode = (! $sent && $this->previewFallback()) ? $code : null;
 
         return $this->meta(
-            $phone,
+            $channel,
+            $target,
             self::TTL_SECONDS,
             self::RESEND_SECONDS,
             $sent ? 'sent' : 'failed',
@@ -133,11 +144,18 @@ class OtpService
 
         $payload = $row->payload ? (array) json_decode((string) $row->payload, true) : [];
 
-        if ($purpose === self::PURPOSE_CONTACT && $payload !== []) {
+        if ($purpose === self::PURPOSE_EMAIL_CHANGE && isset($payload['email'])) {
             DB::table('users')->where('id', $user->id)->update([
-                'email' => $payload['email'] ?? $user->email,
-                'phone' => $payload['phone'] ?? $user->phone,
+                'email' => $payload['email'],
                 'email_verified_at' => now(),
+            ]);
+
+            return ['ok' => true, 'payload' => $payload];
+        }
+
+        if ($purpose === self::PURPOSE_PHONE_CHANGE && isset($payload['phone'])) {
+            DB::table('users')->where('id', $user->id)->update([
+                'phone' => $payload['phone'],
                 'phone_verified_at' => now(),
             ]);
 
@@ -174,6 +192,43 @@ class OtpService
         return $digits;
     }
 
+    private function channelFor(string $purpose): string
+    {
+        return $purpose === self::PURPOSE_EMAIL_CHANGE ? 'email' : 'whatsapp';
+    }
+
+    private function canDeliver(string $channel): bool
+    {
+        return $channel === 'email' ? $this->emailReady() : $this->fonnte->isConfigured();
+    }
+
+    /** Email hanya bisa dikirim bila mailer diarahkan ke transport nyata (bukan log/array). */
+    private function emailReady(): bool
+    {
+        return ! in_array(strtolower((string) config('mail.default')), ['', 'log', 'array', 'null'], true);
+    }
+
+    private function sendEmail(string $email, string $code, string $purpose): bool
+    {
+        if (! $this->emailReady()) {
+            Log::warning('OTP email tidak terkirim: MAIL_MAILER belum diarahkan ke SMTP.');
+
+            return false;
+        }
+
+        try {
+            Mail::raw($this->message($code, $purpose), function ($mail) use ($email) {
+                $mail->to($email)->subject('Kode verifikasi email SE SMART PULSA');
+            });
+        } catch (\Throwable $exception) {
+            Log::warning('Gagal mengirim OTP email: '.$exception->getMessage());
+
+            return false;
+        }
+
+        return true;
+    }
+
     private function maskPhone(string $phone): string
     {
         if (strlen($phone) < 8) {
@@ -183,11 +238,24 @@ class OtpService
         return substr($phone, 0, 4).str_repeat('*', strlen($phone) - 7).substr($phone, -3);
     }
 
+    private function maskEmail(string $email): string
+    {
+        [$local, $domain] = array_pad(explode('@', $email, 2), 2, '');
+
+        if ($domain === '') {
+            return $email;
+        }
+
+        return mb_substr($local, 0, 2).str_repeat('*', 3).'@'.$domain;
+    }
+
     private function message(string $code, string $purpose): string
     {
-        $prefix = $purpose === self::PURPOSE_CONTACT
-            ? 'Kode verifikasi perubahan kontak akun SE SMART PULSA'
-            : 'Kode OTP SE SMART PULSA';
+        $prefix = match ($purpose) {
+            self::PURPOSE_EMAIL_CHANGE => 'Kode verifikasi email baru akun SE SMART PULSA',
+            self::PURPOSE_PHONE_CHANGE => 'Kode verifikasi nomor WhatsApp baru akun SE SMART PULSA',
+            default => 'Kode OTP SE SMART PULSA',
+        };
 
         return "{$prefix}: {$code}\n"
             .'Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun, termasuk yang mengaku admin.';
@@ -199,13 +267,13 @@ class OtpService
     }
 
     /**
-     * @return array{channel:string,phoneMasked:string,expiresInSeconds:int,resendAfterSeconds:int,status:string,devCode:string|null}
+     * @return array{channel:string,targetMasked:string,expiresInSeconds:int,resendAfterSeconds:int,status:string,devCode:string|null}
      */
-    private function meta(string $phone, int $expiresIn, int $resendAfter, string $status, ?string $devCode): array
+    private function meta(string $channel, string $target, int $expiresIn, int $resendAfter, string $status, ?string $devCode): array
     {
         return [
-            'channel' => 'whatsapp',
-            'phoneMasked' => $this->maskPhone($phone),
+            'channel' => $channel,
+            'targetMasked' => $channel === 'email' ? $this->maskEmail($target) : $this->maskPhone($target),
             'expiresInSeconds' => max(0, $expiresIn),
             'resendAfterSeconds' => max(0, $resendAfter),
             'status' => $status,

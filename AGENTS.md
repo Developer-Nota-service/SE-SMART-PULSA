@@ -45,8 +45,8 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 
 - `POST /register` `{name,email,phone,password,accountType}` → 201 **tanpa sesi**:
   menyimpan akun yang belum terverifikasi, mengirim kode OTP WhatsApp, dan
-  mengembalikan `{ email, verification }` (`phoneMasked`, `expiresInSeconds`,
-  `resendAfterSeconds`, `status`: `sent` | `failed` | `cooldown`).
+  mengembalikan `{ email, verification }` (`channel`, `targetMasked`,
+  `expiresInSeconds`, `resendAfterSeconds`, `status`: `sent` | `failed` | `cooldown`).
   `accountType` wajib `reseller` | `personal` (default `reseller`) dan menentukan
   harga produk akun tersebut. Bisa diubah kapan saja lewat
   `PATCH /profile/account-type` (tanpa mendaftar ulang).
@@ -61,10 +61,13 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /me` → `{ user, lastLoginAt }` (`user.emailVerified`, `user.phoneVerified`,
   `user.avatarUrl`) · `POST /logout`
 - `PATCH /profile` `{name}` — ubah nama tampilan (2-60 karakter).
-- `POST /profile/contact` `{email,phone}` → 200 `{ verification }`: kode OTP dikirim ke
-  nomor WhatsApp **baru**. Email/nomor baru baru diterapkan (dan keduanya ditandai
-  terverifikasi) setelah `POST /profile/contact/verify` `{code}` benar. Nomor lama
-  tetap aktif sampai kode dikonfirmasi.
+- `POST /profile/contact` `{email,phone}` → 200 `{ pending }`: setiap kontak yang
+  berubah mendapat kode sendiri — email baru lewat **email** (`channel: email`),
+  nomor baru lewat **WhatsApp** (`channel: whatsapp`). `pending` berisi kunci
+  `email` dan/atau `phone`, tiap nilai `{channel, targetMasked, expiresInSeconds,
+  resendAfterSeconds, status, devCode}`. Perubahan baru diterapkan setelah
+  `POST /profile/contact/verify` `{channel, code}` benar; kolom yang bersangkutan
+  lalu ditandai terverifikasi. Kontak lama tetap aktif sampai kode dikonfirmasi.
 - `PATCH /profile/account-type` `{accountType}` — pindah reseller ↔ pribadi tanpa
   daftar ulang; harga, metode bayar, dan fitur langsung mengikuti tipe baru. Pindah
   ke pribadi ditolak 422 bila saldo > 0 atau masih ada deposit pending, supaya saldo
@@ -102,10 +105,17 @@ Akun baru tidak bisa dipakai sebelum nomor WhatsApp-nya terbukti aktif. Alurnya:
 - `app/Services/OtpService.php` — terbitkan & periksa kode: berlaku 5 menit, jeda
   kirim ulang 60 detik, maksimal 5 percobaan salah per kode, kode lama otomatis
   dibatalkan saat kode baru terbit. Hanya `code_hash` (SHA-256) yang disimpan —
-  jangan pernah menyimpan atau mengembalikan kode asli. Dua `purpose`:
-  `account_verification` (verifikasi akun baru) dan `contact_change` (perubahan
-  email/WhatsApp dari halaman profil; perubahan disimpan di kolom `payload` dan
-  diterapkan saat kode benar).
+  jangan pernah menyimpan atau mengembalikan kode asli. Tiga `purpose`/kanal:
+  `account_verification` (WhatsApp, verifikasi akun baru), `email_change` (email,
+  kode dikirim ke **email baru**), dan `phone_change` (WhatsApp, kode dikirim ke
+  **nomor baru**). Perubahan kontak disimpan di kolom `payload` dan baru diterapkan
+  saat kode untuk kanal itu benar; kolom `otp_codes.target` menyimpan tujuan
+  (nomor atau alamat email).
+- Email OTP memakai `Mail` Laravel (config `mail`). Kanal dianggap siap hanya bila
+  `MAIL_MAILER` bukan `log`/`array`; kalau belum diisi, perubahan email ditolak
+  dengan pesan jelas (di preview mode kode dikembalikan sebagai `devCode`).
+  Setel `MAIL_HOST`/`MAIL_PORT`/`MAIL_SCHEME`/`MAIL_USERNAME`/`MAIL_PASSWORD`/
+  `MAIL_FROM_ADDRESS` di dashboard (bukan di compose `environment:`).
 - `app/Services/FonnteClient.php` — `POST https://api.fonnte.com/send` dengan header
   `Authorization: <FONNTE_TOKEN>`, form `target` (format `62...`) + `message`.
 - `config/fonnte.php` → `FONNTE_TOKEN`, `FONNTE_API_URL`. Token berasal dari

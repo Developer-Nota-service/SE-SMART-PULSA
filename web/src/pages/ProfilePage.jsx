@@ -87,7 +87,8 @@ export default function ProfilePage() {
             </div>
 
             <p className="note note--muted">
-              Perubahan email atau nomor WhatsApp dikonfirmasi dengan kode OTP ke nomor baru.
+              Email baru dikonfirmasi dengan kode OTP ke email baru; nomor WhatsApp baru
+              dikonfirmasi dengan kode OTP ke nomor baru.
             </p>
           </div>
         )}

@@ -2,18 +2,25 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { api } from '../lib/api.js'
 
+const LABELS = {
+  email: { title: 'Email', hint: 'Kode 6 angka dikirim ke email' },
+  phone: { title: 'Nomor WhatsApp', hint: 'Kode 6 angka dikirim ke WhatsApp' },
+}
+
 /**
- * Ubah email & nomor WhatsApp. Perubahan baru diterapkan setelah kode OTP yang
- * dikirim ke nomor WhatsApp BARU dikonfirmasi, jadi nomor tetap terverifikasi.
+ * Ubah email & nomor WhatsApp. Setiap kontak yang berubah diverifikasi sendiri:
+ * kode untuk email baru dikirim ke email baru, kode untuk nomor baru dikirim ke
+ * WhatsApp nomor baru. Kontak baru hanya diterapkan setelah kode-nya benar,
+ * sehingga keduanya tetap terverifikasi.
  */
 export default function ProfileContactEditor({ user, onDone, onCancel }) {
   const { refresh } = useAuth()
   const [form, setForm] = useState({ email: user?.email ?? '', phone: user?.phone ?? '' })
-  const [verification, setVerification] = useState(null)
-  const [code, setCode] = useState('')
+  const [pending, setPending] = useState(null)
+  const [codes, setCodes] = useState({})
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState('')
   const [seconds, setSeconds] = useState(0)
 
   useEffect(() => {
@@ -24,7 +31,7 @@ export default function ProfileContactEditor({ user, onDone, onCancel }) {
 
   async function requestCode(event) {
     event.preventDefault()
-    setBusy(true)
+    setBusy('request')
     setErrors({})
     setMessage('')
     try {
@@ -32,58 +39,91 @@ export default function ProfileContactEditor({ user, onDone, onCancel }) {
         email: form.email.trim(),
         phone: form.phone.replace(/\D/g, ''),
       })
-      setVerification(data.verification)
-      setSeconds(data.verification?.resendAfterSeconds ?? 0)
-      setCode('')
+      const next = data.pending || {}
+      setPending(next)
+      setCodes({})
+      setSeconds(
+        Object.values(next).reduce((longest, item) => Math.max(longest, item.resendAfterSeconds ?? 0), 0),
+      )
     } catch (error) {
       setErrors(error.errors || {})
       setMessage(error.message)
     } finally {
-      setBusy(false)
+      setBusy('')
     }
   }
 
-  async function confirmCode(event) {
+  async function confirmCode(event, channel) {
     event.preventDefault()
-    setBusy(true)
+    setBusy(channel)
     setErrors({})
     setMessage('')
     try {
-      await api.verifyContactChange(code)
+      const data = await api.verifyContactChange(channel, codes[channel])
       await refresh()
-      onDone()
+      const remaining = { ...pending }
+      delete remaining[channel]
+      if (Object.keys(remaining).length === 0) {
+        onDone()
+        return
+      }
+      setPending(remaining)
+      setMessage(data.message || '')
     } catch (error) {
-      setErrors(error.errors || {})
+      setErrors({ [channel]: error.errors?.code?.[0] || error.message })
       setMessage(error.message)
     } finally {
-      setBusy(false)
+      setBusy('')
     }
   }
 
-  if (verification) {
+  if (pending) {
+    const channels = Object.keys(pending)
+    const resendBlocked = seconds > 0 && channels.every((channel) => !pending[channel].devCode)
+
     return (
-      <form className="contact-editor" onSubmit={confirmCode} noValidate>
-        <p className="section-hint">
-          {verification.devCode
-            ? `Mode sandbox: kode OTP Anda ${verification.devCode}.`
-            : `Kode 6 angka dikirim ke WhatsApp ${verification.phoneMasked}.`}
-        </p>
-        <label className="field">
-          <span className="field__label">Kode OTP dari WhatsApp baru</span>
-          <input
-            className="input otp__code"
-            inputMode="numeric"
-            maxLength={6}
-            value={code}
-            onChange={(event) => {
-              setCode(event.target.value.replace(/\D/g, '').slice(0, 6))
-              setErrors({})
-              setMessage('')
-            }}
-            placeholder="······"
-          />
-          {errors.code ? <span className="field__error">{errors.code[0]}</span> : null}
-        </label>
+      <div className="contact-editor">
+        {channels.map((channel) => {
+          const verification = pending[channel]
+          const info = LABELS[channel]
+
+          return (
+            <form key={channel} onSubmit={(event) => confirmCode(event, channel)} noValidate>
+              <p className="section-hint">
+                {verification.devCode
+                  ? `Mode sandbox: kode OTP untuk ${info.title.toLowerCase()} baru adalah ${verification.devCode}.`
+                  : `${info.hint} ${verification.targetMasked}.`}
+              </p>
+
+              <label className="field">
+                <span className="field__label">Kode OTP dari {info.title.toLowerCase()} baru</span>
+                <input
+                  className="input otp__code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={codes[channel] ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value.replace(/\D/g, '').slice(0, 6)
+                    setCodes((current) => ({ ...current, [channel]: value }))
+                    setErrors({})
+                    setMessage('')
+                  }}
+                  placeholder="······"
+                />
+                {errors[channel] ? <span className="field__error">{errors[channel]}</span> : null}
+              </label>
+
+              <button
+                type="submit"
+                className="btn btn--primary btn--block"
+                disabled={busy !== '' || (codes[channel] ?? '').length !== 6}
+              >
+                {busy === channel ? 'Memverifikasi…' : `Simpan ${info.title.toLowerCase()}`}
+              </button>
+            </form>
+          )
+        })}
 
         {message ? (
           <p className="form-message" role="alert">
@@ -91,36 +131,30 @@ export default function ProfileContactEditor({ user, onDone, onCancel }) {
           </p>
         ) : null}
 
-        <button
-          type="submit"
-          className="btn btn--primary btn--block"
-          disabled={busy || code.length !== 6}
-        >
-          {busy ? 'Memverifikasi…' : 'Simpan kontak baru'}
-        </button>
-
         <div className="contact-editor__actions">
           <button
             type="button"
             className="btn btn--ghost btn--sm"
             onClick={requestCode}
-            disabled={busy || (seconds > 0 && !verification.devCode)}
+            disabled={busy !== '' || resendBlocked}
           >
-            {seconds > 0 && !verification.devCode ? `Kirim ulang (${seconds}s)` : 'Kirim ulang kode'}
+            {resendBlocked ? `Kirim ulang (${seconds}s)` : 'Kirim ulang kode'}
           </button>
           <button
             type="button"
             className="btn btn--ghost btn--sm"
             onClick={() => {
-              setVerification(null)
-              setMessage('')
+              setPending(null)
+              setCodes({})
               setErrors({})
+              setMessage('')
             }}
+            disabled={busy !== ''}
           >
             Ubah data
           </button>
         </div>
-      </form>
+      </div>
     )
   }
 
@@ -141,6 +175,9 @@ export default function ProfileContactEditor({ user, onDone, onCancel }) {
           autoComplete="email"
         />
         {errors.email ? <span className="field__error">{errors.email[0]}</span> : null}
+        <span className="field__hint">
+          Kode OTP dikirim ke email baru. Email lama tetap aktif sampai kode dikonfirmasi.
+        </span>
       </label>
 
       <label className="field">
@@ -169,12 +206,12 @@ export default function ProfileContactEditor({ user, onDone, onCancel }) {
         </p>
       ) : null}
 
-      <button type="submit" className="btn btn--primary btn--block" disabled={busy}>
-        {busy ? 'Mengirim kode…' : 'Kirim kode OTP'}
+      <button type="submit" className="btn btn--primary btn--block" disabled={busy !== ''}>
+        {busy === 'request' ? 'Mengirim kode…' : 'Kirim kode verifikasi'}
       </button>
 
       <div className="contact-editor__actions">
-        <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel} disabled={busy}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel} disabled={busy !== ''}>
           Batal
         </button>
       </div>

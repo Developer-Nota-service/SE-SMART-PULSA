@@ -41,7 +41,9 @@ class ProfileController extends Controller
     }
 
     /**
-     * Minta kode OTP ke nomor WhatsApp BARU sebelum email/nomor diganti.
+     * Minta kode OTP untuk setiap kontak yang berubah: email baru menerima kode
+     * lewat email, nomor baru lewat WhatsApp. Masing-masing baru diterapkan
+     * setelah kode-nya dikonfirmasi.
      */
     public function changeContact(Request $request): JsonResponse
     {
@@ -68,51 +70,77 @@ class ProfileController extends Controller
         }
 
         $user = $request->attributes->get('authUser');
+        $emailChanged = $input['email'] !== strtolower((string) $user->email);
+        $phoneChanged = $input['phone'] !== (string) $user->phone;
 
-        if ($input['email'] === strtolower((string) $user->email) && $input['phone'] === (string) $user->phone) {
+        if (! $emailChanged && ! $phoneChanged) {
             return response()->json([
                 'message' => 'Email dan nomor WhatsApp tidak berubah.',
                 'errors' => ['phone' => ['Email dan nomor WhatsApp tidak berubah.']],
             ], 422);
         }
 
-        if (DB::table('users')->where('email', $input['email'])->where('id', '!=', $user->id)->exists()) {
+        if ($emailChanged && DB::table('users')->where('email', $input['email'])->where('id', '!=', $user->id)->exists()) {
             return response()->json([
                 'message' => 'Data kontak belum lengkap.',
                 'errors' => ['email' => ['Email sudah dipakai akun lain.']],
             ], 422);
         }
 
-        $phoneTaken = DB::table('users')
-            ->where('phone', $input['phone'])
-            ->where('id', '!=', $user->id)
-            ->whereNotNull('phone_verified_at')
-            ->exists();
+        if ($phoneChanged) {
+            $phoneTaken = DB::table('users')
+                ->where('phone', $input['phone'])
+                ->where('id', '!=', $user->id)
+                ->whereNotNull('phone_verified_at')
+                ->exists();
 
-        if ($phoneTaken) {
-            return response()->json([
-                'message' => 'Data kontak belum lengkap.',
-                'errors' => ['phone' => ['Nomor HP sudah dipakai akun lain.']],
-            ], 422);
+            if ($phoneTaken) {
+                return response()->json([
+                    'message' => 'Data kontak belum lengkap.',
+                    'errors' => ['phone' => ['Nomor HP sudah dipakai akun lain.']],
+                ], 422);
+            }
         }
 
-        // Perubahan baru diterapkan setelah kode ke nomor baru terbukti benar.
-        $verification = $this->otp->issue(
-            $user,
-            $input['phone'],
-            OtpService::PURPOSE_CONTACT,
-            ['email' => $input['email'], 'phone' => $input['phone']],
-        );
+        // Perubahan baru diterapkan setelah kode untuk masing-masing kontak
+        // terbukti benar: email lewat kode ke email baru, nomor lewat WhatsApp baru.
+        $pending = [];
+
+        if ($emailChanged) {
+            $pending['email'] = $this->otp->issue(
+                $user,
+                $input['email'],
+                OtpService::PURPOSE_EMAIL_CHANGE,
+                ['email' => $input['email']],
+            );
+        }
+
+        if ($phoneChanged) {
+            $pending['phone'] = $this->otp->issue(
+                $user,
+                $input['phone'],
+                OtpService::PURPOSE_PHONE_CHANGE,
+                ['phone' => $input['phone']],
+            );
+        }
 
         return response()->json([
-            'message' => OtpMessage::for($verification),
-            'data' => ['verification' => $verification],
+            'message' => implode(' ', array_map(fn (array $verification) => OtpMessage::for($verification), $pending)),
+            'data' => ['pending' => $pending],
         ]);
     }
 
     public function verifyContact(Request $request): JsonResponse
     {
+        $channel = (string) $request->input('channel');
         $code = preg_replace('/\D/', '', (string) $request->input('code')) ?? '';
+
+        if (! in_array($channel, ['email', 'phone'], true)) {
+            return response()->json([
+                'message' => 'Pilih kontak yang ingin diverifikasi.',
+                'errors' => ['channel' => ['Pilih kontak yang ingin diverifikasi.']],
+            ], 422);
+        }
 
         if (strlen($code) !== 6) {
             return response()->json([
@@ -122,7 +150,8 @@ class ProfileController extends Controller
         }
 
         $user = $request->attributes->get('authUser');
-        $result = $this->otp->verify($user, $code, OtpService::PURPOSE_CONTACT);
+        $purpose = $channel === 'email' ? OtpService::PURPOSE_EMAIL_CHANGE : OtpService::PURPOSE_PHONE_CHANGE;
+        $result = $this->otp->verify($user, $code, $purpose);
 
         if (! $result['ok']) {
             return response()->json([
@@ -131,9 +160,13 @@ class ProfileController extends Controller
             ], 422);
         }
 
-        $this->writeAudit((int) $user->id, 'profile.contact', ['email' => $result['payload']['email'] ?? null]);
+        $this->writeAudit((int) $user->id, 'profile.'.$channel, $result['payload']);
 
-        return $this->userResponse((int) $user->id);
+        return $this->userResponse(
+            (int) $user->id,
+            200,
+            ($channel === 'email' ? 'Email' : 'Nomor WhatsApp').' baru tersimpan dan terverifikasi.',
+        );
     }
 
     /**
