@@ -48,7 +48,12 @@ export default function PurchasePage() {
     setFieldError('')
     setSubmitError('')
 
-    if (!/^\d{6,16}$/.test(customerNumber)) {
+    if (product.category === 'voucher') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerNumber)) {
+        setFieldError('Email penerima voucher tidak valid.')
+        return
+      }
+    } else if (!/^\d{6,16}$/.test(customerNumber)) {
       setFieldError('Nomor tujuan harus 6-16 digit angka.')
       return
     }
@@ -126,6 +131,7 @@ export default function PurchasePage() {
     )
   }
 
+  const emailTarget = product.category === 'voucher'
   const insufficient = user ? user.balance < product.price : false
 
   return (
@@ -151,17 +157,23 @@ export default function PurchasePage() {
             <span className="field__label">{targetLabel(product.category)}</span>
             <input
               className="input"
-              inputMode="numeric"
+              type={emailTarget ? 'email' : 'text'}
+              inputMode={emailTarget ? 'email' : 'numeric'}
+              autoComplete={emailTarget ? 'email' : 'tel'}
               value={customerNumber}
               onChange={(event) => {
-                setCustomerNumber(event.target.value.replace(/\D/g, '').slice(0, 16))
+                const value = emailTarget
+                  ? event.target.value.trim().slice(0, 100)
+                  : event.target.value.replace(/\D/g, '').slice(0, 16)
+                setCustomerNumber(value)
                 setFieldError('')
                 setSubmitError('')
               }}
-              placeholder="Contoh: 081234567890"
+              placeholder={emailTarget ? 'nama@email.com' : 'Contoh: 081234567890'}
             />
             <span className="field__hint">
-              Pastikan nomor benar. Transaksi yang sudah diproses tidak dapat dibatalkan.
+              Pastikan {emailTarget ? 'email' : 'nomor'} benar. Transaksi yang sudah diproses tidak
+              dapat dibatalkan.
             </span>
             {fieldError ? <span className="field__error">{fieldError}</span> : null}
           </label>

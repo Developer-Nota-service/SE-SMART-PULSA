@@ -94,7 +94,24 @@ class TransactionController extends Controller
             return response()->json(['message' => 'Produk tidak valid.'], 422);
         }
 
-        if (! preg_match('/^\d{6,16}$/', $customerNumber)) {
+        $productCategory = DB::table('products')
+            ->where('id', (int) $productId)
+            ->where('active', true)
+            ->value('category');
+
+        if ($productCategory === null) {
+            return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        if ($productCategory === 'voucher') {
+            // Voucher dikirim ke email penerima, bukan ke nomor HP.
+            if (filter_var($customerNumber, FILTER_VALIDATE_EMAIL) === false) {
+                return response()->json([
+                    'message' => 'Email penerima voucher tidak valid.',
+                    'errors' => ['customerNumber' => ['Email penerima voucher tidak valid.']],
+                ], 422);
+            }
+        } elseif (! preg_match('/^\d{6,16}$/', $customerNumber)) {
             return response()->json([
                 'message' => 'Nomor tujuan harus 6-16 digit angka.',
                 'errors' => ['customerNumber' => ['Nomor tujuan harus 6-16 digit angka.']],
