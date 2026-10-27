@@ -61,6 +61,16 @@ di-unwrap, error 401 memicu event `sesp:unauthorized`, 422 diteruskan sebagai
 `error.errors` per field. Selama kontrak respons Laravel sama, cukup ganti base URL
 dan arahkan cookie/sanctum.
 
+### Autentikasi Bearer (backend Laravel pengguna)
+
+Backend Laravel pengguna memakai Sanctum **personal access token**, bukan cookie:
+`POST /login` dan `/register` mengembalikan `token`, lalu setiap request mengirim
+`Authorization: Bearer <token>`. `web/src/lib/api.js` menyimpan token itu di
+`sessionStorage` (bukan localStorage) dan tetap memakai cookie bila respons tidak
+berisi token — jadi API demo tidak berubah. `/register` mewajibkan field
+`password_confirmation`; field `phone` opsional dan boleh tidak ada di respons
+(kartu saldo tidak menampilkan nomor bila kosong).
+
 ### Mengarahkan ke backend Laravel lewat proxy dev
 
 Jangan pernah set `VITE_API_BASE_URL` ke URL tunnel: browser akan memanggil lintas

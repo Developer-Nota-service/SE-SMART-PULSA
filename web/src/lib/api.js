@@ -1,5 +1,30 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '')
 
+// The Laravel backend authenticates with a Bearer token, the local demo API with
+// an httpOnly cookie. Both flows are supported: the token is only kept when the
+// backend actually returns one.
+const TOKEN_KEY = 'sesp_token'
+
+function readToken() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY)
+  } catch (error) {
+    return null
+  }
+}
+
+let token = readToken()
+
+function setToken(value) {
+  token = value || null
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token)
+    else sessionStorage.removeItem(TOKEN_KEY)
+  } catch (error) {
+    // Storage can be unavailable (private mode); the in-memory token still works.
+  }
+}
+
 export class ApiError extends Error {
   constructor(message, status, errors) {
     super(message)
@@ -25,6 +50,14 @@ function unwrap(payload) {
   return payload
 }
 
+// Laravel keeps the balance in `wallet.balance_idr`; the demo API puts it on the
+// user object. Views always read `user.balance`.
+function normalizeUser(payload) {
+  if (!payload?.user) return payload
+  const balance = payload.wallet?.balance_idr ?? payload.user.balance
+  return { ...payload, user: { ...payload.user, balance: balance ?? 0 } }
+}
+
 async function request(path, { method = 'GET', body, headers } = {}) {
   let response
   try {
@@ -33,6 +66,7 @@ async function request(path, { method = 'GET', body, headers } = {}) {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
       },
@@ -43,6 +77,7 @@ async function request(path, { method = 'GET', body, headers } = {}) {
   }
 
   if (response.status === 401) {
+    setToken(null)
     window.dispatchEvent(new Event('sesp:unauthorized'))
   }
 
@@ -68,10 +103,30 @@ async function request(path, { method = 'GET', body, headers } = {}) {
 }
 
 export const api = {
-  login: (email, password) => request('/login', { method: 'POST', body: { email, password } }),
-  register: (payload) => request('/register', { method: 'POST', body: payload }),
-  me: () => request('/me'),
-  logout: () => request('/logout', { method: 'POST' }),
+  login: async (email, password) => {
+    const data = normalizeUser(await request('/login', { method: 'POST', body: { email, password } }))
+    if (data?.token) setToken(data.token)
+    return data
+  },
+  register: async (payload) => {
+    // Laravel requires password_confirmation; the form only asks for one password.
+    const data = normalizeUser(
+      await request('/register', {
+        method: 'POST',
+        body: { ...payload, password_confirmation: payload.password },
+      }),
+    )
+    if (data?.token) setToken(data.token)
+    return data
+  },
+  me: async () => normalizeUser(await request('/me')),
+  logout: async () => {
+    try {
+      return await request('/logout', { method: 'POST' })
+    } finally {
+      setToken(null)
+    }
+  },
 
   products: (params) => request(`/products${query(params)}`),
   product: (id) => request(`/products/${id}`),
