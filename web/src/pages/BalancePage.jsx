@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext.jsx'
 import BalanceCard from '../components/BalanceCard.jsx'
 import DepositForm from '../components/DepositForm.jsx'
+import WithdrawForm from '../components/WithdrawForm.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { ArrowInIcon, ArrowOutIcon } from '../components/Icons.jsx'
@@ -10,9 +11,10 @@ import { dateTime, rupiah } from '../lib/format.js'
 import usePaymentSync from '../lib/usePaymentSync.js'
 
 export default function BalancePage() {
-  const { user } = useAuth()
+  const { user, updateBalance } = useAuth()
   const isPersonal = user?.accountType === 'personal'
   const [deposits, setDeposits] = useState([])
+  const [withdrawals, setWithdrawals] = useState([])
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -21,8 +23,13 @@ export default function BalancePage() {
     setLoading(true)
     setError('')
     try {
-      const [depositList, entryList] = await Promise.all([api.deposits(), api.balanceEntries()])
+      const [depositList, withdrawalList, entryList] = await Promise.all([
+        api.deposits(),
+        api.withdrawals(),
+        api.balanceEntries(),
+      ])
       setDeposits(depositList)
+      setWithdrawals(withdrawalList)
       setEntries(entryList)
     } catch (requestError) {
       setError(requestError.message)
@@ -51,7 +58,56 @@ export default function BalancePage() {
           </p>
         </section>
       ) : (
-        <DepositForm onCreated={load} />
+        <>
+          <DepositForm onCreated={load} />
+          <WithdrawForm balance={user?.balance} onCreated={(balance) => {
+            updateBalance(balance)
+            load()
+          }} />
+        </>
+      )}
+
+      {isPersonal ? null : (
+        <section>
+          <div className="section-head">
+            <h2 className="section-title">Riwayat penarikan</h2>
+            <span className="section-hint">{withdrawals.length} pengajuan</span>
+          </div>
+
+          {loading ? (
+            <LoadingState label="Memuat penarikan…" />
+          ) : withdrawals.length === 0 ? (
+            <EmptyState
+              title="Belum ada penarikan"
+              description="Pengajuan tarik saldo akan tercatat di sini."
+            />
+          ) : (
+            <div className="tx-list">
+              {withdrawals.map((withdrawal) => (
+                <div key={withdrawal.id} className="tx">
+                  <span className="tx__icon tx__icon--debit">
+                    <ArrowOutIcon />
+                  </span>
+                  <span className="tx__body">
+                    <span className="tx__name">
+                      Tarik saldo ke {withdrawal.providerName}
+                    </span>
+                    <span className="tx__meta">
+                      {withdrawal.accountNumber} · {withdrawal.verifiedHolder || withdrawal.accountHolder}
+                    </span>
+                    <span className="tx__time">
+                      {dateTime(withdrawal.createdAt)} · {withdrawal.reference}
+                    </span>
+                  </span>
+                  <span className="tx__right">
+                    <span className="tx__amount">−{rupiah(withdrawal.amount)}</span>
+                    <StatusBadge status={withdrawal.status} />
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       <section>

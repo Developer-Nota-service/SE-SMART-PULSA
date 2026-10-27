@@ -218,6 +218,18 @@ class ProfileController extends Controller
                     'errors' => ['accountType' => ['Deposit masih pending.']],
                 ], 422);
             }
+
+            $pendingWithdrawal = DB::table('withdrawals')
+                ->where('user_id', $fresh->id)
+                ->whereIn('status', ['pending', 'processing'])
+                ->exists();
+
+            if ($pendingWithdrawal) {
+                return response()->json([
+                    'message' => 'Masih ada penarikan saldo yang diproses. Tunggu sampai dana dikirim sebelum pindah ke akun pribadi.',
+                    'errors' => ['accountType' => ['Penarikan saldo masih diproses.']],
+                ], 422);
+            }
         }
 
         DB::table('users')->where('id', $fresh->id)->update(['account_type' => $type]);

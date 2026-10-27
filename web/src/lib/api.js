@@ -177,6 +177,12 @@ export const api = {
   deposits: () => request('/deposits'),
   createDeposit: (amount) => request('/deposits', { method: 'POST', body: { amount } }),
 
+  // Penarikan saldo: daftar bank/e-wallet, cek nama pemilik rekening, pengajuan.
+  withdrawalChannels: () => request('/withdrawals/channels'),
+  inquiryRecipient: (payload) => request('/withdrawals/inquiry', { method: 'POST', body: payload }),
+  withdrawals: () => request('/withdrawals'),
+  createWithdrawal: (payload) => request('/withdrawals', { method: 'POST', body: payload }),
+
   // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).
   syncPayments: (orderNumber) =>
     request('/midtrans/sync', {

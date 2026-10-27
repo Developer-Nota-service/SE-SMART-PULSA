@@ -749,6 +749,99 @@ select.input {
   color: #fff;
 }
 
+/* ---------- tarik saldo ---------- */
+.transfer-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #f4f7fc;
+  padding: 4px;
+}
+
+.transfer-tab {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.transfer-tab.is-active {
+  background: #fff;
+  color: var(--accent-strong);
+  box-shadow: 0 4px 10px -8px rgba(11, 37, 69, 0.6);
+}
+
+.inquiry {
+  display: block;
+  margin-top: 12px;
+  border-radius: 13px;
+  padding: 11px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.inquiry--checking {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.inquiry--ok {
+  border: 1px solid #bfe6cf;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.inquiry--failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.inquiry--warn {
+  background: var(--pending-soft);
+  color: var(--pending);
+}
+
+.inquiry__label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.inquiry__name {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.inquiry__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.terms-list {
+  margin: 12px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.terms-list li + li {
+  margin-top: 3px;
+}
+
 .filters {
   display: grid;
   grid-template-columns: 1fr 1fr;

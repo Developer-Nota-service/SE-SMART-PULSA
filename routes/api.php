@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\MidtransController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\WalletController;
+use App\Http\Controllers\Api\WithdrawalController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -45,6 +46,12 @@ Route::prefix('v1')->group(function () {
         Route::get('balance/entries', [WalletController::class, 'entries']);
         Route::get('deposits', [WalletController::class, 'deposits']);
         Route::post('deposits', [WalletController::class, 'storeDeposit']);
+
+        // Penarikan saldo: daftar bank/e-wallet, cek nama rekening, pengajuan.
+        Route::get('withdrawals/channels', [WithdrawalController::class, 'channels']);
+        Route::post('withdrawals/inquiry', [WithdrawalController::class, 'inquiry']);
+        Route::get('withdrawals', [WithdrawalController::class, 'index']);
+        Route::post('withdrawals', [WithdrawalController::class, 'store']);
 
         // Cek status pembayaran langsung ke Midtrans (cadangan webhook).
         Route::post('midtrans/sync', [MidtransController::class, 'sync']);

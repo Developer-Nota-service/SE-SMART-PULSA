@@ -43,7 +43,9 @@ export const categoryLabel = (key) =>
 const STATUS = {
   success: { label: 'Berhasil', tone: 'success' },
   pending: { label: 'Menunggu', tone: 'pending' },
+  processing: { label: 'Diproses', tone: 'pending' },
   failed: { label: 'Gagal', tone: 'danger' },
+  rejected: { label: 'Ditolak', tone: 'danger' },
   paid: { label: 'Berhasil', tone: 'success' },
   expired: { label: 'Kedaluwarsa', tone: 'muted' },
   canceled: { label: 'Dibatalkan', tone: 'muted' },

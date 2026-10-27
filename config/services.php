@@ -35,6 +35,14 @@ return [
         ],
     ],
 
+    // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan saldo.
+    // Penyedia menerima POST JSON + Bearer token; lihat BankAccountVerifier.
+    'bank_inquiry' => [
+        'url' => env('BANK_INQUIRY_URL'),
+        'key' => env('BANK_INQUIRY_KEY'),
+        'timeout' => (int) env('BANK_INQUIRY_TIMEOUT', 15),
+    ],
+
     'midtrans' => [
         'server_key' => env('MIDTRANS_SERVER_KEY'),
         'client_key' => env('MIDTRANS_CLIENT_KEY'),
