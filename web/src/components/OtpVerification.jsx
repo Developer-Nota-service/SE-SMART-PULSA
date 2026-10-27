@@ -10,8 +10,8 @@ function describe(verification) {
     return `Fonnte belum terhubung. Mode sandbox: kode OTP Anda ${verification.devCode}.`
   }
 
-  if (verification.status === 'not_configured') {
-    return 'Kode OTP belum bisa dikirim: gateway WhatsApp (Fonnte) belum dikonfigurasi.'
+  if (verification.status === 'failed') {
+    return 'Kode OTP gagal dikirim ke WhatsApp. Periksa nomor Anda lalu minta kode baru.'
   }
 
   if (verification.status === 'cooldown') {

@@ -268,7 +268,7 @@ class AuthController extends Controller
 
         return match ($verification['status']) {
             'cooldown' => "Kode sebelumnya baru dikirim. Tunggu {$verification['resendAfterSeconds']} detik untuk minta kode baru.",
-            'not_configured' => 'Kode OTP gagal dikirim: gateway WhatsApp (Fonnte) belum dikonfigurasi.',
+            'failed' => 'Kode OTP gagal dikirim ke WhatsApp. Periksa nomor Anda lalu minta kode baru.',
             default => "Kode OTP dikirim ke WhatsApp {$phone}.",
         };
     }

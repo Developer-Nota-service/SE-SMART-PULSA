@@ -43,11 +43,21 @@ docker compose -f docker-compose.base44.yml restart web       # npm
 Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 `{ "message": "...", "errors": { field: [ ... ] } }`.
 
-- `POST /register` `{name,email,phone,password,accountType}` → 201 (+ `token`);
+- `POST /register` `{name,email,phone,password,accountType}` → 201 **tanpa sesi**:
+  menyimpan akun yang belum terverifikasi, mengirim kode OTP WhatsApp, dan
+  mengembalikan `{ email, verification }` (`phoneMasked`, `expiresInSeconds`,
+  `resendAfterSeconds`, `status`: `sent` | `failed` | `cooldown`).
   `accountType` wajib `reseller` | `personal` (default `reseller`) dan menentukan
   harga produk akun tersebut. Tidak ada endpoint untuk mengubahnya setelah daftar.
-- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body
-- `GET /me` → `{ user, lastLoginAt }` · `POST /logout`
+  Mendaftar ulang dengan email yang belum terverifikasi memperbarui data dan
+  mengirim kode baru (bukan membuat akun kedua).
+- `POST /verify-otp` `{email,code}` → 200 (+ `token`, cookie `sesp_session`) setelah
+  kode benar; sekaligus menandai `email_verified_at` + `phone_verified_at`.
+- `POST /resend-otp` `{email}` → 200 `{ verification }` (jeda 60 detik antar kode).
+- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body.
+  Akun yang belum terverifikasi dijawab **403** `{ data: { needsVerification: true,
+  email, verification } }` dan kode OTP baru dikirim.
+- `GET /me` → `{ user, lastLoginAt }` (`user.emailVerified`, `user.phoneVerified`) · `POST /logout`
 - `GET /products?category=` · `GET /products/:id` — `price` adalah harga untuk tipe
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
@@ -67,6 +77,30 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` /
 `admin12345`. Data demo: saldo Rp186.900, 4 transaksi (success/pending/failed),
 4 deposit (paid/pending/expired), 95 produk DEMO di 7 kategori.
+
+## Verifikasi akun (OTP WhatsApp via Fonnte)
+
+Akun baru tidak bisa dipakai sebelum nomor WhatsApp-nya terbukti aktif. Alurnya:
+`POST /register` → kode 6 angka dikirim ke WhatsApp nomor pendaftar lewat Fonnte →
+`POST /verify-otp` → barulah sesi dibuat. Akun lama yang belum terverifikasi
+(`email_verified_at` NULL) dipaksa ke langkah yang sama saat `POST /login`.
+
+- `app/Services/OtpService.php` — terbitkan & periksa kode: berlaku 5 menit, jeda
+  kirim ulang 60 detik, maksimal 5 percobaan salah per kode, kode lama otomatis
+  dibatalkan saat kode baru terbit. Hanya `code_hash` (SHA-256) yang disimpan —
+  jangan pernah menyimpan atau mengembalikan kode asli.
+- `app/Services/FonnteClient.php` — `POST https://api.fonnte.com/send` dengan header
+  `Authorization: <FONNTE_TOKEN>`, form `target` (format `62...`) + `message`.
+- `config/fonnte.php` → `FONNTE_TOKEN`, `FONNTE_API_URL`. Token berasal dari
+  dashboard Fonnte (Device > Token) dan dikirim platform lewat
+  `/run/base44/app.env`; **jangan** menaruhnya di compose `environment:`.
+- Satu nomor terverifikasi hanya boleh dipakai satu akun (registrasi kedua ditolak
+  422 `phone`).
+- Sandbox: bila pengiriman gagal **dan** `BASE44_PREVIEW_MODE=1`, respons berisi
+  `verification.devCode` supaya alur bisa dicoba tanpa WhatsApp. `devCode` selalu
+  `null` di luar preview mode atau saat Fonnte berhasil mengirim.
+- Akun demo/admin di-seed dengan `email_verified_at` + `phone_verified_at` terisi
+  agar login demo tetap tanpa OTP.
 
 ## Pembayaran Midtrans (Snap + webhook)
 
@@ -129,6 +163,10 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
   browser.
 - Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.
 - Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per email.
+- Sesi hanya terbit setelah OTP WhatsApp terverifikasi (registrasi maupun
+  `/verify-otp`). Jangan menambah jalur yang membuat sesi untuk akun dengan
+  `phone_verified_at` NULL, dan jangan pernah mengirim kode OTP di luar
+  `verification.devCode` yang dibatasi preview mode.
 - `COOKIE_SECURE=1` untuk deployment HTTPS. Cookie `sesp_session` dikecualikan dari
   `EncryptCookies` (token acak, bukan payload terenkripsi).
 
@@ -150,6 +188,12 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:3000/api/v1/me        # 401 t
 curl -s -c /tmp/c -X POST localhost:3000/api/v1/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@sesmartpulsa.id","password":"demo12345"}'
+
+# Alur OTP: daftar (kode dikirim ke WhatsApp) lalu verifikasi dengan kode dari WA
+curl -s -X POST localhost:3000/api/v1/register -H 'Content-Type: application/json' \
+  -d '{"name":"Uji OTP","email":"uji@example.com","phone":"08xxxxxxxxxx","password":"rahasia123","accountType":"personal"}'
+curl -s -X POST localhost:3000/api/v1/verify-otp -H 'Content-Type: application/json' \
+  -d '{"email":"uji@example.com","code":"123456"}'
 curl -s -b /tmp/c localhost:3000/api/v1/products | head -c 200
 ```
 

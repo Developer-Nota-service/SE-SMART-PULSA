@@ -65,15 +65,15 @@ class OtpService
 
         $sent = $this->fonnte->send($phone, $this->message($code));
 
-        // Tanpa token Fonnte di lingkungan preview, kode ditampilkan agar alur
-        // verifikasi tetap bisa diuji. Tidak pernah aktif di luar preview.
+        // Bila pengiriman gagal di lingkungan preview, kode dikembalikan agar
+        // alur verifikasi tetap bisa diuji. Tidak pernah aktif di luar preview.
         $devCode = (! $sent && $this->previewFallback()) ? $code : null;
 
         return $this->meta(
             $phone,
             self::TTL_SECONDS,
             self::RESEND_SECONDS,
-            $sent ? 'sent' : 'not_configured',
+            $sent ? 'sent' : 'failed',
             $devCode,
         );
     }
