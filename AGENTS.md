@@ -75,8 +75,27 @@ framework **Laravel** (root repo, port **80**), `npm run build` untuk React, dan
 environment `APP_KEY`, `DATABASE_URL` (Postgres `se-smart-pulsa-db`),
 `COOKIE_SECURE=1`. Build type Dockerfile memakai `Dockerfile` + `docker/entrypoint.sh`,
 yang otomatis `migrate --force` + `db:seed` ke database kosong saat container start.
-Auto-deploy hosting mengikuti branch `main`; pastikan branch itu sudah berisi kode
-Laravel, bukan backend Node lama.
+Auto-deploy hosting mengikuti branch `main`, yang sudah berisi kode Laravel (backend
+Node lama `api/` sudah dihapus).
+
+**Quirk image produksi:** folder `resources/views` harus ada di repo (dijaga
+`resources/views/.gitkeep`). Tanpa folder itu `php artisan optimize` di
+`docker/entrypoint.sh` gagal (`The ".../resources/views" directory does not exist`)
+dan container langsung exit sebelum Apache jalan — migrate + seed sudah jalan, jadi
+gejalanya "container mati, port tidak menjawab".
+
+Uji jalur deploy tanpa hosting (Dockerfile + Postgres bersih):
+
+```bash
+docker build -t se-smart-pulsa:deploy-check .
+# jalankan dengan Postgres sementara, lalu:
+#   /up → 200 · / → 302 /app · /app/transaksi → 200 · /api/v1/me → 401
+#   POST /api/v1/login demo → 200 · GET /api/v1/products → 95 produk
+#   curl -H 'X-Forwarded-Proto: https' -H 'Host: <domain>' localhost:8081/ → 302 https://<domain>/app
+```
+
+`TRUSTED_PROXIES` (default `*`, lihat `bootstrap/app.php`) membuat URL/redirect
+mengikuti skema `X-Forwarded-Proto` dari proxy hosting.
 
 ## Verifikasi
 

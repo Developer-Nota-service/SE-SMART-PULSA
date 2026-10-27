@@ -18,6 +18,16 @@ return Application::configure(basePath: dirname(__DIR__))
         // cookie must not be encrypted/decrypted by the framework.
         $middleware->encryptCookies(except: ['sesp_session']);
 
+        // Hosting menerminasi TLS di proxy-nya, jadi Laravel harus membaca
+        // X-Forwarded-* agar URL yang dibuat (redirect / → /app) memakai https.
+        $middleware->trustProxies(
+            at: env('TRUSTED_PROXIES', '*'),
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO,
+        );
+
         $middleware->alias([
             'session.token' => AuthenticateSessionToken::class,
         ]);
