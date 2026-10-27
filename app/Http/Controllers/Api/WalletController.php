@@ -75,6 +75,13 @@ class WalletController extends Controller
 
         $user = $request->attributes->get('authUser');
 
+        // Akun pribadi tidak memakai saldo, jadi tidak perlu mengisi saldo.
+        if ((string) ($user->account_type ?? 'reseller') !== 'reseller') {
+            return response()->json([
+                'message' => 'Isi saldo hanya untuk akun reseller. Akun pribadi bertransaksi langsung lewat Midtrans.',
+            ], 422);
+        }
+
         $deposit = OrderNumber::withUnique('DEP', function (string $orderNumber) use ($user, $amount) {
             $id = DB::table('deposits')->insertGetId([
                 'user_id' => $user->id,

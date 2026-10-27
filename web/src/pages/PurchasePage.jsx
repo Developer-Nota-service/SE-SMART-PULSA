@@ -17,6 +17,9 @@ export default function PurchasePage() {
   const { productId } = useParams()
   const navigate = useNavigate()
   const { user, updateBalance } = useAuth()
+  // Metode bayar mengikuti tipe akun: reseller memakai saldo, akun pribadi
+  // membayar langsung lewat Midtrans.
+  const isPersonal = user?.accountType === 'personal'
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -25,7 +28,6 @@ export default function PurchasePage() {
   const [fieldError, setFieldError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [method, setMethod] = useState('balance')
   const [result, setResult] = useState(null)
   const idempotencyKey = useRef(newIdempotencyKey())
 
@@ -62,7 +64,7 @@ export default function PurchasePage() {
 
     setSubmitting(true)
     try {
-      if (activeMethod === 'midtrans') {
+      if (isPersonal) {
         const data = await api.directPurchase({ productId: product.id, customerNumber })
 
         if (!data.payment?.redirectUrl) {
@@ -148,10 +150,9 @@ export default function PurchasePage() {
   const emailTarget = product.category === 'voucher'
   // Server mengirim `price` sesuai tipe akun (reseller atau pribadi).
   const unitPrice = product.price
-  const priceLabel = user?.accountType === 'personal' ? 'harga publik' : 'harga reseller'
-  const insufficient = user ? user.balance < unitPrice : false
-  // Saldo kurang: arahkan otomatis ke pembayaran langsung via Midtrans.
-  const activeMethod = method === 'balance' && insufficient ? 'midtrans' : method
+  const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'
+  const method = isPersonal ? 'midtrans' : 'balance'
+  const insufficient = !isPersonal && user ? user.balance < unitPrice : false
 
   return (
     <div className="stack">
@@ -197,18 +198,18 @@ export default function PurchasePage() {
             {fieldError ? <span className="field__error">{fieldError}</span> : null}
           </label>
 
-          <div className="info-row">
-            <span className="info-row__label">Saldo Anda</span>
-            <span className="info-row__value">{user ? rupiah(user.balance) : '—'}</span>
-          </div>
+          {isPersonal ? null : (
+            <div className="info-row">
+              <span className="info-row__label">Saldo Anda</span>
+              <span className="info-row__value">{user ? rupiah(user.balance) : '—'}</span>
+            </div>
+          )}
 
           <PaymentOptions
-            method={activeMethod}
-            onChange={setMethod}
+            method={method}
             price={unitPrice}
             priceLabel={priceLabel}
             balance={user?.balance ?? 0}
-            balanceDisabled={insufficient}
           />
 
           {insufficient ? (
@@ -217,7 +218,7 @@ export default function PurchasePage() {
               <Link to="/saldo" className="inline-link">
                 Isi saldo
               </Link>{' '}
-              atau bayar langsung.
+              agar bisa bertransaksi dengan harga reseller.
             </p>
           ) : null}
 
@@ -231,12 +232,18 @@ export default function PurchasePage() {
             <button type="button" className="btn btn--outline" onClick={() => navigate(-1)}>
               Batal
             </button>
-            <button type="submit" className="btn btn--primary" disabled={submitting}>
+            <button
+              type="submit"
+              className="btn btn--primary"
+              disabled={submitting || insufficient}
+            >
               {submitting
                 ? 'Memproses…'
-                : activeMethod === 'midtrans'
-                  ? `Bayar ${rupiah(unitPrice)}`
-                  : `Konfirmasi ${rupiah(unitPrice)}`}
+                : insufficient
+                  ? 'Saldo tidak cukup'
+                  : method === 'midtrans'
+                    ? `Bayar ${rupiah(unitPrice)}`
+                    : `Konfirmasi ${rupiah(unitPrice)}`}
             </button>
           </div>
         </form>

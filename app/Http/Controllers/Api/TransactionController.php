@@ -94,6 +94,15 @@ class TransactionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->attributes->get('authUser');
+
+        // Jalur saldo hanya untuk reseller; akun pribadi selalu lewat Midtrans.
+        if (self::isPersonal($user)) {
+            return response()->json([
+                'message' => 'Akun pribadi tidak memakai saldo. Selesaikan transaksi lewat Midtrans.',
+                'errors' => ['paymentMethod' => ['Pembayaran saldo hanya untuk akun reseller.']],
+            ], 422);
+        }
+
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
         $idempotencyKey = $request->header('Idempotency-Key') ?: null;
@@ -221,6 +230,15 @@ class TransactionController extends Controller
     public function direct(Request $request): JsonResponse
     {
         $user = $request->attributes->get('authUser');
+
+        // Reseller wajib mengisi saldo dan bertransaksi memakai saldo.
+        if (! self::isPersonal($user)) {
+            return response()->json([
+                'message' => 'Akun reseller bertransaksi memakai saldo. Silakan isi saldo terlebih dahulu.',
+                'errors' => ['paymentMethod' => ['Bayar langsung hanya untuk akun pribadi.']],
+            ], 422);
+        }
+
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
 
@@ -313,6 +331,11 @@ class TransactionController extends Controller
                 'payment' => $payment,
             ],
         ], 201);
+    }
+
+    private static function isPersonal(object $user): bool
+    {
+        return (string) ($user->account_type ?? 'reseller') === 'personal';
     }
 
     private function productCategory(mixed $productId): ?string

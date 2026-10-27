@@ -147,7 +147,7 @@ export default function LoginPage() {
                   />
                   <span className="pay-option__body">
                     <span className="pay-option__title">Jual kembali</span>
-                    <span className="pay-option__meta">Akun reseller · harga lebih murah</span>
+                    <span className="pay-option__meta">Akun reseller · harga khusus, bayar pakai saldo</span>
                   </span>
                 </label>
 
@@ -163,7 +163,7 @@ export default function LoginPage() {
                   />
                   <span className="pay-option__body">
                     <span className="pay-option__title">Pemakaian pribadi</span>
-                    <span className="pay-option__meta">Akun pribadi · harga publik</span>
+                    <span className="pay-option__meta">Akun pribadi · harga publik, bayar via Midtrans</span>
                   </span>
                 </label>
               </div>

@@ -54,6 +54,14 @@ export default function ProfilePage() {
           </span>
         </div>
         <div className="info-row">
+          <span className="info-row__label">Metode bayar</span>
+          <span className="info-row__value">
+            {user?.accountType === 'personal'
+              ? 'Midtrans · bayar langsung'
+              : 'Saldo · isi saldo dulu'}
+          </span>
+        </div>
+        <div className="info-row">
           <span className="info-row__label">Terakhir masuk</span>
           <span className="info-row__value">{lastLoginAt ? dateTime(lastLoginAt) : '—'}</span>
         </div>

@@ -52,11 +52,13 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
 - `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
-  (bayar pakai saldo, harga reseller)
+  — **reseller saja**: bayar pakai saldo, harga reseller (akun pribadi ditolak 422)
 - `POST /transactions/direct` `{productId,customerNumber}` → transaksi `pending` +
-  `{transaction, payment:{token,redirectUrl}}` (bayar langsung Midtrans, harga publik)
+  `{transaction, payment:{token,redirectUrl}}` — **akun pribadi saja**: bayar langsung
+  Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo)
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
-  (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap)
+  (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap; hanya akun
+  reseller — akun pribadi ditolak 422 karena tidak memakai saldo)
 - `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
 
 Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` /
@@ -65,11 +67,13 @@ Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` 
 
 ## Pembayaran Midtrans (Snap + webhook)
 
-Harga ditentukan oleh tipe akun (`users.account_type`), bukan oleh metode bayar:
+Harga dan metode bayar ditentukan oleh tipe akun (`users.account_type`):
 
-- **Reseller** — `products.price` (lebih murah).
+- **Reseller** — `products.price` (lebih murah), **wajib isi saldo** dan membayar
+  dengan saldo (`POST /transactions`). Jalur Midtrans langsung ditolak.
 - **Pribadi** — `products.retail_price` (5% di atas harga saldo, dibulatkan ke atas
-  per Rp100).
+  per Rp100), **tidak memakai saldo**: semua transaksi lewat Midtrans
+  (`POST /transactions/direct`) dan `POST /deposits` ditolak.
 
 `app/Support/Pricing::unitPrice()` adalah satu-satunya sumber aturan ini dan dipakai
 oleh `CatalogController` (harga yang dikirim ke UI), `POST /transactions` (potong
