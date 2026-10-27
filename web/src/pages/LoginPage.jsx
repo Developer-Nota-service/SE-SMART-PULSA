@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { ShieldIcon } from '../components/Icons.jsx'
 import OtpVerification from '../components/OtpVerification.jsx'
+import PasswordReset from '../components/PasswordReset.jsx'
 
 const DEMO = { email: 'demo@sesmartpulsa.id', password: 'demo12345' }
 
@@ -23,6 +24,8 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   // Terisi setelah pendaftaran / login akun belum verifikasi: tampilkan langkah OTP.
   const [verification, setVerification] = useState(null)
+  // Alur lupa sandi: verifikasi nomor WhatsApp lalu atur sandi baru.
+  const [resetting, setResetting] = useState(false)
 
   if (user) return <Navigate to={location.state?.from || '/'} replace />
 
@@ -90,6 +93,14 @@ export default function LoginPage() {
             onCancel={() => {
               setVerification(null)
               setMessage('')
+            }}
+          />
+        ) : resetting ? (
+          <PasswordReset
+            onCancel={() => {
+              setResetting(false)
+              setMessage('')
+              setErrors({})
             }}
           />
         ) : (
@@ -213,6 +224,22 @@ export default function LoginPage() {
             />
             {errors.password ? <span className="field__error">{errors.password[0]}</span> : null}
           </label>
+
+          {mode === 'login' ? (
+            <div className="auth__helper">
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setResetting(true)
+                  setMessage('')
+                  setErrors({})
+                }}
+              >
+                Lupa sandi atau email?
+              </button>
+            </div>
+          ) : null}
 
           {message ? (
             <p className="form-message" role="alert">

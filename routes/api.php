@@ -17,6 +17,12 @@ Route::prefix('v1')->group(function () {
     Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
     Route::post('resend-otp', [AuthController::class, 'resendOtp']);
 
+    // Lupa sandi: verifikasi nomor WhatsApp dulu, lalu tampilkan email akun dan
+    // atur sandi baru tanpa perlu tahu email lamanya.
+    Route::post('password/forgot', [AuthController::class, 'requestPasswordReset']);
+    Route::post('password/verify', [AuthController::class, 'verifyPasswordReset']);
+    Route::post('password/reset', [AuthController::class, 'resetPassword']);
+
     // Webhook pembayaran Midtrans: publik, diverifikasi lewat signature_key.
     Route::post('midtrans/notification', [MidtransController::class, 'notification']);
 

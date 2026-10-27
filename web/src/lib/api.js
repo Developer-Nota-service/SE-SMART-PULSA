@@ -127,6 +127,18 @@ export const api = {
     return data
   },
   resendOtp: (email) => request('/resend-otp', { method: 'POST', body: { email } }),
+  // Lupa sandi: kode WhatsApp → email akun + token reset → sandi baru.
+  requestPasswordReset: (phone) =>
+    request('/password/forgot', { method: 'POST', body: { phone } }),
+  verifyPasswordReset: (phone, code) =>
+    request('/password/verify', { method: 'POST', body: { phone, code } }),
+  resetPassword: async (resetToken, password) => {
+    const data = normalizeUser(
+      await request('/password/reset', { method: 'POST', body: { resetToken, password } }),
+    )
+    if (data?.token) setToken(data.token)
+    return data
+  },
   me: async () => normalizeUser(await request('/me')),
   logout: async () => {
     try {

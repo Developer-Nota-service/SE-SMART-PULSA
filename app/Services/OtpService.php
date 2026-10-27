@@ -23,6 +23,9 @@ class OtpService
 
     public const PURPOSE_PHONE_CHANGE = 'phone_change';
 
+    /** Lupa sandi: kode ke nomor WhatsApp terdaftar sebagai bukti kepemilikan akun. */
+    public const PURPOSE_PASSWORD_RESET = 'password_reset';
+
     /** Kode berlaku 5 menit. */
     public const TTL_SECONDS = 300;
 
@@ -254,6 +257,7 @@ class OtpService
         $prefix = match ($purpose) {
             self::PURPOSE_EMAIL_CHANGE => 'Kode verifikasi email baru akun SE SMART PULSA',
             self::PURPOSE_PHONE_CHANGE => 'Kode verifikasi nomor WhatsApp baru akun SE SMART PULSA',
+            self::PURPOSE_PASSWORD_RESET => 'Kode lupa sandi akun SE SMART PULSA',
             default => 'Kode OTP SE SMART PULSA',
         };
 

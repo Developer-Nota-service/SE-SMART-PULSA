@@ -20,6 +20,9 @@ class AuthController extends Controller
 
     private const ATTEMPT_WINDOW_MINUTES = 15;
 
+    /** Masa berlaku sesi "lupa sandi" setelah kode WhatsApp benar. */
+    private const RESET_MINUTES = 15;
+
     public function __construct(private OtpService $otp) {}
 
     public function register(Request $request): JsonResponse
@@ -254,6 +257,145 @@ class AuthController extends Controller
             'message' => OtpMessage::for($verification),
             'data' => ['verification' => $verification],
         ]);
+    }
+
+    /**
+     * Lupa sandi — langkah 1: kirim kode OTP WhatsApp ke nomor yang terdaftar.
+     * Nomor yang tidak terdaftar dijawab dengan pesan generik agar tidak bisa
+     * dipakai menebak nomor mana yang punya akun.
+     */
+    public function requestPasswordReset(Request $request): JsonResponse
+    {
+        $phone = preg_replace('/\D/', '', (string) $request->input('phone')) ?? '';
+
+        if (! preg_match('/^0\d{8,14}$/', $phone)) {
+            return response()->json([
+                'message' => 'Nomor WhatsApp diawali 0 dan 9-15 digit.',
+                'errors' => ['phone' => ['Nomor WhatsApp diawali 0 dan 9-15 digit.']],
+            ], 422);
+        }
+
+        $user = DB::table('users')->where('phone', $phone)->orderBy('id')->first();
+
+        if ($user === null) {
+            return response()->json([
+                'message' => 'Jika nomor ini terdaftar, kode verifikasi WhatsApp akan dikirim ke nomor tersebut.',
+                'data' => ['verification' => null],
+            ]);
+        }
+
+        $verification = $this->otp->issue($user, $phone, OtpService::PURPOSE_PASSWORD_RESET);
+
+        return response()->json([
+            'message' => OtpMessage::for($verification),
+            'data' => ['verification' => $verification],
+        ]);
+    }
+
+    /**
+     * Lupa sandi — langkah 2: kode WhatsApp benar → email akun ditampilkan
+     * (untuk pengguna yang lupa emailnya) dan sesi reset 15 menit dibuka.
+     */
+    public function verifyPasswordReset(Request $request): JsonResponse
+    {
+        $phone = preg_replace('/\D/', '', (string) $request->input('phone')) ?? '';
+        $code = preg_replace('/\D/', '', (string) $request->input('code')) ?? '';
+
+        $user = $phone === '' ? null : DB::table('users')->where('phone', $phone)->orderBy('id')->first();
+
+        if ($user === null) {
+            return response()->json([
+                'message' => 'Nomor atau kode verifikasi tidak cocok.',
+                'errors' => ['code' => ['Nomor atau kode verifikasi tidak cocok.']],
+            ], 422);
+        }
+
+        if (strlen($code) !== 6) {
+            return response()->json([
+                'message' => 'Kode OTP terdiri dari 6 angka.',
+                'errors' => ['code' => ['Kode OTP terdiri dari 6 angka.']],
+            ], 422);
+        }
+
+        $result = $this->otp->verify($user, $code, OtpService::PURPOSE_PASSWORD_RESET);
+
+        if (! $result['ok']) {
+            return response()->json([
+                'message' => $result['message'],
+                'errors' => ['code' => [$result['message']]],
+            ], 422);
+        }
+
+        $token = bin2hex(random_bytes(32));
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['user_id' => $user->id],
+            [
+                'token_hash' => hash('sha256', $token),
+                'expires_at' => now()->addMinutes(self::RESET_MINUTES),
+                'created_at' => now(),
+            ],
+        );
+
+        $this->writeAudit((int) $user->id, 'auth.password_reset.verified');
+
+        return response()->json([
+            'message' => 'Nomor WhatsApp terverifikasi. Atur sandi baru untuk akun ini.',
+            'data' => [
+                'email' => $user->email,
+                'resetToken' => $token,
+                'expiresInSeconds' => self::RESET_MINUTES * 60,
+            ],
+        ]);
+    }
+
+    /**
+     * Lupa sandi — langkah 3: simpan sandi baru dari sesi reset, putuskan sesi
+     * lama, lalu beri sesi masuk. Hanya akun yang nomornya sudah terverifikasi
+     * lewat OTP yang boleh lewat jalur ini.
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $token = trim((string) $request->input('resetToken'));
+        $password = (string) $request->input('password');
+
+        if (strlen($password) < 8) {
+            return response()->json([
+                'message' => 'Password minimal 8 karakter.',
+                'errors' => ['password' => ['Password minimal 8 karakter.']],
+            ], 422);
+        }
+
+        $row = $token === '' ? null : DB::table('password_reset_tokens')
+            ->where('token_hash', hash('sha256', $token))
+            ->first();
+
+        if ($row === null || now()->greaterThan(\Illuminate\Support\Carbon::parse($row->expires_at))) {
+            return response()->json([
+                'message' => 'Sesi atur ulang sandi sudah kedaluwarsa. Minta kode baru.',
+                'errors' => ['resetToken' => ['Sesi atur ulang sandi sudah kedaluwarsa.']],
+            ], 422);
+        }
+
+        $user = DB::table('users')->find($row->user_id);
+
+        if ($user === null || $user->phone_verified_at === null) {
+            return response()->json([
+                'message' => 'Akun belum terverifikasi. Ulangi permintaan kode WhatsApp.',
+                'errors' => ['resetToken' => ['Akun belum terverifikasi.']],
+            ], 422);
+        }
+
+        DB::table('users')->where('id', $user->id)->update([
+            'password_hash' => Hash::make($password),
+        ]);
+
+        DB::table('password_reset_tokens')->where('user_id', $user->id)->delete();
+        DB::table('sessions')->where('user_id', $user->id)->delete();
+
+        $this->writeAudit((int) $user->id, 'auth.password_reset');
+
+        return $this->sessionResponse(DB::table('users')->find($user->id));
     }
 
     /**

@@ -55,6 +55,14 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `POST /verify-otp` `{email,code}` → 200 (+ `token`, cookie `sesp_session`) setelah
   kode benar; sekaligus menandai `email_verified_at` + `phone_verified_at`.
 - `POST /resend-otp` `{email}` → 200 `{ verification }` (jeda 60 detik antar kode).
+- `POST /password/forgot` `{phone}` → 200 `{ verification }`: kirim kode OTP WhatsApp
+  (`purpose: password_reset`) ke nomor terdaftar; nomor tak terdaftar dijawab pesan
+  generik dengan `verification: null` (anti-enumerasi).
+- `POST /password/verify` `{phone,code}` → 200 `{ email, resetToken, expiresInSeconds }`:
+  kode benar menampilkan email akun (untuk pengguna yang lupa email) dan membuka
+  sesi reset 15 menit (hash token di tabel `password_reset_tokens`).
+- `POST /password/reset` `{resetToken,password}` → 200 (+ sesi masuk): sandi baru
+  disimpan, sesi lama akun diputus, token reset dihapus.
 - `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body.
   Akun yang belum terverifikasi dijawab **403** `{ data: { needsVerification: true,
   email, verification } }` dan kode OTP baru dikirim.
@@ -105,10 +113,11 @@ Akun baru tidak bisa dipakai sebelum nomor WhatsApp-nya terbukti aktif. Alurnya:
 - `app/Services/OtpService.php` — terbitkan & periksa kode: berlaku 5 menit, jeda
   kirim ulang 60 detik, maksimal 5 percobaan salah per kode, kode lama otomatis
   dibatalkan saat kode baru terbit. Hanya `code_hash` (SHA-256) yang disimpan —
-  jangan pernah menyimpan atau mengembalikan kode asli. Tiga `purpose`/kanal:
+  jangan pernah menyimpan atau mengembalikan kode asli. Empat `purpose`/kanal:
   `account_verification` (WhatsApp, verifikasi akun baru), `email_change` (email,
-  kode dikirim ke **email baru**), dan `phone_change` (WhatsApp, kode dikirim ke
-  **nomor baru**). Perubahan kontak disimpan di kolom `payload` dan baru diterapkan
+  kode dikirim ke **email baru**), `phone_change` (WhatsApp, kode dikirim ke
+  **nomor baru**), dan `password_reset` (WhatsApp, lupa sandi/email lewat nomor
+  terdaftar — kode benar juga menandai akun terverifikasi). Perubahan kontak disimpan di kolom `payload` dan baru diterapkan
   saat kode untuk kanal itu benar; kolom `otp_codes.target` menyimpan tujuan
   (nomor atau alamat email).
 - Email OTP memakai `Mail` Laravel (config `mail`). Kanal dianggap siap hanya bila
