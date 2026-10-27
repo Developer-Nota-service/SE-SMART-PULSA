@@ -7,7 +7,9 @@ export default function BalanceCard({ account, compact = false }) {
       <span className="balance-card__label">Saldo aktif</span>
       <strong className="balance-card__value">{account ? rupiah(account.balance) : '—'}</strong>
       <span className="balance-card__meta">
-        {account ? `${account.name} · ${account.phone}` : 'Memuat akun…'}
+        {account
+          ? [account.name, account.phone].filter(Boolean).join(' · ')
+          : 'Memuat akun…'}
       </span>
 
       <div className="balance-card__actions">

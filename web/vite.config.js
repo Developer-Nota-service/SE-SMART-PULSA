@@ -9,8 +9,14 @@ if (process.env.BASE44_PREVIEW_MODE === '1' && process.env.BASE44_SANDBOX_HOST_D
   previewHosts.push(`.${process.env.BASE44_SANDBOX_HOST_DOMAIN}`)
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Produksi disajikan Laravel dari public/app, jadi aset memakai prefiks /app/.
+  base: command === 'build' ? '/app/' : '/',
   plugins: [react()],
+  build: {
+    outDir: '../public/app',
+    emptyOutDir: true,
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,
@@ -18,9 +24,9 @@ export default defineConfig({
     allowedHosts: previewHosts.length ? previewHosts : undefined,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_PROXY || 'http://api:8000',
+        target: process.env.VITE_API_PROXY || 'http://laravel:8000',
         changeOrigin: true,
       },
     },
   },
-})
+}))

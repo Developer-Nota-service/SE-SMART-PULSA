@@ -1,0 +1,12 @@
+{
+  "name": "se-smart-pulsa",
+  "private": true,
+  "description": "Laravel (root) + React frontend (web/). Dokploy: build React ke public/app.",
+  "scripts": {
+    "build": "npm --prefix web ci && npm --prefix web run build",
+    "dev": "npm --prefix web run dev"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -16,44 +16,76 @@ services:
       timeout: 3s
       retries: 24
       start_period: 5s
+    labels:
+      base44.project: "SE-SMART PULSA"
+      base44.kind: "infra"
 
-  # One-shot schema + seed, runs before the API starts. Idempotent.
-  migrate:
-    image: node:22-alpine
-    working_dir: /app
-    command: ["sh", "-ec", "npm install --no-audit --no-fund && node src/setup-db.js"]
-    volumes:
-      - ./api:/app
-      - api_node_modules:/app/node_modules
+  # One-shot: pastikan database khusus Laravel ada (data lama milik backend
+  # Node sebelumnya tidak disentuh).
+  dbsetup:
+    image: postgres:16-alpine
     environment:
-      DATABASE_URL: postgres://pulsa:pulsa_dev_only@db:5432/pulsa
+      PGPASSWORD: pulsa_dev_only
     depends_on:
       db:
         condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        psql -h db -U pulsa -d pulsa -tAc "SELECT 1 FROM pg_database WHERE datname='pulsa_laravel'" | grep -q 1 \
+          || psql -h db -U pulsa -d pulsa -c 'CREATE DATABASE pulsa_laravel'
 
-  api:
-    image: node:22-alpine
+  # Laravel: API /api/v1 + halaman /app. Migrasi + seed dijalankan saat start
+  # (keduanya idempotent), jadi db kosong selalu siap dipakai.
+  laravel:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
     restart: on-failure
     working_dir: /app
-    command: ["sh", "-ec", "npm install --no-audit --no-fund && exec node --watch src/server.js"]
+    command:
+      - sh
+      - -ec
+      - |
+        [ -f vendor/autoload.php ] || composer install --no-interaction --prefer-dist
+        php artisan config:clear >/dev/null
+        php artisan migrate --force
+        php artisan db:seed --force
+        exec php artisan serve --host=0.0.0.0 --port=8000
     volumes:
-      - ./api:/app
-      - api_node_modules:/app/node_modules
+      - .:/app
     environment:
-      DATABASE_URL: postgres://pulsa:pulsa_dev_only@db:5432/pulsa
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      APP_KEY: base64:lOZh+tWXYdiU7ZRfijeTwOqveUUVjd6HDaWs+MDJZag=
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: pulsa_laravel
+      DB_USERNAME: pulsa
+      DB_PASSWORD: pulsa_dev_only
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      LOG_CHANNEL: stderr
       PORT: "8000"
     depends_on:
       db:
         condition: service_healthy
-      migrate:
+      dbsetup:
         condition: service_completed_successfully
     healthcheck:
-      # 401 from the auth-guarded endpoint still proves the API is answering.
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8000/api/v1/me').then((r) => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))\""]
+      test: ["CMD", "php", "docker/health.php"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 40s
+      start_period: 60s
+    labels:
+      base44.project: "SE-SMART PULSA"
+      base44.kind: "api"
+      base44.port: "8000"
 
   web:
     image: node:22-alpine
@@ -66,16 +98,14 @@ services:
     ports:
       - "3000:5173"
     environment:
-      # Set LARAVEL_API_ORIGIN (a live backend origin, e.g. an HTTPS tunnel) to
-      # route /api/v1 through the dev proxy to the real Laravel backend.
-      # Unset keeps the local demo API.
-      VITE_API_PROXY: ${LARAVEL_API_ORIGIN:-http://api:8000}
+      # Semua /api diproxy ke Laravel (single origin, cookie sesi tetap terkirim).
+      VITE_API_PROXY: http://laravel:8000
       # Injected by the Base44 sandbox; bare keys pass them through when present.
       __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:
       BASE44_PREVIEW_MODE:
       BASE44_SANDBOX_HOST_DOMAIN:
     depends_on:
-      api:
+      laravel:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ >/dev/null || exit 1"]
@@ -90,5 +120,4 @@ services:
 
 volumes:
   pgdata:
-  api_node_modules:
   web_node_modules:
