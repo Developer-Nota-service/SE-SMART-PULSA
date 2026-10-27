@@ -862,6 +862,97 @@ select.input {
   text-align: right;
 }
 
+/* ---------- ringkasan akun (profil) ---------- */
+.summary {
+  display: grid;
+  gap: 8px;
+}
+
+.summary__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, var(--navy) 0%, var(--accent) 100%);
+  color: #fff;
+}
+
+.summary__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.summary__icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.summary__body {
+  min-width: 0;
+}
+
+.summary__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.summary__value {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.summary__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.summary__tile {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #f8fafe;
+  padding: 9px 11px;
+}
+
+.summary__tile--wide {
+  grid-column: 1 / -1;
+}
+
+.summary__tile .summary__label {
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.summary__tile .summary__label svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+
+.summary__tile .summary__value {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
 /* ---------- sheet ---------- */
 .overlay {
   position: fixed;
