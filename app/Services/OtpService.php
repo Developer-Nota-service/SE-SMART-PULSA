@@ -6,11 +6,18 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Membuat dan memeriksa kode OTP verifikasi akun. Kode dikirim ke WhatsApp
- * nomor pengguna lewat Fonnte dan hanya hash-nya yang disimpan.
+ * Membuat dan memeriksa kode OTP. Kode dikirim ke WhatsApp lewat Fonnte dan
+ * hanya hash-nya yang disimpan.
+ *
+ * Dua tujuan: verifikasi akun baru (`account_verification`) dan konfirmasi
+ * perubahan nomor WhatsApp/email (`contact_change`).
  */
 class OtpService
 {
+    public const PURPOSE_ACCOUNT = 'account_verification';
+
+    public const PURPOSE_CONTACT = 'contact_change';
+
     /** Kode berlaku 5 menit. */
     public const TTL_SECONDS = 300;
 
@@ -23,15 +30,23 @@ class OtpService
     public function __construct(private FonnteClient $fonnte) {}
 
     /**
-     * Terbitkan kode baru untuk pengguna dan kirim via WhatsApp.
+     * Terbitkan kode baru dan kirim ke WhatsApp `$phone` (default: nomor akun).
+     * `$payload` disimpan bersama kode dan dipakai saat verifikasi berhasil.
      *
+     * @param  array<string,mixed>  $payload
      * @return array{channel:string,phoneMasked:string,expiresInSeconds:int,resendAfterSeconds:int,status:string,devCode:string|null}
      */
-    public function issue(object $user): array
-    {
-        $phone = $this->formatPhone((string) $user->phone);
+    public function issue(
+        object $user,
+        ?string $phone = null,
+        string $purpose = self::PURPOSE_ACCOUNT,
+        array $payload = [],
+    ): array {
+        $phone = $this->formatPhone($phone ?? (string) $user->phone);
+
         $last = DB::table('otp_codes')
             ->where('user_id', $user->id)
+            ->where('purpose', $purpose)
             ->whereNull('consumed_at')
             ->orderByDesc('id')
             ->first();
@@ -50,20 +65,23 @@ class OtpService
 
         DB::table('otp_codes')
             ->where('user_id', $user->id)
+            ->where('purpose', $purpose)
             ->whereNull('consumed_at')
             ->update(['consumed_at' => now()]);
 
         DB::table('otp_codes')->insert([
             'user_id' => $user->id,
             'channel' => 'whatsapp',
+            'purpose' => $purpose,
             'phone' => $phone,
             'code_hash' => hash('sha256', $code),
+            'payload' => $payload === [] ? null : json_encode($payload),
             'attempts' => 0,
             'expires_at' => now()->addSeconds(self::TTL_SECONDS),
             'created_at' => now(),
         ]);
 
-        $sent = $this->fonnte->send($phone, $this->message($code));
+        $sent = $this->fonnte->send($phone, $this->message($code, $purpose));
 
         // Bila pengiriman gagal di lingkungan preview, kode dikembalikan agar
         // alur verifikasi tetap bisa diuji. Tidak pernah aktif di luar preview.
@@ -79,12 +97,16 @@ class OtpService
     }
 
     /**
-     * @return array{ok:bool,message?:string}
+     * Periksa kode. Bila benar, verifikasi akun ditandai atau perubahan kontak
+     * (`payload`) langsung diterapkan ke pengguna.
+     *
+     * @return array{ok:bool,message?:string,payload?:array<string,mixed>}
      */
-    public function verify(object $user, string $code): array
+    public function verify(object $user, string $code, string $purpose = self::PURPOSE_ACCOUNT): array
     {
         $row = DB::table('otp_codes')
             ->where('user_id', $user->id)
+            ->where('purpose', $purpose)
             ->whereNull('consumed_at')
             ->orderByDesc('id')
             ->first();
@@ -108,12 +130,26 @@ class OtpService
         }
 
         DB::table('otp_codes')->where('id', $row->id)->update(['consumed_at' => now()]);
+
+        $payload = $row->payload ? (array) json_decode((string) $row->payload, true) : [];
+
+        if ($purpose === self::PURPOSE_CONTACT && $payload !== []) {
+            DB::table('users')->where('id', $user->id)->update([
+                'email' => $payload['email'] ?? $user->email,
+                'phone' => $payload['phone'] ?? $user->phone,
+                'email_verified_at' => now(),
+                'phone_verified_at' => now(),
+            ]);
+
+            return ['ok' => true, 'payload' => $payload];
+        }
+
         DB::table('users')->where('id', $user->id)->update([
             'email_verified_at' => $user->email_verified_at ?? now(),
             'phone_verified_at' => $user->phone_verified_at ?? now(),
         ]);
 
-        return ['ok' => true];
+        return ['ok' => true, 'payload' => $payload];
     }
 
     /**
@@ -147,10 +183,14 @@ class OtpService
         return substr($phone, 0, 4).str_repeat('*', strlen($phone) - 7).substr($phone, -3);
     }
 
-    private function message(string $code): string
+    private function message(string $code, string $purpose): string
     {
-        return "Kode OTP SE SMART PULSA Anda: {$code}\n"
-            ."Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun, termasuk yang mengaku admin.";
+        $prefix = $purpose === self::PURPOSE_CONTACT
+            ? 'Kode verifikasi perubahan kontak akun SE SMART PULSA'
+            : 'Kode OTP SE SMART PULSA';
+
+        return "{$prefix}: {$code}\n"
+            .'Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun, termasuk yang mengaku admin.';
     }
 
     private function previewFallback(): bool

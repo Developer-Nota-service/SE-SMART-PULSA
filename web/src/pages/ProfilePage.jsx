@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
+import AccountTypeSwitcher from '../components/AccountTypeSwitcher.jsx'
+import ProfileContactEditor from '../components/ProfileContactEditor.jsx'
+import ProfileHero from '../components/ProfileHero.jsx'
 import {
   ChevronRightIcon,
   FileIcon,
@@ -8,7 +11,7 @@ import {
   LogoutIcon,
   ShieldIcon,
 } from '../components/Icons.jsx'
-import { dateTime, initials } from '../lib/format.js'
+import { dateTime } from '../lib/format.js'
 import { support } from '../lib/support.js'
 
 const menus = [
@@ -17,10 +20,19 @@ const menus = [
   { to: '/legal/privasi', label: 'Kebijakan privasi', Icon: ShieldIcon },
 ]
 
+function verificationBadge(verified) {
+  return (
+    <span className={`badge badge--xs ${verified ? 'badge--ok' : 'badge--warn'}`}>
+      {verified ? 'Terverifikasi' : 'Belum'}
+    </span>
+  )
+}
+
 export default function ProfilePage() {
   const { user, lastLoginAt, logout } = useAuth()
   const navigate = useNavigate()
   const [signingOut, setSigningOut] = useState(false)
+  const [editingContact, setEditingContact] = useState(false)
 
   async function handleLogout() {
     setSigningOut(true)
@@ -34,25 +46,57 @@ export default function ProfilePage() {
 
   return (
     <div className="stack">
-      <section className="profile-card">
-        <span className="profile-card__avatar">{initials(user?.name)}</span>
-        <div className="profile-card__body">
-          <h2 className="profile-card__name">{user?.name}</h2>
-          <p className="profile-card__meta">{user?.email}</p>
-          <p className="profile-card__meta">{user?.phone}</p>
-        </div>
-        <span className={`badge ${user?.role === 'admin' ? 'badge--admin' : 'badge--soft'}`}>
-          {user?.role === 'admin' ? 'Admin' : 'Pengguna'}
-        </span>
-      </section>
+      <ProfileHero user={user} />
 
       <section className="card">
-        <div className="info-row">
-          <span className="info-row__label">Tipe akun</span>
-          <span className="info-row__value">
-            {user?.accountType === 'personal' ? 'Pribadi · harga publik' : 'Reseller · harga khusus'}
-          </span>
+        <div className="section-head">
+          <h2 className="section-title">Kontak &amp; keamanan</h2>
+          {editingContact ? null : (
+            <button
+              type="button"
+              className="inline-link"
+              onClick={() => setEditingContact(true)}
+            >
+              Ubah
+            </button>
+          )}
         </div>
+
+        {editingContact ? (
+          <ProfileContactEditor
+            user={user}
+            onDone={() => setEditingContact(false)}
+            onCancel={() => setEditingContact(false)}
+          />
+        ) : (
+          <div className="contact-list">
+            <div className="contact-row">
+              <div className="contact-row__body">
+                <span className="contact-row__label">Email</span>
+                <span className="contact-row__value">{user?.email}</span>
+              </div>
+              {verificationBadge(user?.emailVerified)}
+            </div>
+
+            <div className="contact-row">
+              <div className="contact-row__body">
+                <span className="contact-row__label">Nomor WhatsApp</span>
+                <span className="contact-row__value">{user?.phone}</span>
+              </div>
+              {verificationBadge(user?.phoneVerified)}
+            </div>
+
+            <p className="note note--muted">
+              Perubahan email atau nomor WhatsApp dikonfirmasi dengan kode OTP ke nomor baru.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <AccountTypeSwitcher user={user} />
+
+      <section className="card">
+        <h2 className="section-title">Ringkasan akun</h2>
         <div className="info-row">
           <span className="info-row__label">Metode bayar</span>
           <span className="info-row__value">
@@ -88,11 +132,6 @@ export default function ProfilePage() {
           ))}
         </nav>
       </section>
-
-      <p className="note note--muted">
-        Pengaturan akun, ubah profil, dan keamanan tambahan aktif setelah terhubung ke backend
-        Laravel pada Tahap 2.
-      </p>
 
       <button
         type="button"

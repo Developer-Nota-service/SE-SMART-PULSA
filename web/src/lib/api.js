@@ -59,7 +59,7 @@ function normalizeUser(payload) {
   return { ...payload, user: { ...payload.user, balance: balance ?? 0 } }
 }
 
-async function request(path, { method = 'GET', body, headers } = {}) {
+async function request(path, { method = 'GET', body, form, headers } = {}) {
   let response
   try {
     response = await fetch(`${BASE_URL}${path}`, {
@@ -68,10 +68,11 @@ async function request(path, { method = 'GET', body, headers } = {}) {
       headers: {
         Accept: 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // FormData mengatur Content-Type (boundary) sendiri.
         ...(body ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: form || (body ? JSON.stringify(body) : undefined),
     })
   } catch (error) {
     throw new ApiError('Tidak dapat terhubung ke server. Periksa koneksi Anda.', 0)
@@ -147,6 +148,18 @@ export const api = {
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     }),
   directPurchase: (payload) => request('/transactions/direct', { method: 'POST', body: payload }),
+
+  updateName: (name) => request('/profile', { method: 'PATCH', body: { name } }),
+  requestContactChange: (payload) => request('/profile/contact', { method: 'POST', body: payload }),
+  verifyContactChange: (code) =>
+    request('/profile/contact/verify', { method: 'POST', body: { code } }),
+  updateAccountType: (accountType) =>
+    request('/profile/account-type', { method: 'PATCH', body: { accountType } }),
+  uploadAvatar: (file) => {
+    const form = new FormData()
+    form.append('avatar', file)
+    return request('/profile/avatar', { method: 'POST', form })
+  },
 
   balanceEntries: () => request('/balance/entries'),
   deposits: () => request('/deposits'),

@@ -48,7 +48,8 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   mengembalikan `{ email, verification }` (`phoneMasked`, `expiresInSeconds`,
   `resendAfterSeconds`, `status`: `sent` | `failed` | `cooldown`).
   `accountType` wajib `reseller` | `personal` (default `reseller`) dan menentukan
-  harga produk akun tersebut. Tidak ada endpoint untuk mengubahnya setelah daftar.
+  harga produk akun tersebut. Bisa diubah kapan saja lewat
+  `PATCH /profile/account-type` (tanpa mendaftar ulang).
   Mendaftar ulang dengan email yang belum terverifikasi memperbarui data dan
   mengirim kode baru (bukan membuat akun kedua).
 - `POST /verify-otp` `{email,code}` → 200 (+ `token`, cookie `sesp_session`) setelah
@@ -57,7 +58,20 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body.
   Akun yang belum terverifikasi dijawab **403** `{ data: { needsVerification: true,
   email, verification } }` dan kode OTP baru dikirim.
-- `GET /me` → `{ user, lastLoginAt }` (`user.emailVerified`, `user.phoneVerified`) · `POST /logout`
+- `GET /me` → `{ user, lastLoginAt }` (`user.emailVerified`, `user.phoneVerified`,
+  `user.avatarUrl`) · `POST /logout`
+- `PATCH /profile` `{name}` — ubah nama tampilan (2-60 karakter).
+- `POST /profile/contact` `{email,phone}` → 200 `{ verification }`: kode OTP dikirim ke
+  nomor WhatsApp **baru**. Email/nomor baru baru diterapkan (dan keduanya ditandai
+  terverifikasi) setelah `POST /profile/contact/verify` `{code}` benar. Nomor lama
+  tetap aktif sampai kode dikonfirmasi.
+- `PATCH /profile/account-type` `{accountType}` — pindah reseller ↔ pribadi tanpa
+  daftar ulang; harga, metode bayar, dan fitur langsung mengikuti tipe baru. Pindah
+  ke pribadi ditolak 422 bila saldo > 0 atau masih ada deposit pending, supaya saldo
+  tidak tertahan.
+- `POST /profile/avatar` (multipart `avatar`, JPG/PNG/WEBP maks 2 MB) → `user.avatarUrl`;
+  file disimpan di `storage/app/private/avatars` dan disajikan lewat
+  `GET /avatar/{file}` (nama acak 32 hex, tanpa sesi karena dipakai `<img>`).
 - `GET /products?category=` · `GET /products/:id` — `price` adalah harga untuk tipe
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
@@ -88,7 +102,10 @@ Akun baru tidak bisa dipakai sebelum nomor WhatsApp-nya terbukti aktif. Alurnya:
 - `app/Services/OtpService.php` — terbitkan & periksa kode: berlaku 5 menit, jeda
   kirim ulang 60 detik, maksimal 5 percobaan salah per kode, kode lama otomatis
   dibatalkan saat kode baru terbit. Hanya `code_hash` (SHA-256) yang disimpan —
-  jangan pernah menyimpan atau mengembalikan kode asli.
+  jangan pernah menyimpan atau mengembalikan kode asli. Dua `purpose`:
+  `account_verification` (verifikasi akun baru) dan `contact_change` (perubahan
+  email/WhatsApp dari halaman profil; perubahan disimpan di kolom `payload` dan
+  diterapkan saat kode benar).
 - `app/Services/FonnteClient.php` — `POST https://api.fonnte.com/send` dengan header
   `Authorization: <FONNTE_TOKEN>`, form `target` (format `62...`) + `message`.
 - `config/fonnte.php` → `FONNTE_TOKEN`, `FONNTE_API_URL`. Token berasal dari

@@ -101,6 +101,13 @@ export const CheckIcon = (p) => (
   </svg>
 )
 
+export const CameraIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 8.5h3l1.4-2h7.2l1.4 2h3v9.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+    <circle cx="12" cy="13" r="3.2" />
+  </svg>
+)
+
 export const CloseIcon = (p) => (
   <svg {...base} strokeWidth={2.2} {...p}>
     <path d="M6 6l12 12M18 6 6 18" />

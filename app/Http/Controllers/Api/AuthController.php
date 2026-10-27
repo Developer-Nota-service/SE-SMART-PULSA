@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\AuthenticateSessionToken;
 use App\Services\OtpService;
+use App\Support\OtpMessage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,7 @@ class AuthController extends Controller
         $verification = $this->otp->issue($user);
 
         return response()->json([
-            'message' => $this->verificationMessage($verification),
+            'message' => OtpMessage::for($verification),
             'data' => [
                 'email' => $user->email,
                 'verification' => $verification,
@@ -165,7 +166,7 @@ class AuthController extends Controller
             $verification = $this->otp->issue($user);
 
             return response()->json([
-                'message' => 'Akun belum terverifikasi. '.$this->verificationMessage($verification),
+                'message' => 'Akun belum terverifikasi. '.OtpMessage::for($verification),
                 'errors' => ['verification' => ['Selesaikan verifikasi kode OTP WhatsApp untuk masuk.']],
                 'data' => [
                     'needsVerification' => true,
@@ -250,7 +251,7 @@ class AuthController extends Controller
         $verification = $this->otp->issue($user);
 
         return response()->json([
-            'message' => $this->verificationMessage($verification),
+            'message' => OtpMessage::for($verification),
             'data' => ['verification' => $verification],
         ]);
     }
@@ -258,21 +259,6 @@ class AuthController extends Controller
     /**
      * @param  array{phoneMasked:string,status:string,resendAfterSeconds:int,devCode:string|null}  $verification
      */
-    private function verificationMessage(array $verification): string
-    {
-        $phone = $verification['phoneMasked'];
-
-        if ($verification['devCode'] !== null) {
-            return "Mode sandbox (Fonnte belum terhubung): kode OTP untuk {$phone} adalah {$verification['devCode']}.";
-        }
-
-        return match ($verification['status']) {
-            'cooldown' => "Kode sebelumnya baru dikirim. Tunggu {$verification['resendAfterSeconds']} detik untuk minta kode baru.",
-            'failed' => 'Kode OTP gagal dikirim ke WhatsApp. Periksa nomor Anda lalu minta kode baru.',
-            default => "Kode OTP dikirim ke WhatsApp {$phone}.",
-        };
-    }
-
     public function me(Request $request): JsonResponse
     {
         $user = $request->attributes->get('authUser');
@@ -354,6 +340,9 @@ class AuthController extends Controller
             'balance' => (int) $row->balance,
             'emailVerified' => ($row->email_verified_at ?? null) !== null,
             'phoneVerified' => ($row->phone_verified_at ?? null) !== null,
+            'avatarUrl' => ($row->avatar_path ?? null)
+                ? '/api/v1/avatar/'.basename((string) $row->avatar_path)
+                : null,
         ];
     }
 }
