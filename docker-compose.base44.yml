@@ -66,7 +66,10 @@ services:
     ports:
       - "3000:5173"
     environment:
-      VITE_API_PROXY: http://api:8000
+      # Set LARAVEL_API_ORIGIN (a live backend origin, e.g. an HTTPS tunnel) to
+      # route /api/v1 through the dev proxy to the real Laravel backend.
+      # Unset keeps the local demo API.
+      VITE_API_PROXY: ${LARAVEL_API_ORIGIN:-http://api:8000}
       # Injected by the Base44 sandbox; bare keys pass them through when present.
       __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS:
       BASE44_PREVIEW_MODE:

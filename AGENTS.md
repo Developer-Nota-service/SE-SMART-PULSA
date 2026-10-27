@@ -61,6 +61,31 @@ di-unwrap, error 401 memicu event `sesp:unauthorized`, 422 diteruskan sebagai
 `error.errors` per field. Selama kontrak respons Laravel sama, cukup ganti base URL
 dan arahkan cookie/sanctum.
 
+### Mengarahkan ke backend Laravel lewat proxy dev
+
+Jangan pernah set `VITE_API_BASE_URL` ke URL tunnel: browser akan memanggil lintas
+origin sehingga cookie sesi `SameSite` tidak terkirim. Route tetap same-origin:
+browser → port 3000 → proxy Vite → backend.
+
+```bash
+# tunnel harus hidup; quick tunnel dapat nama acak baru setiap `cloudflared` dijalankan
+LARAVEL_API_ORIGIN=https://xxxx.trycloudflare.com \
+  docker compose -f docker-compose.base44.yml up -d --force-recreate web
+```
+
+`LARAVEL_API_ORIGIN` kosong/tidak diset → `/api` tetap ke demo lokal (`api:8000`),
+jadi preview tidak pernah rusak karena tunnel mati. Cek dulu kesiapannya:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" localhost:3000/api/v1/me   # 401 = Laravel menjawab
+```
+
+Belum teruji terhadap backend nyata: bila Laravel memasang atribut `Domain` pada
+`Set-Cookie` (`SESSION_DOMAIN`), cookie akan ditolak browser di origin preview —
+kosongkan `SESSION_DOMAIN` di Laravel atau strip atribut itu di proxy. Sanctum SPA
+juga butuh `/sanctum/csrf-cookie` + header `X-XSRF-TOKEN`, yang belum ada di
+`web/src/lib/api.js`.
+
 ## Verifikasi
 
 ```bash
