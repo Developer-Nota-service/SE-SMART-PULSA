@@ -1,109 +1,79 @@
 # AGENTS.md — SE SMART PULSA
 
-PPOB demo app. Tahap 1: UI + backend demo lokal yang meniru kontrak Laravel.
-Backend Laravel lama milik pengguna TIDAK ada di repo ini dan tidak boleh diubah dari sini.
+PPOB demo app. **Backend Laravel 13 (PHP 8.4) + Postgres**, frontend React (Vite)
+di `web/`. Satu domain: Laravel melayani API `/api/v1` dan React hasil build di `/app`.
 
-## Menjalankan
+## Menjalankan (sandbox/base44)
 
-`docker-compose.base44.yml` menjalankan semuanya dari source (bind mount, dev server):
+`docker-compose.base44.yml` menjalankan semuanya dari source:
 
-- `web` — Vite dev server, host port **3000** → 5173. Entry preview.
-- `api` — Express di port internal 8000 (`node --watch`).
-- `db` — Postgres 16, volume `pgdata`.
-- `migrate` — one-shot: buat schema + seed demo. API menunggu service ini exit 0.
+- `web` — Vite dev server, host port **3000** → 5173 (entry preview).
+- `laravel` — `php artisan serve` di 8000; otomatis `migrate` + `db:seed` saat start.
+- `db` — Postgres 16, volume `pgdata`. Data backend Node lama tetap ada di database
+  `pulsa`; Laravel memakai database sendiri `pulsa_laravel` (dibuat `dbsetup`).
+- `dbsetup` — one-shot: `CREATE DATABASE pulsa_laravel` bila belum ada.
 
-Browser hanya bicara ke port 3000; Vite mem-proxy `/api` ke `http://api:8000`, jadi
-single-origin dan tidak perlu CORS. Jangan buka 8000 ke publik.
+Browser hanya bicara ke port 3000; Vite mem-proxy `/api` → `http://laravel:8000`
+(single origin, cookie sesi terkirim).
 
-Setelah mengubah `package.json`, **restart service terkait** — `npm install` hanya jalan
-saat container start, bukan saat file berubah:
+**Jangan membuat file `.env` di root container Laravel.** Compose sudah mengirim
+environment (`APP_KEY`, `DB_*`, `SESSION_DRIVER`); `php artisan serve` mewariskan env
+terbatas ke built-in server sehingga `.env` akan menang dan memutus koneksi DB.
+`.env` di repo di-*ignore* git, jangan dibuat ulang.
+
+Setelah mengubah `composer.json`/`package.json`, restart service terkait:
 
 ```bash
-docker compose -f docker-compose.base44.yml restart web   # atau api
+docker compose -f docker-compose.base44.yml restart laravel   # composer
+docker compose -f docker-compose.base44.yml restart web       # npm
 ```
+
+## Struktur
+
+- `routes/api.php` + `app/Http/Controllers/Api/*` — kontrak API v1.
+- `app/Http/Middleware/AuthenticateSessionToken.php` — token cookie `sesp_session`
+  atau `Authorization: Bearer`.
+- `database/migrations/*` — skema; `database/seeders/DatabaseSeeder.php` — produk +
+  akun + riwayat demo (idempotent, aman dijalankan setiap boot).
+- `web/` — React; `vite.config.js` build ke `public/app` dengan base `/app/`.
+- `routes/web.php` — `/` → `/app`; `/app/{any}` → `public/app/index.html` (SPA fallback).
 
 ## Kontrak API (v1)
 
 Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
-`{ "message": "...", "errors": { field: [ ... ] } }` mengikuti gaya Laravel.
+`{ "message": "...", "errors": { field: [ ... ] } }`.
 
-- `POST /register` `{name,email,phone,password}` → 201
-- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax)
-- `GET /me` → `{ user, lastLoginAt }`
-- `POST /logout`
+- `POST /register` `{name,email,phone,password}` → 201 (+ `token`)
+- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body
+- `GET /me` → `{ user, lastLoginAt }` · `POST /logout`
 - `GET /products?category=` · `GET /products/:id`
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
 - `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
 
-Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin (untuk Tahap 6):
-`admin@sesmartpulsa.id` / `admin12345`. Data demo: saldo Rp186.900, 4 transaksi
-(success/pending/failed), 4 deposit (paid/pending/expired), 95 produk DEMO di 7 kategori.
+Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` /
+`admin12345`. Data demo: saldo Rp186.900, 4 transaksi (success/pending/failed),
+4 deposit (paid/pending/expired), 95 produk DEMO di 7 kategori.
 
 ## Invariant keamanan (jangan dilanggar)
 
-- Harga dan saldo ditentukan server. Balance check berjalan di SQL
-  (`UPDATE users SET balance = balance - $1 WHERE balance >= $1`) karena BIGINT
-  dikembalikan Postgres sebagai teks — jangan bandingkan di JS.
+- Harga dan saldo ditentukan server. Charge berjalan atomik di SQL
+  (`UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?`) — jangan
+  bandingkan BIGINT di PHP float.
 - `POST /deposits` hanya membuat status `pending`. **Tidak ada** endpoint yang bisa
-  menandai deposit `paid`; itu tugas notifikasi Midtrans yang diverifikasi di Laravel.
-  Jangan tambahkan tombol "tandai lunas" di frontend.
-- Setiap perubahan saldo menulis `balance_entries` (audit trail) dalam transaksi DB yang sama.
-- Password di-hash bcrypt; login dibatasi 5 percobaan gagal / 15 menit per email.
-- Token sesi hanya di cookie httpOnly (bukan localStorage). `COOKIE_SECURE=1` untuk
-  deployment HTTPS khusus.
+  menandai deposit `paid`; itu tugas notifikasi Midtrans yang diverifikasi. Jangan
+  tambahkan tombol "tandai lunas".
+- Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.
+- Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per email.
+- `COOKIE_SECURE=1` untuk deployment HTTPS. Cookie `sesp_session` dikecualikan dari
+  `EncryptCookies` (token acak, bukan payload terenkripsi).
 
-## Menyambung ke backend Laravel (Tahap 2+)
+## Deploy
 
-`web/src/lib/api.js` adalah satu-satunya lapisan HTTP: base URL dari
-`VITE_API_BASE_URL` (default `/api/v1`), `credentials: 'include'`, envelope `data`
-di-unwrap, error 401 memicu event `sesp:unauthorized`, 422 diteruskan sebagai
-`error.errors` per field. Selama kontrak respons Laravel sama, cukup ganti base URL
-dan arahkan cookie/sanctum.
-
-### Autentikasi Bearer (backend Laravel pengguna)
-
-Backend Laravel pengguna memakai Sanctum **personal access token**, bukan cookie:
-`POST /login` dan `/register` mengembalikan `token`, lalu setiap request mengirim
-`Authorization: Bearer <token>`. `web/src/lib/api.js` menyimpan token itu di
-`sessionStorage` (bukan localStorage) dan tetap memakai cookie bila respons tidak
-berisi token — jadi API demo tidak berubah. `/register` mewajibkan field
-`password_confirmation`; field `phone` opsional dan boleh tidak ada di respons
-(kartu saldo tidak menampilkan nomor bila kosong).
-
-### Mengarahkan ke backend Laravel lewat proxy dev
-
-Jangan pernah set `VITE_API_BASE_URL` ke URL tunnel: browser akan memanggil lintas
-origin sehingga cookie sesi `SameSite` tidak terkirim. Route tetap same-origin:
-browser → port 3000 → proxy Vite → backend.
-
-```bash
-# tunnel harus hidup; quick tunnel dapat nama acak baru setiap `cloudflared` dijalankan
-LARAVEL_API_ORIGIN=https://xxxx.trycloudflare.com \
-  docker compose -f docker-compose.base44.yml up -d --force-recreate web
-```
-
-`LARAVEL_API_ORIGIN` kosong/tidak diset → `/api` tetap ke demo lokal (`api:8000`),
-jadi preview tidak pernah rusak karena tunnel mati. Cek dulu kesiapannya:
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" localhost:3000/api/v1/me   # 401 = Laravel menjawab
-```
-
-Belum teruji terhadap backend nyata: bila Laravel memasang atribut `Domain` pada
-`Set-Cookie` (`SESSION_DOMAIN`), cookie akan ditolak browser di origin preview —
-kosongkan `SESSION_DOMAIN` di Laravel atau strip atribut itu di proxy. Sanctum SPA
-juga butuh `/sanctum/csrf-cookie` + header `X-XSRF-TOKEN`, yang belum ada di
-`web/src/lib/api.js`.
-
-## Produksi satu domain
-
-`Dockerfile` + `package.json` root membangun `web/dist` lalu menjalankan satu proses
-Node (`api/src/server.js`) yang menyajikan React di `/` (fallback SPA) dan API di
-`/api/v1`. Di dev hal ini tidak aktif karena `web/dist` tidak ada di dalam mount
-`api/` — Vite tetap yang melayani port 3000. Deploy: lihat
-`docs/DEPLOY-SATU-DOMAIN.md` dan `.env.production.example` (`DATABASE_URL`,
-`COOKIE_SECURE=1`). Seed demo idempotent, aman dijalankan setiap boot.
+Lihat `docs/DEPLOY-SATU-DOMAIN.md`. Ringkas: Dokploy framework **Laravel**
+(root repo, port **80**), `npm run build` untuk React, dan environment
+`APP_KEY`, `DATABASE_URL`, `COOKIE_SECURE=1`. `Dockerfile` tersedia bila memakai
+build type Dockerfile.
 
 ## Verifikasi
 
@@ -116,20 +86,21 @@ curl -s -c /tmp/c -X POST localhost:3000/api/v1/login \
 curl -s -b /tmp/c localhost:3000/api/v1/products | head -c 200
 ```
 
-Reset data demo:
+Build produksi React + cek halaman yang dilayani Laravel:
 
 ```bash
-docker compose -f docker-compose.base44.yml exec -T db psql -U pulsa -d pulsa -c "
-DELETE FROM balance_entries; DELETE FROM transactions; DELETE FROM deposits;
-DELETE FROM login_attempts; DELETE FROM sessions; DELETE FROM audit_logs;
-UPDATE users SET balance = 0;"
-docker compose -f docker-compose.base44.yml run --rm migrate   # seed ulang riwayat demo
+npm run build                       # → public/app
+docker compose -f docker-compose.base44.yml exec -T web \
+  node -e "fetch('http://laravel:8000/app').then(r=>console.log(r.status))"
 ```
+
+Catatan: `php artisan serve` (dev) hanya melayani `/app` dan `/app/`;
+sub-rute SPA seperti `/app/transaksi` di dev ditangani Vite di port 3000,
+sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
 
 ## Catatan
 
 - Produk disimpan dengan `is_demo = true` dan selalu ditampilkan dengan label DEMO.
-  Tidak ada provider PPOB nyata; jangan mengarang harga real-time atau status provider.
-- Schema lama (`accounts`) dari build pertama di-drop otomatis oleh `setup-db.js`.
+  Tidak ada provider PPOB nyata; jangan mengarang harga real-time.
 - Halaman: `/login`, `/` (beranda), `/transaksi`, `/saldo`, `/profil`, `/beli/:id`,
   `/bantuan`, `/legal/:doc`. Semua selain `/login` butuh sesi.

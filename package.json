@@ -1,10 +1,10 @@
 {
   "name": "se-smart-pulsa",
   "private": true,
-  "description": "PPOB app: React (web/) + API (api/). Satu proses Node menyajikan keduanya di produksi.",
+  "description": "Laravel (root) + React frontend (web/). Dokploy: build React ke public/app.",
   "scripts": {
-    "build": "npm --prefix web ci && npm --prefix web run build && npm --prefix api ci --omit=dev",
-    "start": "npm --prefix api run setup && npm --prefix api start"
+    "build": "npm --prefix web ci && npm --prefix web run build",
+    "dev": "npm --prefix web run dev"
   },
   "engines": {
     "node": ">=22"

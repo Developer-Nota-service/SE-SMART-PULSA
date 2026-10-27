@@ -1,67 +1,76 @@
-# Deploy satu domain (React + API dalam satu app)
+# Deploy satu domain (Laravel + React + PostgreSQL)
 
-Satu repo = satu app = satu domain. Tidak butuh Laravel maupun Termux.
-Satu proses Node menyajikan UI React dan API:
+Repo ini adalah **aplikasi Laravel** di root. React ada di `web/` dan di-build ke
+`public/app`, lalu disajikan Laravel di `https://domainmu.com/app`.
 
-- `https://domainmu.com/` … `/transaksi` → React (build `web/dist`)
-- `https://domainmu.com/api/v1/...` → API Express (`api/`)
-- Database: Postgres milik platform; schema + seed demo dibuat otomatis saat start
-  (`api/src/setup-db.js`, idempotent — aman dijalankan setiap boot).
+| URL | Isi |
+| --- | --- |
+| `/` | redirect ke `/app` |
+| `/app`, `/app/transaksi`, `/app/saldo`, ... | React (SPA) |
+| `/api/v1/...` | API Laravel (JSON) |
+| `/up` | healthcheck Laravel |
 
-## 1. Deploy lewat platform (pilih Node.js)
+## Dokploy (framework Laravel)
 
 | Setelan | Nilai |
 | --- | --- |
-| Framework | **Node.js** (bukan Laravel/React/Static) |
-| Root directory | `/` |
-| Build command | `npm run build` |
-| Start command | `npm start` |
+| Framework | **Laravel** |
+| Direktori akar | kosong (`/`) |
+| Port aplikasi | **80** (kosong = 80). Jangan 8000 — itu port `artisan serve` di sandbox. |
+| Build command | `composer install --no-dev --optimize-autoloader && npm run build` |
+| Start command | `php artisan migrate --seed --force && php-fpm` (atau default preset) |
 
-`npm run build` (= `npm --prefix web ci && npm --prefix web run build && npm --prefix api ci --omit=dev`)
-dan `npm start` (= `npm --prefix api run setup && npm --prefix api start`) ada di
-`package.json` root.
+`npm run build` di root hanya membangun React ke `public/app` (lihat `package.json`).
+`--seed` idempotent, jadi aman dijalankan setiap deploy.
 
-Environment variable:
+### Environment wajib
 
-```
+```env
+APP_NAME="SE SMART PULSA"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://domainmu.com
+APP_KEY=                # isi hasil: php artisan key:generate --show
 DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/DBNAME
+DB_CONNECTION=pgsql
+SESSION_DRIVER=file     # tabel `sessions` dipakai untuk token API
+CACHE_STORE=file
+QUEUE_CONNECTION=sync
 COOKIE_SECURE=1
-PORT=8000          # biasanya diisi platform
 ```
 
-Tambahkan database Postgres dari dashboard platform, lalu salin `DATABASE_URL`-nya.
-Jangan pakai SQLite — file-nya hilang setiap deploy.
+`DATABASE_URL` disalin dari service **PostgreSQL** di hosting (host internal, bukan
+`localhost`). Buat database dulu, lalu deploy.
 
-Catatan: `PORT` harus dipakai apa adanya (server membaca `process.env.PORT`);
-jika platform meneruskan port lewat argumen (`$PORT`), start command menjadi
-`npm --prefix api run setup && node api/src/server.js`.
+### Kalau preset Laravel tidak jalan
 
-## 2. Deploy lewat Docker (VPS/Railway/Fly, dsb.)
-
-`Dockerfile` di root membangun React lalu menjalankannya dari satu proses Node:
+Ganti **build type** ke **Dockerfile** — `Dockerfile` di root sudah menyiapkan
+Apache + PHP 8.4 + Postgres + React build. Port aplikasi tetap **80**:
 
 ```bash
 docker build -t se-smart-pulsa .
-docker run -d -p 8000:8000 \
+docker run -d -p 80:80 \
+  -e APP_KEY='base64:...' \
   -e DATABASE_URL='postgres://USER:PASSWORD@HOST:5432/DBNAME' \
   -e COOKIE_SECURE=1 \
+  -e SESSION_DRIVER=file -e CACHE_STORE=file \
   se-smart-pulsa
+docker exec <container> php artisan migrate --seed --force
 ```
 
-Letakkan di belakang reverse proxy HTTPS (Caddy/nginx/Traefik) yang meneruskan
-`domainmu.com` → `127.0.0.1:8000`.
+## Cek setelah deploy
 
-## 3. Cek setelah deploy
+1. `https://domainmu.com/up` → 200.
+2. `https://domainmu.com/api/v1/me` → 401 `{"message":"Sesi tidak ditemukan..."}`.
+3. `https://domainmu.com/app` → halaman login; `/app/transaksi` juga tampil (bukan 404).
+4. Login `demo@sesmartpulsa.id` / `demo12345` → saldo Rp186.900, 95 produk demo.
+5. Daftar akun baru → masuk → saldo Rp0 tampil.
 
-1. `https://domainmu.com/api/v1/me` → `{"message":"Sesi tidak ditemukan..."}` (401) = API hidup.
-2. `https://domainmu.com/` → halaman login tampil; `https://domainmu.com/transaksi`
-   juga tampil (bukan 404) berkat fallback SPA.
-3. Login akun demo `demo@sesmartpulsa.id` / `demo12345` → Beranda menampilkan saldo
-   Rp186.900 dan 95 produk demo.
-4. Daftar akun baru → masuk → saldo Rp0 tampil.
+## Catatan
 
-## 4. Kalau nanti tetap mau pindah ke Laravel
-
-Kontrak API-nya sudah ditulis di `AGENTS.md`; port endpoint dari `api/src/routes/`
-ke Laravel, arahkan `web` ke backend itu (base URL `/api/v1`), dan setelan deploy
-tinggal mengikuti framework Laravel.
+- Frontend memakai path relatif `/api/v1`, jadi tidak ada CORS dan cookie sesi
+  otomatis same-origin. Jangan set `VITE_API_BASE_URL` ke domain lain.
+- Build React memakai `base: '/app/'`; kalau path `/app` diganti, ubah
+  `web/vite.config.js` (`base`), `vite.config.js build.outDir`, dan `routes/web.php`.
+- Data lama dari backend Node sebelumnya (database `pulsa` di sandbox) **tidak**
+  dimigrasikan otomatis; Laravel memakai database baru dan seed demo sendiri.
