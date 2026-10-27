@@ -55,6 +55,10 @@ services:
         exec php artisan serve --host=0.0.0.0 --port=8000
     volumes:
       - .:/app
+    # Default sandbox dulu, kredensial asli dari dashboard selalu menang.
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -71,6 +75,8 @@ services:
       QUEUE_CONNECTION: sync
       LOG_CHANNEL: stderr
       PORT: "8000"
+      # Halaman balik setelah pembayaran Midtrans di preview sandbox.
+      MIDTRANS_FINISH_URL: https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/transaksi
     depends_on:
       db:
         condition: service_healthy

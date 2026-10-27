@@ -1090,6 +1090,65 @@ select.input {
   color: var(--navy);
 }
 
+.pay-options {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.pay-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 11px 12px;
+  cursor: pointer;
+}
+
+.pay-option.is-active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: #f8fbff;
+}
+
+.pay-option.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pay-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.pay-option__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pay-option__title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.pay-option__meta {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.pay-option__price {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
 .success-mark {
   display: grid;
   place-items: center;

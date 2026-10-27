@@ -150,9 +150,15 @@ export default function BalancePage() {
                 </span>
               </div>
             </div>
+            {created.payment?.redirectUrl ? (
+              <a className="btn btn--primary btn--block" href={created.payment.redirectUrl}>
+                Lanjut ke pembayaran Midtrans
+              </a>
+            ) : null}
             <p className="note note--muted">
-              Saldo belum bertambah. Pembayaran Midtrans belum diaktifkan pada tahap ini — saldo
-              hanya dikreditkan setelah backend memverifikasi notifikasi pembayaran yang sah.
+              {created.payment?.redirectUrl
+                ? 'Saldo bertambah otomatis setelah Midtrans mengirim notifikasi pembayaran yang sah.'
+                : `${created.paymentError || 'Pembayaran Midtrans belum dikonfigurasi.'} Buat pesanan baru setelah konfigurasi selesai.`}
             </p>
           </div>
         ) : null}

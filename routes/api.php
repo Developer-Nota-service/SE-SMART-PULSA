@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CatalogController;
+use App\Http\Controllers\Api\MidtransController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\WalletController;
 use Illuminate\Support\Facades\Route;
@@ -10,6 +11,9 @@ Route::prefix('v1')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout']);
+
+    // Webhook pembayaran Midtrans: publik, diverifikasi lewat signature_key.
+    Route::post('midtrans/notification', [MidtransController::class, 'notification']);
 
     Route::middleware('session.token')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
@@ -24,5 +28,6 @@ Route::prefix('v1')->group(function () {
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::get('transactions/{id}', [TransactionController::class, 'show']);
         Route::post('transactions', [TransactionController::class, 'store']);
+        Route::post('transactions/direct', [TransactionController::class, 'direct']);
     });
 });

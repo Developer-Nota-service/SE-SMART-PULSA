@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import CopyButton from '../components/CopyButton.jsx'
+import PaymentOptions from '../components/PaymentOptions.jsx'
 import { ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { CheckIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
@@ -24,6 +25,7 @@ export default function PurchasePage() {
   const [fieldError, setFieldError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [method, setMethod] = useState('balance')
   const [result, setResult] = useState(null)
   const idempotencyKey = useRef(newIdempotencyKey())
 
@@ -60,6 +62,18 @@ export default function PurchasePage() {
 
     setSubmitting(true)
     try {
+      if (activeMethod === 'midtrans') {
+        const data = await api.directPurchase({ productId: product.id, customerNumber })
+
+        if (!data.payment?.redirectUrl) {
+          setSubmitError('Tautan pembayaran Midtrans tidak tersedia.')
+          return
+        }
+
+        window.location.assign(data.payment.redirectUrl)
+        return
+      }
+
       const data = await api.purchase(
         { productId: product.id, customerNumber },
         idempotencyKey.current,
@@ -132,7 +146,10 @@ export default function PurchasePage() {
   }
 
   const emailTarget = product.category === 'voucher'
+  const retailPrice = product.retailPrice || product.price
   const insufficient = user ? user.balance < product.price : false
+  // Saldo kurang: arahkan otomatis ke pembayaran langsung via Midtrans.
+  const activeMethod = method === 'balance' && insufficient ? 'midtrans' : method
 
   return (
     <div className="stack">
@@ -183,13 +200,22 @@ export default function PurchasePage() {
             <span className="info-row__value">{user ? rupiah(user.balance) : '—'}</span>
           </div>
 
+          <PaymentOptions
+            method={activeMethod}
+            onChange={setMethod}
+            balancePrice={product.price}
+            retailPrice={retailPrice}
+            balance={user?.balance ?? 0}
+            balanceDisabled={insufficient}
+          />
+
           {insufficient ? (
             <p className="form-message" role="alert">
-              Saldo tidak cukup.{' '}
+              Saldo tidak cukup untuk harga reseller.{' '}
               <Link to="/saldo" className="inline-link">
-                Isi saldo dulu
-              </Link>
-              .
+                Isi saldo
+              </Link>{' '}
+              atau bayar langsung.
             </p>
           ) : null}
 
@@ -203,19 +229,20 @@ export default function PurchasePage() {
             <button type="button" className="btn btn--outline" onClick={() => navigate(-1)}>
               Batal
             </button>
-            <button
-              type="submit"
-              className="btn btn--primary"
-              disabled={submitting || insufficient}
-            >
-              {submitting ? 'Memproses…' : `Konfirmasi ${rupiah(product.price)}`}
+            <button type="submit" className="btn btn--primary" disabled={submitting}>
+              {submitting
+                ? 'Memproses…'
+                : activeMethod === 'midtrans'
+                  ? `Bayar ${rupiah(retailPrice)}`
+                  : `Konfirmasi ${rupiah(product.price)}`}
             </button>
           </div>
         </form>
       </section>
 
       <p className="note note--muted">
-        Harga dan pemotongan saldo ditentukan oleh server. Halaman ini hanya mengirim nomor tujuan.
+        Harga reseller (saldo) dan harga publik (bayar langsung) ditentukan oleh server. Halaman ini
+        hanya mengirim nomor tujuan.
       </p>
     </div>
   )

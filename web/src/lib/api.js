@@ -139,6 +139,7 @@ export const api = {
       body: payload,
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     }),
+  directPurchase: (payload) => request('/transactions/direct', { method: 'POST', body: payload }),
 
   balanceEntries: () => request('/balance/entries'),
   deposits: () => request('/deposits'),

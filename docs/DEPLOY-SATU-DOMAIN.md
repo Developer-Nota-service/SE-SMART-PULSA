@@ -50,9 +50,28 @@ SESSION_DRIVER=file                         # tabel `sessions` dipakai untuk tok
 CACHE_STORE=file
 QUEUE_CONNECTION=sync
 COOKIE_SECURE=1
+MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx      # Dashboard Midtrans > Settings > Access Keys
+MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxx
+MIDTRANS_IS_PRODUCTION=1
+MIDTRANS_FINISH_URL=https://domainmu.com/app/transaksi
 ```
 
 Alternatif: isi `DATABASE_URL` saja (format `postgres://USER:PASSWORD@HOST:5432/DB`).
+
+### Midtrans (deposit & bayar langsung)
+
+1. Isi `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION=1`
+   (pakai key `SB-Mid-...` + `0` untuk sandbox).
+2. Di Dashboard Midtrans → **Settings → Payment → Notification URL**, isi:
+   `https://domainmu.com/api/v1/midtrans/notification`
+3. Pastikan `APP_URL` sudah domain HTTPS; `MIDTRANS_FINISH_URL` menentukan halaman
+   balik setelah pembayaran.
+
+Alur: deposit dibuat `pending` + tautan Snap; saldo bertambah hanya setelah webhook
+`settlement`/`capture` dengan signature valid. Pembelian bayar langsung memakai
+`retail_price` (harga publik) dan melunasi transaksi lewat webhook yang sama tanpa
+memotong saldo. Tanpa Server Key asli, pembayaran menampilkan "Pembayaran Midtrans
+belum dikonfigurasi".
 
 ### Kalau preset Laravel tidak jalan
 

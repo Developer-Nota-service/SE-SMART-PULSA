@@ -81,11 +81,22 @@ class DatabaseSeeder extends Seeder
     private function seedProducts(): void
     {
         foreach ($this->buildProducts() as $product) {
+            $product['retail_price'] = $this->retailPrice((int) $product['price']);
+
             DB::table('products')->updateOrInsert(
                 ['sku' => $product['sku']],
                 $product + ['active' => true, 'is_demo' => true],
             );
         }
+    }
+
+    /**
+     * Harga publik untuk pembayaran langsung via Midtrans: 5% di atas harga
+     * saldo/reseller, dibulatkan ke atas per Rp100.
+     */
+    private function retailPrice(int $price): int
+    {
+        return (int) (ceil($price * 1.05 / 100) * 100);
     }
 
     /**

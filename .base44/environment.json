@@ -2,5 +2,16 @@
   "previewPort": 3000,
   "healthPath": "/",
   "startCommand": "docker compose -f docker-compose.base44.yml up -d",
-  "secrets": []
+  "secrets": [
+    {
+      "name": "MIDTRANS_SERVER_KEY",
+      "description": "Server Key Midtrans (Dashboard Midtrans > Settings > Access Keys). Dipakai membuat pembayaran Snap dan memverifikasi signature webhook. Tanpa nilai asli, pembayaran Midtrans nonaktif.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MIDTRANS_CLIENT_KEY",
+      "description": "Client Key Midtrans (Dashboard Midtrans > Settings > Access Keys) untuk Snap.js di frontend.",
+      "requiredAtBoot": false
+    }
+  ]
 }

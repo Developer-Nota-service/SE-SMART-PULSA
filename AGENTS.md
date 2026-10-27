@@ -49,20 +49,52 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /products?category=` · `GET /products/:id`
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
 - `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
+  (bayar pakai saldo, harga reseller)
+- `POST /transactions/direct` `{productId,customerNumber}` → transaksi `pending` +
+  `{transaction, payment:{token,redirectUrl}}` (bayar langsung Midtrans, harga publik)
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
+  (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap)
+- `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
 
 Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` /
 `admin12345`. Data demo: saldo Rp186.900, 4 transaksi (success/pending/failed),
 4 deposit (paid/pending/expired), 95 produk DEMO di 7 kategori.
+
+## Pembayaran Midtrans (Snap + webhook)
+
+Dua alur harga:
+
+- **Saldo/reseller** — `products.price` (lebih murah). Dipakai `POST /transactions`.
+- **Bayar langsung/publik** — `products.retail_price` (5% di atas harga saldo,
+  dibulatkan ke atas per Rp100). Dipakai `POST /transactions/direct`; status
+  `pending` sampai webhook melunasi, saldo tidak dipotong.
+
+Webhook: `POST /api/v1/midtrans/notification`. Server memverifikasi
+`sha512(order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY)`, mencocokkan
+nominal dengan pesanan, lalu:
+
+- deposit → `paid` + saldo bertambah + satu baris `balance_entries` (credit);
+- transaksi langsung → `success` (`paid_at` diisi). Idempoten: notifikasi berulang
+  diabaikan karena status terminal tidak diproses lagi.
+
+Daftarkan URL notifikasi di Dashboard Midtrans (Settings > Payment > Notification
+URL) ke `https://<domain>/api/v1/midtrans/notification`.
+
+Env (`config/services.php → midtrans`): `MIDTRANS_SERVER_KEY`,
+`MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION`, `MIDTRANS_FINISH_URL`. Di sandbox
+nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
+`/run/base44/app.env` (nilai asli menang). Placeholder sengaja ditolak saat
+`APP_ENV=production`, jadi produksi wajib mengisi Server Key asli.
 
 ## Invariant keamanan (jangan dilanggar)
 
 - Harga dan saldo ditentukan server. Charge berjalan atomik di SQL
   (`UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?`) — jangan
   bandingkan BIGINT di PHP float.
-- `POST /deposits` hanya membuat status `pending`. **Tidak ada** endpoint yang bisa
-  menandai deposit `paid`; itu tugas notifikasi Midtrans yang diverifikasi. Jangan
-  tambahkan tombol "tandai lunas".
+- `POST /transactions` memakai `products.price`; `POST /transactions/direct` memakai
+  `retail_price`. Jangan pernah menerima nominal dari browser.
+- Satu-satunya jalur yang boleh menandai deposit `paid` (dan menambah saldo) adalah
+  webhook Midtrans yang signature-nya valid. Jangan tambahkan tombol "tandai lunas".
 - Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.
 - Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per email.
 - `COOKIE_SECURE=1` untuk deployment HTTPS. Cookie `sesp_session` dikecualikan dari
@@ -87,6 +119,17 @@ curl -s -c /tmp/c -X POST localhost:3000/api/v1/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@sesmartpulsa.id","password":"demo12345"}'
 curl -s -b /tmp/c localhost:3000/api/v1/products | head -c 200
+```
+
+Uji webhook Midtrans dengan key placeholder sandbox (signature dihitung dari
+`MIDTRANS_SERVER_KEY` yang sama):
+
+```bash
+ORDER=DEP-20261027-0001; AMOUNT=50000.00; KEY=SB-Mid-server-BASE44DEVPLACEHOLDER
+SIG=$(printf '%s' "${ORDER}200${AMOUNT}${KEY}" | sha512sum | cut -d' ' -f1)
+curl -s -X POST localhost:3000/api/v1/midtrans/notification \
+  -H 'Content-Type: application/json' \
+  -d "{\"order_id\":\"$ORDER\",\"status_code\":\"200\",\"gross_amount\":\"$AMOUNT\",\"transaction_status\":\"settlement\",\"signature_key\":\"$SIG\"}"
 ```
 
 Build produksi React + cek halaman yang dilayani Laravel:

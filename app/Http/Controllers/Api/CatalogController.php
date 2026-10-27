@@ -23,7 +23,7 @@ class CatalogController extends Controller
         }
 
         $rows = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'is_demo')
             ->where('active', true)
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->orderBy('category')
@@ -42,7 +42,7 @@ class CatalogController extends Controller
         }
 
         $product = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'is_demo')
             ->where('id', (int) $id)
             ->where('active', true)
             ->first();
@@ -63,6 +63,7 @@ class CatalogController extends Controller
             'operator' => $row->operator,
             'name' => $row->name,
             'price' => (int) $row->price,
+            'retailPrice' => (int) ($row->retail_price ?: $row->price),
             'isDemo' => (bool) $row->is_demo,
         ];
     }

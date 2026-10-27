@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\MidtransService;
 use App\Support\OrderNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ class TransactionController extends Controller
         'transactions.customer_number',
         'transactions.amount',
         'transactions.status',
+        'transactions.payment_method',
+        'transactions.paid_at',
         'transactions.created_at',
         'products.id as product_id',
         'products.name as product_name',
@@ -25,6 +28,10 @@ class TransactionController extends Controller
         'products.operator',
         'products.is_demo',
     ];
+
+    public function __construct(private readonly MidtransService $midtrans)
+    {
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -94,27 +101,19 @@ class TransactionController extends Controller
             return response()->json(['message' => 'Produk tidak valid.'], 422);
         }
 
-        $productCategory = DB::table('products')
-            ->where('id', (int) $productId)
-            ->where('active', true)
-            ->value('category');
+        $productCategory = $this->productCategory($productId);
 
         if ($productCategory === null) {
             return response()->json(['message' => 'Produk tidak tersedia.'], 404);
         }
 
-        if ($productCategory === 'voucher') {
-            // Voucher dikirim ke email penerima, bukan ke nomor HP.
-            if (filter_var($customerNumber, FILTER_VALIDATE_EMAIL) === false) {
-                return response()->json([
-                    'message' => 'Email penerima voucher tidak valid.',
-                    'errors' => ['customerNumber' => ['Email penerima voucher tidak valid.']],
-                ], 422);
-            }
-        } elseif (! preg_match('/^\d{6,16}$/', $customerNumber)) {
+        // Voucher dikirim ke email penerima, kategori lain ke nomor tujuan.
+        $destinationError = $this->destinationError($productCategory, $customerNumber);
+
+        if ($destinationError !== null) {
             return response()->json([
-                'message' => 'Nomor tujuan harus 6-16 digit angka.',
-                'errors' => ['customerNumber' => ['Nomor tujuan harus 6-16 digit angka.']],
+                'message' => $destinationError,
+                'errors' => ['customerNumber' => [$destinationError]],
             ], 422);
         }
 
@@ -185,6 +184,8 @@ class TransactionController extends Controller
                             'customer_number' => $transaction->customer_number,
                             'amount' => $transaction->amount,
                             'status' => $transaction->status,
+                            'payment_method' => 'balance',
+                            'paid_at' => null,
                             'created_at' => $transaction->created_at,
                             'product_id' => $product->id,
                             'product_name' => $product->name,
@@ -205,6 +206,121 @@ class TransactionController extends Controller
         }
     }
 
+    /**
+     * Alur bayar langsung: Midtrans menagih harga publik, saldo tidak dipotong.
+     */
+    public function direct(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('authUser');
+        $productId = $request->input('productId');
+        $customerNumber = trim((string) $request->input('customerNumber'));
+
+        if (! is_numeric($productId) || (int) $productId != $productId) {
+            return response()->json(['message' => 'Produk tidak valid.'], 422);
+        }
+
+        $product = DB::table('products')
+            ->where('id', (int) $productId)
+            ->where('active', true)
+            ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo']);
+
+        if (! $product) {
+            return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        $destinationError = $this->destinationError($product->category, $customerNumber);
+
+        if ($destinationError !== null) {
+            return response()->json([
+                'message' => $destinationError,
+                'errors' => ['customerNumber' => [$destinationError]],
+            ], 422);
+        }
+
+        $amount = (int) ($product->retail_price > 0 ? $product->retail_price : $product->price);
+
+        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $amount) {
+            $id = DB::table('transactions')->insertGetId([
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+                'order_number' => $orderNumber,
+                'customer_number' => $customerNumber,
+                'amount' => $amount,
+                'status' => 'pending',
+                'payment_method' => 'midtrans',
+                'idempotency_key' => null,
+                'created_at' => now(),
+            ]);
+
+            return DB::table('transactions')->find($id, [
+                'id',
+                'order_number',
+                'customer_number',
+                'amount',
+                'status',
+                'payment_method',
+                'paid_at',
+                'created_at',
+            ]);
+        });
+
+        try {
+            $payment = $this->midtrans->createSnapPayment(
+                $transaction->order_number,
+                $amount,
+                $product->name,
+                ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone],
+            );
+        } catch (\Throwable $error) {
+            // Belum ada tagihan yang sah; jangan tinggalkan pesanan pending.
+            DB::table('transactions')->where('id', $transaction->id)->delete();
+
+            // 422 (bukan 5xx): gateway dev/preview mengganti body 5xx dengan
+            // halaman statusnya sendiri sehingga pesan asli hilang.
+            return response()->json(['message' => $error->getMessage()], 422);
+        }
+
+        return response()->json([
+            'data' => [
+                'transaction' => self::serialize((object) [
+                    'id' => $transaction->id,
+                    'order_number' => $transaction->order_number,
+                    'customer_number' => $transaction->customer_number,
+                    'amount' => $transaction->amount,
+                    'status' => $transaction->status,
+                    'payment_method' => $transaction->payment_method,
+                    'paid_at' => $transaction->paid_at,
+                    'created_at' => $transaction->created_at,
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'category' => $product->category,
+                    'operator' => $product->operator,
+                    'is_demo' => $product->is_demo,
+                ]),
+                'payment' => $payment,
+            ],
+        ], 201);
+    }
+
+    private function productCategory(mixed $productId): ?string
+    {
+        return DB::table('products')
+            ->where('id', (int) $productId)
+            ->where('active', true)
+            ->value('category');
+    }
+
+    private function destinationError(string $category, string $customerNumber): ?string
+    {
+        if ($category === 'voucher') {
+            return filter_var($customerNumber, FILTER_VALIDATE_EMAIL) === false
+                ? 'Email penerima voucher tidak valid.'
+                : null;
+        }
+
+        return preg_match('/^\d{6,16}$/', $customerNumber) ? null : 'Nomor tujuan harus 6-16 digit angka.';
+    }
+
     private function findByKey(int $userId, string $key): ?object
     {
         return DB::table('transactions')
@@ -222,6 +338,8 @@ class TransactionController extends Controller
             'customerNumber' => $row->customer_number,
             'amount' => (int) $row->amount,
             'status' => $row->status,
+            'paymentMethod' => $row->payment_method ?? 'balance',
+            'paidAt' => $row->paid_at ?? null,
             'createdAt' => $row->created_at,
             'product' => [
                 'id' => (int) $row->product_id,

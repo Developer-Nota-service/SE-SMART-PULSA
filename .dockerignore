@@ -1,5 +1,6 @@
 .git
 .gitignore
+.env.base44-defaults
 vendor
 **/node_modules
 web/dist

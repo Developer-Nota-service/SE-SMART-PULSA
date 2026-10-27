@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\MidtransService;
 use App\Support\OrderNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,10 @@ class WalletController extends Controller
     private const MIN_DEPOSIT = 10000;
 
     private const MAX_DEPOSIT = 2000000;
+
+    public function __construct(private readonly MidtransService $midtrans)
+    {
+    }
 
     public function entries(Request $request): JsonResponse
     {
@@ -84,7 +89,29 @@ class WalletController extends Controller
                 ->find($id);
         });
 
-        return response()->json(['data' => self::serializeDeposit($deposit)], 201);
+        $payment = null;
+        $paymentError = null;
+
+        try {
+            $payment = $this->midtrans->createSnapPayment(
+                $deposit->order_number,
+                (int) $deposit->amount,
+                'Deposit saldo '.number_format((int) $deposit->amount, 0, ',', '.'),
+                ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone],
+            );
+        } catch (\Throwable $error) {
+            // Pesanan tetap tersimpan sebagai pending; saldo hanya bertambah
+            // lewat notifikasi Midtrans yang signature-nya sah.
+            $paymentError = $error->getMessage();
+        }
+
+        return response()->json([
+            'data' => [
+                ...self::serializeDeposit($deposit),
+                'payment' => $payment,
+                'paymentError' => $paymentError,
+            ],
+        ], 201);
     }
 
     public static function serializeDeposit(object $row): array
