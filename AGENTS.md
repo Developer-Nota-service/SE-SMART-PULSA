@@ -1,52 +1,91 @@
-# AGENTS.md
+# AGENTS.md — SE SMART PULSA
 
-## How this app runs
+PPOB demo app. Tahap 1: UI + backend demo lokal yang meniru kontrak Laravel.
+Backend Laravel lama milik pengguna TIDAK ada di repo ini dan tidak boleh diubah dari sini.
 
-`docker-compose.base44.yml` (not the repo's own compose, there is none) runs three dev
-services from the bind-mounted source — nothing is baked into an image:
+## Menjalankan
 
-- `web` — Vite dev server, host port **3000** → container 5173. This is the preview entry.
-- `api` — Express on internal port 8000, run with `node --watch` (restarts on edit).
-- `db` — Postgres 16, data in the `pgdata` volume.
+`docker-compose.base44.yml` menjalankan semuanya dari source (bind mount, dev server):
 
-The browser only ever talks to port 3000: Vite proxies `/api` to `http://api:8000`
-(`VITE_API_PROXY`), so the app is single-origin and needs no CORS config. Don't expose
-8000 publicly.
+- `web` — Vite dev server, host port **3000** → 5173. Entry preview.
+- `api` — Express di port internal 8000 (`node --watch`).
+- `db` — Postgres 16, volume `pgdata`.
+- `migrate` — one-shot: buat schema + seed demo. API menunggu service ini exit 0.
 
-`migrate` is a one-shot service that applies `api/src/schema.sql` and seeds the product
-catalogue; the API waits for it to exit 0. Both it and the API run `npm install` into the
-shared `api_node_modules` volume — sequentially, never at the same time.
+Browser hanya bicara ke port 3000; Vite mem-proxy `/api` ke `http://api:8000`, jadi
+single-origin dan tidak perlu CORS. Jangan buka 8000 ke publik.
 
-## Known traps
-
-- **Postgres BIGINT arrives as a string** through node-postgres (`price`, `amount`,
-  `balance`). Comparing two of them in JS compares text, so `"250000" < "6300"` is `true`.
-  That false "Saldo tidak cukup" bug was fixed twice: `web/src/api.js` coerces numeric
-  fields with `withNumbers()`, and the balance check lives in SQL
-  (`UPDATE ... WHERE balance >= $1`) in `api/src/server.js`. Keep both.
-- Product filtering uses `activeOperator` (derived), not the `operator` state directly —
-  switching category must not render an empty grid for one frame.
-- Healthchecks intentionally probe existing read-only endpoints (`/api/account`, `/`).
-  Don't add a health route to the app for Compose.
-- `web/vite.config.js` appends `.${BASE44_SANDBOX_HOST_DOMAIN}` to `allowedHosts` only
-  when `BASE44_PREVIEW_MODE === "1"`; unset keeps Vite's localhost-only default.
-
-## Verifying
+Setelah mengubah `package.json`, **restart service terkait** — `npm install` hanya jalan
+saat container start, bukan saat file berubah:
 
 ```bash
-docker compose -f docker-compose.base44.yml ps          # all healthy, migrate exited 0
-curl -s localhost:3000/api/account                      # {"balance":"250000",...}
-curl -s localhost:3000/api/products | head -c 200       # 65 seeded products
-docker compose -f docker-compose.base44.yml logs --tail 20 api
+docker compose -f docker-compose.base44.yml restart web   # atau api
 ```
 
-Seed data: one demo agent account (`Agen SE-SMART`, balance Rp250.000) and 65 products
-(36 pulsa, 24 paket data, 5 token PLN). Top up and purchases both mutate that account, so
-reset it with
-`psql -U pulsa -d pulsa -c "DELETE FROM transactions; UPDATE accounts SET balance = 250000;"`.
+## Kontrak API (v1)
 
-## Not wired to real providers
+Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
+`{ "message": "...", "errors": { field: [ ... ] } }` mengikuti gaya Laravel.
 
-Payment and the PPOB supply side are simulated: top up credits the wallet immediately and
-a purchase always succeeds. Connecting a real payment gateway or an H2H pulsa provider
-needs that provider's credentials, which are not in this repo.
+- `POST /register` `{name,email,phone,password}` → 201
+- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax)
+- `GET /me` → `{ user, lastLoginAt }`
+- `POST /logout`
+- `GET /products?category=` · `GET /products/:id`
+- `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
+- `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
+- `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
+
+Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin (untuk Tahap 6):
+`admin@sesmartpulsa.id` / `admin12345`. Data demo: saldo Rp186.900, 4 transaksi
+(success/pending/failed), 4 deposit (paid/pending/expired), 95 produk DEMO di 7 kategori.
+
+## Invariant keamanan (jangan dilanggar)
+
+- Harga dan saldo ditentukan server. Balance check berjalan di SQL
+  (`UPDATE users SET balance = balance - $1 WHERE balance >= $1`) karena BIGINT
+  dikembalikan Postgres sebagai teks — jangan bandingkan di JS.
+- `POST /deposits` hanya membuat status `pending`. **Tidak ada** endpoint yang bisa
+  menandai deposit `paid`; itu tugas notifikasi Midtrans yang diverifikasi di Laravel.
+  Jangan tambahkan tombol "tandai lunas" di frontend.
+- Setiap perubahan saldo menulis `balance_entries` (audit trail) dalam transaksi DB yang sama.
+- Password di-hash bcrypt; login dibatasi 5 percobaan gagal / 15 menit per email.
+- Token sesi hanya di cookie httpOnly (bukan localStorage). `COOKIE_SECURE=1` untuk
+  deployment HTTPS khusus.
+
+## Menyambung ke backend Laravel (Tahap 2+)
+
+`web/src/lib/api.js` adalah satu-satunya lapisan HTTP: base URL dari
+`VITE_API_BASE_URL` (default `/api/v1`), `credentials: 'include'`, envelope `data`
+di-unwrap, error 401 memicu event `sesp:unauthorized`, 422 diteruskan sebagai
+`error.errors` per field. Selama kontrak respons Laravel sama, cukup ganti base URL
+dan arahkan cookie/sanctum.
+
+## Verifikasi
+
+```bash
+docker compose -f docker-compose.base44.yml ps
+curl -s -o /dev/null -w "%{http_code}\n" localhost:3000/api/v1/me        # 401 tanpa sesi
+curl -s -c /tmp/c -X POST localhost:3000/api/v1/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@sesmartpulsa.id","password":"demo12345"}'
+curl -s -b /tmp/c localhost:3000/api/v1/products | head -c 200
+```
+
+Reset data demo:
+
+```bash
+docker compose -f docker-compose.base44.yml exec -T db psql -U pulsa -d pulsa -c "
+DELETE FROM balance_entries; DELETE FROM transactions; DELETE FROM deposits;
+DELETE FROM login_attempts; DELETE FROM sessions; DELETE FROM audit_logs;
+UPDATE users SET balance = 0;"
+docker compose -f docker-compose.base44.yml run --rm migrate   # seed ulang riwayat demo
+```
+
+## Catatan
+
+- Produk disimpan dengan `is_demo = true` dan selalu ditampilkan dengan label DEMO.
+  Tidak ada provider PPOB nyata; jangan mengarang harga real-time atau status provider.
+- Schema lama (`accounts`) dari build pertama di-drop otomatis oleh `setup-db.js`.
+- Halaman: `/login`, `/` (beranda), `/transaksi`, `/saldo`, `/profil`, `/beli/:id`,
+  `/bantuan`, `/legal/:doc`. Semua selain `/login` butuh sesi.
