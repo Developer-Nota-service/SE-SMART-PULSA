@@ -200,23 +200,30 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
 - Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
   masih diproses menahan perubahan tipe akun ke pribadi.
-- Cek nama pemilik rekening/e-wallet otomatis memakai **CekRek Netovas** lewat
-  `app/Services/BankAccountVerifier.php`:
-  `POST {NETOVAS_CEKREK_URL|https://netovas.com/api/cekrek/v1/account-inquiry}`
-  form-urlencoded `account_bank={providerCode}&account_number={accountNumber}`,
-  header `Authorization: Bearer <token>` **hanya** bila `NETOVAS_CEKREK_KEY`
-  diisi (endpoint default dipanggil tanpa token). Nama pemilik dibaca dari kunci
-  JSON `account_name`/`account_holder`/`name`/`nama` (boleh bersarang di `data`),
-  pesan penolakan dari `message`/`error_message`/`error`/`remark`.
-  Jawaban pasti di-cache 10 menit, gangguan 1 menit.
-- Kanal bank maupun e-wallet sama-sama dicek otomatis (`account_bank` mengikuti
-  `providerCode`, mis. `gopay`).
-- Bila penyedia tidak menjawab (DNS gagal, timeout, 401/403/5xx, bukan JSON),
-  hasilnya `configured: false` (`verificationAvailable: false`): frontend
-  menampilkan input nama manual dan pengajuan tetap jalan dengan tanda `unverified`.
-  Penolakan rekening dari penyedia (2xx tanpa nama, atau 404/422 dengan
-  `success: false`) memblokir pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu URL
-  atau token salah akan mematikan seluruh penarikan.
+- Cek nama pemilik rekening/e-wallet otomatis memakai **Identity Iluma** lewat
+  `app/Services/BankAccountVerifier.php`. Autentikasi Basic: API key sebagai
+  username tanpa password (`ILUMA_API_KEY`, dikirim platform lewat
+  `/run/base44/app.env`; **jangan** ditaruh di compose `environment:`).
+  - Bank: `POST {ILUMA_BASE_URL|https://api.iluma.ai}/v1.2/identity/bank_account_validation_details`
+    `{bank_account_number, bank_code: "ID_<BANK>"}` → `result.account_holder_name`
+    (kode bank berawalan negara, mis. `bca` → `ID_BCA`).
+  - E-wallet: `POST /v0/identity/ewallet_account_data_requests`
+    `{ewallet_account_number, ewallet_type: "GOPAY"}` → `result.ewallet_account_name`.
+    E-wallet yang didukung: GOPAY, OVO, DANA, SHOPEEPAY, LINKAJA.
+  - Hasil sering asinkron: `PENDING`/`WAITING_ON_SOURCE` lalu ditanyakan ulang
+    lewat `GET {path}/{id}` (maksimal 5 kali, jeda 1 detik) sampai `COMPLETED`.
+    Callback URL Iluma **tidak** didaftarkan karena alamat preview sandbox
+    berubah setiap sandbox dibuat ulang.
+  - Jawaban pasti di-cache 10 menit, `pending` 10 detik, gangguan 1 menit.
+- Bila penyedia tidak menjawab (kunci kosong/ditolak 401/403, 400 bank tak
+  didukung, 5xx, timeout, DNS gagal), hasilnya `configured: false`
+  (`verificationAvailable: false`): frontend menampilkan input nama manual dan
+  pengajuan tetap jalan dengan tanda `unverified`. Penolakan rekening dari penyedia
+  (`COMPLETED` dengan `result.is_found: false`) memblokir pengajuan — jangan
+  mengubahnya menjadi "blokir saat penyedia error", satu kunci salah akan
+  mematikan seluruh penarikan.
+- E-wallet yang belum KYC mengembalikan nama kosong: itu bukan penolakan, jadi
+  hasilnya `configured: false` dan pengguna mengisi nama manual.
 
 ## Invariant keamanan (jangan dilanggar)
 

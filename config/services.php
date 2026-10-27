@@ -42,15 +42,13 @@ return [
         'finish_url' => env('MIDTRANS_FINISH_URL'),
     ],
 
-    // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan (CekRek
-    // Netovas). Kunci opsional: bila penyedia mewajibkan token, isi
-    // NETOVAS_CEKREK_KEY; lihat App\Services\BankAccountVerifier.
-    'netovas' => [
-        'cekrek' => [
-            'url' => env('NETOVAS_CEKREK_URL', 'https://netovas.com/api/cekrek/v1/account-inquiry'),
-            'key' => env('NETOVAS_CEKREK_KEY'),
-            'timeout' => (int) env('NETOVAS_CEKREK_TIMEOUT', 15),
-        ],
+    // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan (Identity
+    // Iluma). Basic auth: API key sebagai username; lihat
+    // App\Services\BankAccountVerifier.
+    'iluma' => [
+        'api_key' => env('ILUMA_API_KEY'),
+        'base_url' => env('ILUMA_BASE_URL', 'https://api.iluma.ai'),
+        'timeout' => (int) env('ILUMA_TIMEOUT', 20),
     ],
 
 ];

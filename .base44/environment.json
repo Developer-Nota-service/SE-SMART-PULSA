@@ -14,8 +14,8 @@
       "requiredAtBoot": false
     },
     {
-      "name": "NETOVAS_CEKREK_KEY",
-      "description": "Token API CekRek Netovas (dari dashboard/penyedia layanan netovas.com) untuk cek nama pemilik rekening/e-wallet tujuan penarikan. Opsional: endpoint default dipanggil tanpa token, dan bila token diwajibkan penyedia, isi nilai ini. Tanpa token yang valid, form penarikan jatuh ke input nama manual.",
+      "name": "ILUMA_API_KEY",
+      "description": "API key Identity Iluma (didapat dari tim sales Iluma setelah pendaftaran; dashboard/Postman Iluma). Dipakai cek nama pemilik rekening bank (bank_account_validation_details) dan e-wallet (ewallet_account_data_requests) sebagai Basic auth username tanpa password. Tanpa nilai, form penarikan jatuh ke input nama manual.",
       "requiredAtBoot": false
     },
     {

@@ -4,7 +4,7 @@ namespace App\Support;
 
 /**
  * Daftar tujuan penarikan saldo: rekening bank dan e-wallet. Kode mengikuti
- * kode tujuan yang dipakai layanan pengecekan rekening (CekRek Netovas).
+ * kode tujuan yang dipakai layanan pengecekan rekening (Identity Iluma).
  */
 class TransferChannels
 {
