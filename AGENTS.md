@@ -70,10 +70,13 @@ Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` 
 
 ## Deploy
 
-Lihat `docs/DEPLOY-SATU-DOMAIN.md`. Ringkas: Dokploy framework **Laravel**
-(root repo, port **80**), `npm run build` untuk React, dan environment
-`APP_KEY`, `DATABASE_URL`, `COOKIE_SECURE=1`. `Dockerfile` tersedia bila memakai
-build type Dockerfile.
+Lihat `docs/DEPLOY-SATU-DOMAIN.md`. Ringkas: DockHosting project `se-smart-pulsa`
+framework **Laravel** (root repo, port **80**), `npm run build` untuk React, dan
+environment `APP_KEY`, `DATABASE_URL` (Postgres `se-smart-pulsa-db`),
+`COOKIE_SECURE=1`. Build type Dockerfile memakai `Dockerfile` + `docker/entrypoint.sh`,
+yang otomatis `migrate --force` + `db:seed` ke database kosong saat container start.
+Auto-deploy hosting mengikuti branch `main`; pastikan branch itu sudah berisi kode
+Laravel, bukan backend Node lama.
 
 ## Verifikasi
 

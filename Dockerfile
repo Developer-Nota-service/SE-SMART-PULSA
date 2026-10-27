@@ -39,4 +39,10 @@ RUN printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require
 
 COPY --from=web /app/public/app ./public/app
 
+# Saat container start: migrate + seed ke Postgres (database baru di hosting),
+# cache config, lalu jalankan Apache. Lihat docker/entrypoint.sh.
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
