@@ -146,8 +146,10 @@ export default function PurchasePage() {
   }
 
   const emailTarget = product.category === 'voucher'
-  const retailPrice = product.retailPrice || product.price
-  const insufficient = user ? user.balance < product.price : false
+  // Server mengirim `price` sesuai tipe akun (reseller atau pribadi).
+  const unitPrice = product.price
+  const priceLabel = user?.accountType === 'personal' ? 'harga publik' : 'harga reseller'
+  const insufficient = user ? user.balance < unitPrice : false
   // Saldo kurang: arahkan otomatis ke pembayaran langsung via Midtrans.
   const activeMethod = method === 'balance' && insufficient ? 'midtrans' : method
 
@@ -203,15 +205,15 @@ export default function PurchasePage() {
           <PaymentOptions
             method={activeMethod}
             onChange={setMethod}
-            balancePrice={product.price}
-            retailPrice={retailPrice}
+            price={unitPrice}
+            priceLabel={priceLabel}
             balance={user?.balance ?? 0}
             balanceDisabled={insufficient}
           />
 
           {insufficient ? (
             <p className="form-message" role="alert">
-              Saldo tidak cukup untuk harga reseller.{' '}
+              Saldo tidak cukup untuk {priceLabel}.{' '}
               <Link to="/saldo" className="inline-link">
                 Isi saldo
               </Link>{' '}
@@ -233,16 +235,16 @@ export default function PurchasePage() {
               {submitting
                 ? 'Memproses…'
                 : activeMethod === 'midtrans'
-                  ? `Bayar ${rupiah(retailPrice)}`
-                  : `Konfirmasi ${rupiah(product.price)}`}
+                  ? `Bayar ${rupiah(unitPrice)}`
+                  : `Konfirmasi ${rupiah(unitPrice)}`}
             </button>
           </div>
         </form>
       </section>
 
       <p className="note note--muted">
-        Harga reseller (saldo) dan harga publik (bayar langsung) ditentukan oleh server. Halaman ini
-        hanya mengirim nomor tujuan.
+        Harga mengikuti tipe akun Anda ({priceLabel}) dan ditentukan oleh server. Halaman ini hanya
+        mengirim nomor tujuan.
       </p>
     </div>
   )

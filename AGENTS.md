@@ -43,10 +43,13 @@ docker compose -f docker-compose.base44.yml restart web       # npm
 Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 `{ "message": "...", "errors": { field: [ ... ] } }`.
 
-- `POST /register` `{name,email,phone,password}` → 201 (+ `token`)
+- `POST /register` `{name,email,phone,password,accountType}` → 201 (+ `token`);
+  `accountType` wajib `reseller` | `personal` (default `reseller`) dan menentukan
+  harga produk akun tersebut. Tidak ada endpoint untuk mengubahnya setelah daftar.
 - `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body
 - `GET /me` → `{ user, lastLoginAt }` · `POST /logout`
-- `GET /products?category=` · `GET /products/:id`
+- `GET /products?category=` · `GET /products/:id` — `price` adalah harga untuk tipe
+  akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
 - `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
   (bayar pakai saldo, harga reseller)
@@ -62,12 +65,16 @@ Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` 
 
 ## Pembayaran Midtrans (Snap + webhook)
 
-Dua alur harga:
+Harga ditentukan oleh tipe akun (`users.account_type`), bukan oleh metode bayar:
 
-- **Saldo/reseller** — `products.price` (lebih murah). Dipakai `POST /transactions`.
-- **Bayar langsung/publik** — `products.retail_price` (5% di atas harga saldo,
-  dibulatkan ke atas per Rp100). Dipakai `POST /transactions/direct`; status
-  `pending` sampai webhook melunasi, saldo tidak dipotong.
+- **Reseller** — `products.price` (lebih murah).
+- **Pribadi** — `products.retail_price` (5% di atas harga saldo, dibulatkan ke atas
+  per Rp100).
+
+`app/Support/Pricing::unitPrice()` adalah satu-satunya sumber aturan ini dan dipakai
+oleh `CatalogController` (harga yang dikirim ke UI), `POST /transactions` (potong
+saldo) dan `POST /transactions/direct` (tagihan Midtrans; status `pending` sampai
+webhook melunasi, saldo tidak dipotong). Akun lama dan akun demo tetap `reseller`.
 
 Webhook: `POST /api/v1/midtrans/notification`. Server memverifikasi
 `sha512(order_id + status_code + gross_amount + MIDTRANS_SERVER_KEY)`, mencocokkan
@@ -91,8 +98,9 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Harga dan saldo ditentukan server. Charge berjalan atomik di SQL
   (`UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?`) — jangan
   bandingkan BIGINT di PHP float.
-- `POST /transactions` memakai `products.price`; `POST /transactions/direct` memakai
-  `retail_price`. Jangan pernah menerima nominal dari browser.
+- Harga selalu `Pricing::unitPrice(price, retail_price, account_type)`. Jangan
+  pernah menerima nominal dari browser, dan jangan mengambil tipe akun dari body
+  request — hanya dari pengguna yang terautentikasi.
 - Satu-satunya jalur yang boleh menandai deposit `paid` (dan menambah saldo) adalah
   webhook Midtrans yang signature-nya valid. Jangan tambahkan tombol "tandai lunas".
 - Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.

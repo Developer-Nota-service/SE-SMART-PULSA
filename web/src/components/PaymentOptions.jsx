@@ -3,8 +3,8 @@ import { rupiah } from '../lib/format.js'
 export default function PaymentOptions({
   method,
   onChange,
-  balancePrice,
-  retailPrice,
+  price,
+  priceLabel,
   balance,
   balanceDisabled,
 }) {
@@ -24,10 +24,10 @@ export default function PaymentOptions({
           onChange={() => onChange('balance')}
         />
         <span className="pay-option__body">
-          <span className="pay-option__title">Saldo · harga reseller</span>
+          <span className="pay-option__title">Saldo · {priceLabel}</span>
           <span className="pay-option__meta">Saldo Anda {rupiah(balance)}</span>
         </span>
-        <span className="pay-option__price">{rupiah(balancePrice)}</span>
+        <span className="pay-option__price">{rupiah(price)}</span>
       </label>
 
       <label className={`pay-option${method === 'midtrans' ? ' is-active' : ''}`}>
@@ -39,10 +39,10 @@ export default function PaymentOptions({
           onChange={() => onChange('midtrans')}
         />
         <span className="pay-option__body">
-          <span className="pay-option__title">Bayar langsung · harga publik</span>
-          <span className="pay-option__meta">Kartu, QRIS, atau e-wallet via Midtrans</span>
+          <span className="pay-option__title">Bayar langsung · Midtrans</span>
+          <span className="pay-option__meta">Kartu, QRIS, atau e-wallet</span>
         </span>
-        <span className="pay-option__price">{rupiah(retailPrice)}</span>
+        <span className="pay-option__price">{rupiah(price)}</span>
       </label>
     </div>
   )

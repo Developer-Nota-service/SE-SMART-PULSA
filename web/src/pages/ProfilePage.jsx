@@ -48,6 +48,12 @@ export default function ProfilePage() {
 
       <section className="card">
         <div className="info-row">
+          <span className="info-row__label">Tipe akun</span>
+          <span className="info-row__value">
+            {user?.accountType === 'personal' ? 'Pribadi · harga publik' : 'Reseller · harga khusus'}
+          </span>
+        </div>
+        <div className="info-row">
           <span className="info-row__label">Terakhir masuk</span>
           <span className="info-row__value">{lastLoginAt ? dateTime(lastLoginAt) : '—'}</span>
         </div>

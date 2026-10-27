@@ -10,7 +10,13 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mode, setMode] = useState('login')
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' })
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    accountType: 'personal',
+  })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -37,6 +43,7 @@ export default function LoginPage() {
           email: form.email.trim(),
           phone: form.phone.replace(/\D/g, ''),
           password: form.password,
+          accountType: form.accountType,
         })
       }
       navigate(location.state?.from || '/', { replace: true })
@@ -124,6 +131,48 @@ export default function LoginPage() {
             </label>
           ) : null}
 
+          {mode === 'register' ? (
+            <div className="field">
+              <span className="field__label">Akun ini dipakai untuk apa?</span>
+              <div className="pay-options" role="radiogroup" aria-label="Tipe akun">
+                <label
+                  className={`pay-option${form.accountType === 'reseller' ? ' is-active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="account_type"
+                    value="reseller"
+                    checked={form.accountType === 'reseller'}
+                    onChange={() => setForm((current) => ({ ...current, accountType: 'reseller' }))}
+                  />
+                  <span className="pay-option__body">
+                    <span className="pay-option__title">Jual kembali</span>
+                    <span className="pay-option__meta">Akun reseller · harga lebih murah</span>
+                  </span>
+                </label>
+
+                <label
+                  className={`pay-option${form.accountType === 'personal' ? ' is-active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="account_type"
+                    value="personal"
+                    checked={form.accountType === 'personal'}
+                    onChange={() => setForm((current) => ({ ...current, accountType: 'personal' }))}
+                  />
+                  <span className="pay-option__body">
+                    <span className="pay-option__title">Pemakaian pribadi</span>
+                    <span className="pay-option__meta">Akun pribadi · harga publik</span>
+                  </span>
+                </label>
+              </div>
+              {errors.accountType ? (
+                <span className="field__error">{errors.accountType[0]}</span>
+              ) : null}
+            </div>
+          ) : null}
+
           <label className="field">
             <span className="field__label">Password</span>
             <input
@@ -158,7 +207,13 @@ export default function LoginPage() {
             className="btn btn--outline btn--sm"
             onClick={() => {
               setMode('login')
-              setForm({ name: '', email: DEMO.email, phone: '', password: DEMO.password })
+              setForm({
+                name: '',
+                email: DEMO.email,
+                phone: '',
+                password: DEMO.password,
+                accountType: 'personal',
+              })
               setMessage('')
               setErrors({})
             }}

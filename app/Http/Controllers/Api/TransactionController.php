@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\MidtransService;
 use App\Support\OrderNumber;
+use App\Support\Pricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -132,17 +133,25 @@ class TransactionController extends Controller
                 $product = DB::table('products')
                     ->where('id', (int) $productId)
                     ->where('active', true)
-                    ->first(['id', 'name', 'price', 'category', 'operator', 'is_demo']);
+                    ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo']);
 
                 if (! $product) {
                     return response()->json(['message' => 'Produk tidak tersedia.'], 404);
                 }
 
+                // Harga mengikuti tipe akun (reseller/pribadi) dan selalu
+                // ditentukan server.
+                $amount = Pricing::unitPrice(
+                    (int) $product->price,
+                    (int) $product->retail_price,
+                    (string) ($locked->account_type ?? 'reseller'),
+                );
+
                 // Atomic charge: the balance check runs in SQL so BIGINT never
                 // reaches a floating point comparison.
                 $charged = DB::update(
                     'UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?',
-                    [$product->price, $user->id, $product->price],
+                    [$amount, $user->id, $amount],
                 );
 
                 if ($charged === 0) {
@@ -151,13 +160,13 @@ class TransactionController extends Controller
 
                 $balance = (int) DB::table('users')->where('id', $user->id)->value('balance');
 
-                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $idempotencyKey) {
+                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $idempotencyKey, $amount) {
                     $id = DB::table('transactions')->insertGetId([
                         'user_id' => $user->id,
                         'product_id' => $product->id,
                         'order_number' => $orderNumber,
                         'customer_number' => $customerNumber,
-                        'amount' => $product->price,
+                        'amount' => $amount,
                         'status' => 'success',
                         'idempotency_key' => $idempotencyKey,
                         'created_at' => now(),
@@ -169,7 +178,7 @@ class TransactionController extends Controller
                 DB::table('balance_entries')->insert([
                     'user_id' => $user->id,
                     'direction' => 'debit',
-                    'amount' => $product->price,
+                    'amount' => $amount,
                     'balance_after' => $balance,
                     'reference' => $transaction->order_number,
                     'description' => $product->name,
@@ -207,7 +216,7 @@ class TransactionController extends Controller
     }
 
     /**
-     * Alur bayar langsung: Midtrans menagih harga publik, saldo tidak dipotong.
+     * Alur bayar langsung: Midtrans menagih harga tipe akun, saldo tidak dipotong.
      */
     public function direct(Request $request): JsonResponse
     {
@@ -237,7 +246,11 @@ class TransactionController extends Controller
             ], 422);
         }
 
-        $amount = (int) ($product->retail_price > 0 ? $product->retail_price : $product->price);
+        $amount = Pricing::unitPrice(
+            (int) $product->price,
+            (int) $product->retail_price,
+            (string) ($user->account_type ?? 'reseller'),
+        );
 
         $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $amount) {
             $id = DB::table('transactions')->insertGetId([

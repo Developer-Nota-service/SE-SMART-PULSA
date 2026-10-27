@@ -25,6 +25,7 @@ class AuthController extends Controller
             'email' => strtolower(trim((string) $request->input('email'))),
             'phone' => preg_replace('/\D/', '', (string) $request->input('phone')),
             'password' => (string) $request->input('password'),
+            'accountType' => (string) $request->input('accountType', 'reseller'),
         ];
 
         $validator = Validator::make($input, [
@@ -32,6 +33,7 @@ class AuthController extends Controller
             'email' => ['required', 'regex:/^[^\s@]+@[^\s@]+\.[^\s@]+$/'],
             'phone' => ['required', 'regex:/^0\d{8,14}$/'],
             'password' => ['required', 'min:8'],
+            'accountType' => ['in:reseller,personal'],
         ], [
             'name.required' => 'Nama minimal 2 karakter.',
             'name.min' => 'Nama minimal 2 karakter.',
@@ -41,6 +43,7 @@ class AuthController extends Controller
             'phone.regex' => 'Nomor HP diawali 0 dan 9-15 digit.',
             'password.required' => 'Password minimal 8 karakter.',
             'password.min' => 'Password minimal 8 karakter.',
+            'accountType.in' => 'Pilih tipe akun reseller atau pribadi.',
         ]);
 
         if ($validator->fails()) {
@@ -63,12 +66,13 @@ class AuthController extends Controller
             'phone' => $input['phone'],
             'password_hash' => Hash::make($input['password']),
             'role' => 'user',
+            'account_type' => $input['accountType'],
             'balance' => 0,
             'created_at' => now(),
         ]);
 
         $user = DB::table('users')
-            ->select('id', 'name', 'email', 'phone', 'role', 'balance')
+            ->select('id', 'name', 'email', 'phone', 'role', 'account_type', 'balance')
             ->find($id);
 
         $this->writeAudit($id, 'auth.register');
@@ -201,6 +205,7 @@ class AuthController extends Controller
             'email' => $row->email,
             'phone' => $row->phone,
             'role' => $row->role,
+            'accountType' => $row->account_type ?? 'reseller',
             'balance' => (int) $row->balance,
         ];
     }
