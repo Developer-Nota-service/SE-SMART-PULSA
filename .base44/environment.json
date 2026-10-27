@@ -14,13 +14,8 @@
       "requiredAtBoot": false
     },
     {
-      "name": "BANK_INQUIRY_URL",
-      "description": "URL endpoint cek nama pemilik rekening/e-wallet dari penyedia pengecekan (mis. Flip Big Flip, Xendit, iPaymu). Dipakai POST /withdrawals/inquiry dan validasi ulang di store(). Kontrak: POST JSON {channel_type, provider_code, account_number}, header Authorization: Bearer <BANK_INQUIRY_KEY>, respons memuat account_holder. Tanpa nilai, form penarikan jatuh ke input nama manual.",
-      "requiredAtBoot": false
-    },
-    {
-      "name": "BANK_INQUIRY_KEY",
-      "description": "Token Bearer untuk endpoint pengecekan rekening di BANK_INQUIRY_URL (dashboard penyedia pengecekan).",
+      "name": "MIDTRANS_IRIS_KEY",
+      "description": "API key Midtrans Iris (Dashboard Iris > Settings > API Key; perlu aktivasi fitur disbursement). Dipakai cek nama pemilik rekening tujuan penarikan lewat GET /iris/api/v1/account_validation. Berbeda dari Server Key Snap — Server Key tidak bisa dipakai di Iris. Tanpa nilai, form penarikan jatuh ke input nama manual.",
       "requiredAtBoot": false
     },
     {

@@ -200,16 +200,21 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
 - Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
   masih diproses menahan perubahan tipe akun ke pribadi.
-- Cek nama pemilik rekening otomatis lewat `app/Services/BankAccountVerifier.php`
-  (`BANK_INQUIRY_URL` + `BANK_INQUIRY_KEY`): POST JSON + Bearer token, respons
-  memuat `account_holder`. Jawaban pasti di-cache 10 menit, gangguan 1 menit.
-- Bila penyedia belum diisi, membalas HTML/401/403/5xx, atau timeout, hasilnya
-  `configured: false` (`verificationAvailable: false`): frontend menampilkan input
-  nama manual dan pengajuan tetap jalan dengan tanda `unverified`. Hanya penolakan
-  rekening yang jelas (`INVALID_ACCOUNT_NUMBER`, `CLOSED`, `BLACK_LISTED`,
-  `SUSPECTED_ACCOUNT`, `TOP_UP_LIMIT_EXCEEDED`) yang memblokir pengajuan — jangan
-  mengubahnya menjadi "blokir saat penyedia error", satu kunci salah akan
-  mematikan seluruh penarikan.
+- Cek nama pemilik rekening otomatis memakai **Midtrans Iris** lewat
+  `app/Services/BankAccountVerifier.php`:
+  `GET {MIDTRANS_IRIS_URL|https://app[.sandbox].midtrans.com/iris}/api/v1/account_validation?bank={providerCode}&account={accountNumber}`
+  dengan Basic auth `MIDTRANS_IRIS_KEY`. Respons sukses memuat `account_name`;
+  `error_message`/`errors` berarti rekening ditolak. Kunci Iris **berbeda** dari
+  Server Key Snap dan dibuat di dashboard Iris (perlu aktivasi disbursement).
+  Jawaban pasti di-cache 10 menit, gangguan 1 menit.
+- Hanya rekening bank yang dicek otomatis; Iris tidak punya endpoint e-wallet, jadi
+  kanal e-wallet langsung jatuh ke input nama manual.
+- Bila kunci belum diisi, Iris membalas 401/403/5xx, timeout, atau bank tak
+  didukung, hasilnya `configured: false` (`verificationAvailable: false`): frontend
+  menampilkan input nama manual dan pengajuan tetap jalan dengan tanda `unverified`.
+  Penolakan rekening dari Iris (2xx/4xx dengan `error_message`/`errors`) memblokir
+  pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu kunci
+  salah akan mematikan seluruh penarikan.
 
 ## Invariant keamanan (jangan dilanggar)
 

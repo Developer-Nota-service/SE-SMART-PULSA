@@ -7,39 +7,25 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Pengecekan nama pemilik rekening/e-wallet lewat penyedia pengecekan pihak
- * ketiga. Tujuannya mencegah salah ketik nomor atau nama tujuan penarikan.
+ * Pengecekan nama pemilik rekening tujuan penarikan lewat Midtrans Iris
+ * (`GET /iris/api/v1/account_validation?bank=&account=`).
  *
- * Kontrak penyedia (config `services.bank_inquiry`): POST JSON ke
- * `BANK_INQUIRY_URL` dengan header `Authorization: Bearer <BANK_INQUIRY_KEY>`
- * dan body `{ channel_type, provider_code, account_number }`. Respons dianggap
- * berhasil bila memuat nama pemilik rekening (`account_holder` / `name`, juga
- * di dalam `data`) dan status sukses (`SUCCESS`/`VERIFIED`/`OK`). Format
- * respons Flip (`{"status":"SUCCESS","account_holder":"…"}`) langsung dikenali.
+ * Iris mengembalikan `account_name` bila rekening valid, atau `error_message` /
+ * `errors` bila rekening ditolak. Hanya rekening bank yang didukung — e-wallet
+ * tidak punya endpoint pengecekan di Iris, jadi jatuh ke input nama manual.
  *
- * Bila penyedia belum dikonfigurasi — atau menolak/mengganggu permintaan kita
- * (halaman HTML, 401/403/5xx, timeout) — hasilnya `configured: false`: pengguna
- * tetap bisa mengajukan penarikan dengan nama yang diketik sendiri, dan
- * catatannya ditandai belum terverifikasi untuk diperiksa manual. Hanya
- * penolakan rekening yang jelas dari penyedia yang memblokir pengajuan.
+ * Kunci Iris (`MIDTRANS_IRIS_KEY`) berbeda dari Server Key Snap dan dibuat di
+ * dashboard Iris (perlu aktivasi disbursement). Tanpa kunci itu, hasilnya
+ * `configured: false`: pengguna tetap bisa mengajukan penarikan dengan nama yang
+ * diketik sendiri, dan catatannya ditandai belum terverifikasi untuk diperiksa
+ * manual. Hal yang sama berlaku saat Iris menolak permintaan kita (401/403/5xx,
+ * bukan JSON) — itu gangguan penyedia, bukan bukti nomor rekening salah.
  */
 class BankAccountVerifier
 {
-    /**
-     * Status penyedia yang berarti nomor rekeningnya memang tidak bisa dipakai.
-     * Status lain (401/403/5xx, HTML blokir) dianggap gangguan penyedia.
-     */
-    private const REJECTION_STATUSES = [
-        'INVALID_ACCOUNT_NUMBER',
-        'BLACK_LISTED',
-        'SUSPECTED_ACCOUNT',
-        'CLOSED',
-        'TOP_UP_LIMIT_EXCEEDED',
-    ];
-
     public function isConfigured(): bool
     {
-        return trim((string) config('services.bank_inquiry.url')) !== '';
+        return trim((string) config('services.midtrans.iris.key')) !== '';
     }
 
     /**
@@ -48,20 +34,24 @@ class BankAccountVerifier
     public function verify(string $channelType, string $providerCode, string $accountNumber): array
     {
         if (! $this->isConfigured()) {
-            return $this->result(false, 'unavailable', null, 'Pengecekan nama rekening otomatis belum aktif.');
+            return $this->unavailable('Pengecekan nama rekening otomatis belum aktif.');
         }
 
-        $cacheKey = "bank-inquiry:{$channelType}:{$providerCode}:{$accountNumber}";
+        if ($channelType !== 'bank') {
+            return $this->unavailable('Cek nama otomatis Midtrans Iris hanya berlaku untuk rekening bank.');
+        }
+
+        $cacheKey = "iris-inquiry:{$providerCode}:{$accountNumber}";
         $cached = Cache::get($cacheKey);
 
         if (is_array($cached)) {
             return $cached;
         }
 
-        $result = $this->call($channelType, $providerCode, $accountNumber);
+        $result = $this->call($providerCode, $accountNumber);
 
         // Jawaban pasti (rekening valid/ditolak) disimpan 10 menit; gangguan
-        // penyedia hanya 1 menit supaya pengecekan cepat pulih setelah pulih.
+        // penyedia hanya 1 menit supaya pengecekan cepat pulih.
         Cache::put($cacheKey, $result, $result['configured'] ? now()->addMinutes(10) : now()->addMinute());
 
         return $result;
@@ -99,71 +89,54 @@ class BankAccountVerifier
     /**
      * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}
      */
-    private function call(string $channelType, string $providerCode, string $accountNumber): array
+    private function call(string $providerCode, string $accountNumber): array
     {
+        $url = rtrim((string) config('services.midtrans.iris.base_url'), '/').'/api/v1/account_validation';
+
         try {
-            $response = Http::withToken((string) config('services.bank_inquiry.key'))
+            $response = Http::withBasicAuth((string) config('services.midtrans.iris.key'), '')
                 ->acceptJson()
-                ->asJson()
-                ->timeout((int) config('services.bank_inquiry.timeout', 15))
-                ->post((string) config('services.bank_inquiry.url'), [
-                    'channel_type' => $channelType,
-                    'provider_code' => $providerCode,
-                    'account_number' => $accountNumber,
-                ]);
+                ->timeout((int) config('services.midtrans.iris.timeout', 15))
+                ->get($url, ['bank' => $providerCode, 'account' => $accountNumber]);
         } catch (\Throwable $error) {
-            Log::warning('Cek nama rekening gagal', ['provider' => $providerCode, 'error' => $error->getMessage()]);
+            Log::warning('Cek rekening Iris gagal', ['bank' => $providerCode, 'error' => $error->getMessage()]);
 
             return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
 
         $decoded = $response->json();
         $payload = is_array($decoded) ? $decoded : [];
-        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
-        $status = strtoupper((string) ($payload['status'] ?? $data['status'] ?? ''));
+        $holder = trim((string) ($payload['account_name'] ?? ''));
 
-        // Respons HTML/blokir atau kode error yang tidak menyebut status rekening
-        // berarti penyedia yang menolak/mengganggu, bukan nomor rekeningnya salah.
-        // Pengajuan tetap boleh memakai nama yang diketik pengguna.
-        if (! is_array($decoded)
-            || (! $response->successful() && ! in_array($status, self::REJECTION_STATUSES, true))) {
-            Log::warning('Cek nama rekening tidak tersedia', [
+        if ($response->successful() && $holder !== '') {
+            return $this->result(true, 'verified', $holder, null);
+        }
+
+        // Kunci belum benar, Iris belum aktif, atau layanan bermasalah: bukan
+        // bukti nomor rekening salah, jadi jangan memblokir pengajuan.
+        if (! $response->successful()) {
+            Log::warning('Cek rekening Iris tidak tersedia', [
                 'status' => $response->status(),
                 'body' => mb_substr($response->body(), 0, 300),
             ]);
 
             return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
-        $holder = $payload['account_holder'] ?? $payload['accountHolder'] ?? $data['account_holder']
-            ?? $data['accountHolder'] ?? $data['name'] ?? $payload['name'] ?? null;
-        $holder = is_string($holder) ? trim($holder) : null;
-        $holder = $holder === '' ? null : $holder;
 
-        $ok = $response->successful()
-            && $holder !== null
-            && ($status === '' || in_array($status, ['SUCCESS', 'VERIFIED', 'OK'], true))
-            && ($payload['success'] ?? $data['success'] ?? true) !== false;
+        $errors = $payload['errors'] ?? null;
+        $message = is_array($errors)
+            ? trim((string) (collect($errors)->flatten()->first() ?? ''))
+            : '';
 
-        if ($ok) {
-            return $this->result(true, 'verified', $holder, null);
+        if ($message === '') {
+            $message = trim((string) ($payload['error_message'] ?? ''));
         }
 
-        if (! $response->successful()) {
-            Log::warning('Cek nama rekening ditolak penyedia', [
-                'status' => $response->status(),
-                'body' => mb_substr($response->body(), 0, 300),
-            ]);
+        if ($message === '') {
+            $message = 'Nomor rekening tidak dapat diverifikasi. Periksa kembali nomor rekening Anda.';
         }
 
-        $message = match ($status) {
-            'INVALID_ACCOUNT_NUMBER' => 'Nomor rekening tidak ditemukan di bank/e-wallet tujuan.',
-            'BLACK_LISTED', 'SUSPECTED_ACCOUNT' => 'Rekening tujuan diblokir penyedia pengecekan.',
-            'CLOSED' => 'Rekening tujuan sudah ditutup.',
-            'TOP_UP_LIMIT_EXCEEDED' => 'Rekening e-wallet tujuan sudah mencapai batas top up.',
-            default => 'Nama pemilik rekening tidak dapat diverifikasi. Periksa kembali nomor rekening Anda.',
-        };
-
-        return $this->result(false, $status === '' ? 'unknown' : strtolower($status), $holder, $message);
+        return $this->result(false, 'rejected', null, $message);
     }
 
     /**

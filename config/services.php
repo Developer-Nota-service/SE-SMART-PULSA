@@ -35,19 +35,25 @@ return [
         ],
     ],
 
-    // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan saldo.
-    // Penyedia menerima POST JSON + Bearer token; lihat BankAccountVerifier.
-    'bank_inquiry' => [
-        'url' => env('BANK_INQUIRY_URL'),
-        'key' => env('BANK_INQUIRY_KEY'),
-        'timeout' => (int) env('BANK_INQUIRY_TIMEOUT', 15),
-    ],
-
     'midtrans' => [
         'server_key' => env('MIDTRANS_SERVER_KEY'),
         'client_key' => env('MIDTRANS_CLIENT_KEY'),
         'is_production' => env('MIDTRANS_IS_PRODUCTION', '0') === '1',
         'finish_url' => env('MIDTRANS_FINISH_URL'),
+
+        // Pengecekan nama pemilik rekening tujuan penarikan lewat Iris
+        // (`GET /iris/api/v1/account_validation`). Kunci Iris berbeda dari
+        // Server Key Snap; lihat App\Services\BankAccountVerifier.
+        'iris' => [
+            'key' => env('MIDTRANS_IRIS_KEY'),
+            'base_url' => env(
+                'MIDTRANS_IRIS_URL',
+                env('MIDTRANS_IS_PRODUCTION', '0') === '1'
+                    ? 'https://app.midtrans.com/iris'
+                    : 'https://app.sandbox.midtrans.com/iris',
+            ),
+            'timeout' => (int) env('MIDTRANS_IRIS_TIMEOUT', 15),
+        ],
     ],
 
 ];
