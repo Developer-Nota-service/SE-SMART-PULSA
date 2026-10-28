@@ -200,30 +200,40 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
 - Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
   masih diproses menahan perubahan tipe akun ke pribadi.
-- Cek nama pemilik rekening/e-wallet otomatis memakai **Identity Iluma** lewat
-  `app/Services/BankAccountVerifier.php`. Autentikasi Basic: API key sebagai
-  username tanpa password (`ILUMA_API_KEY`, dikirim platform lewat
-  `/run/base44/app.env`; **jangan** ditaruh di compose `environment:`).
-  - Bank: `POST {ILUMA_BASE_URL|https://api.iluma.ai}/v1.2/identity/bank_account_validation_details`
-    `{bank_account_number, bank_code: "ID_<BANK>"}` → `result.account_holder_name`
-    (kode bank berawalan negara, mis. `bca` → `ID_BCA`).
-  - E-wallet: `POST /v0/identity/ewallet_account_data_requests`
-    `{ewallet_account_number, ewallet_type: "GOPAY"}` → `result.ewallet_account_name`.
-    E-wallet yang didukung: GOPAY, OVO, DANA, SHOPEEPAY, LINKAJA.
-  - Hasil sering asinkron: `PENDING`/`WAITING_ON_SOURCE` lalu ditanyakan ulang
-    lewat `GET {path}/{id}` (maksimal 5 kali, jeda 1 detik) sampai `COMPLETED`.
-    Callback URL Iluma **tidak** didaftarkan karena alamat preview sandbox
-    berubah setiap sandbox dibuat ulang.
-  - Jawaban pasti di-cache 10 menit, `pending` 10 detik, gangguan 1 menit.
-- Bila penyedia tidak menjawab (kunci kosong/ditolak 401/403, 400 bank tak
-  didukung, 5xx, timeout, DNS gagal), hasilnya `configured: false`
-  (`verificationAvailable: false`): frontend menampilkan input nama manual dan
-  pengajuan tetap jalan dengan tanda `unverified`. Penolakan rekening dari penyedia
-  (`COMPLETED` dengan `result.is_found: false`) memblokir pengajuan — jangan
-  mengubahnya menjadi "blokir saat penyedia error", satu kunci salah akan
-  mematikan seluruh penarikan.
-- E-wallet yang belum KYC mengembalikan nama kosong: itu bukan penolakan, jadi
-  hasilnya `configured: false` dan pengguna mengisi nama manual.
+- Cek nama pemilik rekening/e-wallet otomatis memakai **Durianpay SNAP API**
+  lewat `app/Services/BankAccountVerifier.php`. Kredensial dikirim platform lewat
+  `/run/base44/app.env`; **jangan** ditaruh di compose `environment:`:
+  `DURIANPAY_CLIENT_KEY`, `DURIANPAY_CLIENT_SECRET`, `DURIANPAY_PRIVATE_KEY`
+  (private key RSA merchant, PEM mentah atau base64 dari file `.pem`).
+  - Token B2B: `POST {DURIANPAY_BASE_URL|https://api.durianpay.id}/v1.0/access-token/b2b`
+    body `{"grantType":"AUTHORIZATION_CODE"}`; `X-SIGNATURE` = SHA256withRSA dari
+    `{clientKey}|{timestamp}` dengan private key merchant (public key diunggah di
+    Dashboard Durianpay → Settings → API Keys). Token disimpan di cache sampai
+    60 detik sebelum `expiresIn` (default 900 detik).
+  - Bank: `POST /v1.0/account-inquiry-external`
+    `{beneficiaryAccountNo, beneficiaryBankCode, additionalInfo}` →
+    `beneficiaryAccountName`. `beneficiaryBankCode` memakai kode bank SNAP
+    (`014` BCA, `009` BNI, `002` BRI, `008` Mandiri, `013` Permata, `022` CIMB,
+    `011` Danamon, `200` BTN, `451` BSI, `542` Jago, `535` SeaBank, `501` Blu) —
+    pemetaannya ada di `BankAccountVerifier::BANK_CODES`.
+  - E-wallet: `POST /v1.0/emoney/account-inquiry`
+    `{customerNumber, amount:{value:"1",currency:"IDR"}, partnerReferenceNo,
+    additionalInfo.platformCode}` → `customerName`. `platformCode` = `gopay`,
+    `ovo`, `dana`, `shopeepay`, `linkaja`; `amount.value="1"` mematikan validasi
+    nominal karena kita hanya meminta nama.
+  - Signature transaksi (header `X-SIGNATURE`) = base64 HMAC-SHA512 dengan client
+    secret dari `POST:{path}:{accessToken}:{sha256hex(body tanpa spasi)}:{timestamp}`;
+    header lain: `X-TIMESTAMP`, `X-PARTNER-ID` (= client key), `X-EXTERNAL-ID`,
+    `CHANNEL-ID` (default `95221`).
+  - Jawaban pasti di-cache 10 menit, gangguan 1 menit.
+- Bila penyedia tidak menjawab (kunci kosong/ditolak 401/403, 5xx, timeout, DNS
+  gagal), hasilnya `configured: false` (`verificationAvailable: false`): frontend
+  menampilkan input nama manual dan pengajuan tetap jalan dengan tanda
+  `unverified`. Penolakan rekening dari penyedia (HTTP 404/409) memblokir
+  pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu kunci
+  salah akan mematikan seluruh penarikan.
+- Penyedia menjawab 2xx tetapi nama kosong (mis. e-wallet belum KYC): itu bukan
+  penolakan, jadi hasilnya `configured: false` dan pengguna mengisi nama manual.
 
 ## Invariant keamanan (jangan dilanggar)
 

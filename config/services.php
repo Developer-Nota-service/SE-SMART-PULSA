@@ -43,12 +43,15 @@ return [
     ],
 
     // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan (Identity
-    // Iluma). Basic auth: API key sebagai username; lihat
-    // App\Services\BankAccountVerifier.
-    'iluma' => [
-        'api_key' => env('ILUMA_API_KEY'),
-        'base_url' => env('ILUMA_BASE_URL', 'https://api.iluma.ai'),
-        'timeout' => (int) env('ILUMA_TIMEOUT', 20),
+    // Durianpay SNAP). Butuh client key + client secret + private key RSA
+    // merchant; lihat App\Services\BankAccountVerifier.
+    'durianpay' => [
+        'client_key' => env('DURIANPAY_CLIENT_KEY'),
+        'client_secret' => env('DURIANPAY_CLIENT_SECRET'),
+        'private_key' => env('DURIANPAY_PRIVATE_KEY'),
+        'base_url' => env('DURIANPAY_BASE_URL', 'https://api.durianpay.id'),
+        'channel_id' => env('DURIANPAY_CHANNEL_ID', '95221'),
+        'timeout' => (int) env('DURIANPAY_TIMEOUT', 20),
     ],
 
 ];

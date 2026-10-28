@@ -7,39 +7,62 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Pengecekan nama pemilik rekening/e-wallet tujuan penarikan lewat **Iluma**
- * (Basic auth: API key sebagai username, tanpa password).
+ * Cek nama pemilik rekening bank & e-wallet tujuan penarikan lewat **Durianpay**
+ * SNAP API — penyedia yang punya endpoint nama untuk bank maupun e-wallet.
  *
- * - Bank: `POST /v1.2/identity/bank_account_validation_details`
- *   `{bank_account_number, bank_code: "ID_<BANK>"}` → `result.account_holder_name`.
- * - E-wallet: `POST /v0/identity/ewallet_account_data_requests`
- *   `{ewallet_account_number, ewallet_type: "GOPAY"}` → `result.ewallet_account_name`.
+ * - Token B2B: `POST /v1.0/access-token/b2b` dengan `X-SIGNATURE` = RSA-SHA256
+ *   dari `{clientKey}|{timestamp}` memakai private key merchant (public key-nya
+ *   diunggah di Dashboard Durianpay → Settings → API Keys), header
+ *   `X-CLIENT-KEY`, body `{"grantType":"AUTHORIZATION_CODE"}`.
+ * - Bank: `POST /v1.0/account-inquiry-external`
+ *   `{beneficiaryAccountNo, beneficiaryBankCode}` → `beneficiaryAccountName`
+ *   (`beneficiaryBankCode` = kode bank SNAP, mis. BCA `014`).
+ * - E-wallet: `POST /v1.0/emoney/account-inquiry`
+ *   `{customerNumber, amount, partnerReferenceNo, additionalInfo.platformCode}`
+ *   → `customerName`. `amount.value = "1"` mematikan validasi nominal karena
+ *   kita hanya meminta nama.
  *
- * Iluma memproses sebagian besar permintaan secara asinkron: balasan pertama bisa
- * `PENDING` dan hasil akhirnya dikirim lewat callback URL. Karena URL preview
- * sandbox berubah-ubah, kelas ini tidak mendaftarkan callback melainkan menanyakan
- * ulang hasilnya lewat `GET .../:id` beberapa kali.
+ * Signature transaksi = HMAC-SHA512 (client secret, base64) dari
+ * `POST:{path}:{accessToken}:{sha256hex(minifiedBody)}:{timestamp}`.
  *
  * Bedakan dua jenis kegagalan:
- * - jawaban penyedia bahwa rekening tidak ada (`is_found: false`) → pengajuan diblokir;
- * - penyedia tidak bisa menjawab (kunci kosong/ditolak, 4xx/5xx, timeout) → hasil
- *   `configured: false`: pengguna mengisi nama sendiri dan catatan ditandai
+ * - penyedia menjawab rekening tidak ada (HTTP 404/409) → pengajuan diblokir;
+ * - penyedia tidak bisa menjawab (kunci kosong/ditolak 401/403, 5xx, timeout) →
+ *   hasil `configured: false`: pengguna mengisi nama sendiri dan catatan ditandai
  *   `unverified`. Satu kunci salah tidak boleh mematikan seluruh penarikan.
  */
 class BankAccountVerifier
 {
-    /** Jumlah percobaan menanyakan ulang hasil `PENDING` (jeda 1 detik). */
-    private const MAX_POLLS = 5;
+    private const TOKEN_PATH = '/v1.0/access-token/b2b';
 
-    private const POLL_INTERVAL_US = 1000000;
+    private const BANK_PATH = '/v1.0/account-inquiry-external';
 
-    private const BANK_PATH = '/v1.2/identity/bank_account_validation_details';
+    private const EWALLET_PATH = '/v1.0/emoney/account-inquiry';
 
-    private const EWALLET_PATH = '/v0/identity/ewallet_account_data_requests';
+    /** Kode bank SNAP untuk daftar bank di App\Support\TransferChannels. */
+    private const BANK_CODES = [
+        'bca' => '014',
+        'bni' => '009',
+        'bri' => '002',
+        'mandiri' => '008',
+        'permata' => '013',
+        'cimb' => '022',
+        'danamon' => '011',
+        'btn' => '200',
+        'bsi' => '451',
+        'jago' => '542',
+        'seabank' => '535',
+        'blu' => '501',
+    ];
+
+    /** Status HTTP permintaan token terakhir (401/403 = kunci salah). */
+    private ?int $tokenStatus = null;
 
     public function isConfigured(): bool
     {
-        return trim((string) config('services.iluma.api_key')) !== '';
+        return $this->clientKey() !== ''
+            && $this->clientSecret() !== ''
+            && $this->privateKey() !== '';
     }
 
     /**
@@ -51,7 +74,7 @@ class BankAccountVerifier
             return $this->unavailable('Pengecekan nama rekening otomatis belum aktif.');
         }
 
-        $cacheKey = "iluma:{$channelType}:{$providerCode}:{$accountNumber}";
+        $cacheKey = "durianpay:{$channelType}:{$providerCode}:{$accountNumber}";
         $cached = Cache::get($cacheKey);
 
         if (is_array($cached)) {
@@ -62,13 +85,10 @@ class BankAccountVerifier
             ? $this->checkEwallet($providerCode, $accountNumber)
             : $this->checkBank($providerCode, $accountNumber);
 
-        // Jawaban pasti (rekening valid/ditolak) disimpan 10 menit; masih diproses
-        // hanya 10 detik supaya langsung dicek lagi; gangguan 1 menit.
-        $ttl = match ($result['status']) {
-            'verified', 'rejected' => now()->addMinutes(10),
-            'pending' => now()->addSeconds(10),
-            default => now()->addMinute(),
-        };
+        // Jawaban pasti (nama ketemu/ditolak) disimpan 10 menit; gangguan 1 menit.
+        $ttl = in_array($result['status'], ['verified', 'rejected'], true)
+            ? now()->addMinutes(10)
+            : now()->addMinute();
 
         Cache::put($cacheKey, $result, $ttl);
 
@@ -109,10 +129,16 @@ class BankAccountVerifier
      */
     private function checkBank(string $providerCode, string $accountNumber): array
     {
-        // Kode bank Iluma memakai awalan negara, mis. `bca` → `ID_BCA`.
+        $bankCode = self::BANK_CODES[$providerCode] ?? null;
+
+        if ($bankCode === null) {
+            return $this->unavailable('Pengecekan nama otomatis belum tersedia untuk bank ini. Masukkan nama sesuai buku tabungan.');
+        }
+
         $response = $this->send(self::BANK_PATH, [
-            'bank_account_number' => $accountNumber,
-            'bank_code' => 'ID_'.strtoupper($providerCode),
+            'beneficiaryAccountNo' => $accountNumber,
+            'beneficiaryBankCode' => $bankCode,
+            'additionalInfo' => $this->additionalInfo(),
         ]);
 
         if ($response === null) {
@@ -127,7 +153,11 @@ class BankAccountVerifier
             return $error;
         }
 
-        return $this->interpret($payload, self::BANK_PATH, 'account_holder_name');
+        $holder = trim((string) ($payload['beneficiaryAccountName'] ?? ''));
+
+        return $holder !== ''
+            ? $this->result(true, 'verified', $holder, null)
+            : $this->unavailable('Nama pemilik tidak dapat ditampilkan otomatis oleh penyedia. Masukkan nama sesuai buku tabungan.');
     }
 
     /**
@@ -136,8 +166,11 @@ class BankAccountVerifier
     private function checkEwallet(string $providerCode, string $accountNumber): array
     {
         $response = $this->send(self::EWALLET_PATH, [
-            'ewallet_account_number' => $accountNumber,
-            'ewallet_type' => strtoupper($providerCode),
+            'customerNumber' => $accountNumber,
+            // "1" mematikan validasi nominal: kita hanya meminta nama pemilik.
+            'amount' => ['value' => '1', 'currency' => 'IDR'],
+            'partnerReferenceNo' => 'INQ'.now()->format('YmdHis').random_int(1000, 9999),
+            'additionalInfo' => $this->additionalInfo() + ['platformCode' => $providerCode],
         ]);
 
         if ($response === null) {
@@ -152,109 +185,59 @@ class BankAccountVerifier
             return $error;
         }
 
-        return $this->interpret($payload, self::EWALLET_PATH, 'ewallet_account_name');
+        $holder = trim((string) ($payload['customerName'] ?? ''));
+
+        return $holder !== ''
+            ? $this->result(true, 'verified', $holder, null)
+            : $this->unavailable('Nama pemilik tidak dapat ditampilkan otomatis oleh penyedia. Masukkan nama sesuai aplikasi e-wallet.');
     }
 
-    /**
-     * Terjemahkan payload Iluma menjadi hasil pengecekan. `PENDING` ditanyakan
-     * ulang lewat `GET {path}/{id}` sampai `MAX_POLLS` kali.
-     *
-     * @param  array<mixed>  $payload
-     * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}
-     */
-    private function interpret(array $payload, string $path, string $holderKey): array
+    /** @return array{deviceId: string, channel: string} */
+    private function additionalInfo(): array
     {
-        for ($attempt = 0; $attempt <= self::MAX_POLLS; $attempt++) {
-            $state = strtoupper((string) ($payload['status'] ?? ''));
-            $id = (string) ($payload['id'] ?? '');
-
-            if (in_array($state, ['PENDING', 'WAITING_ON_SOURCE'], true) && $id !== '' && $attempt < self::MAX_POLLS) {
-                usleep(self::POLL_INTERVAL_US);
-                $response = $this->send($path.'/'.rawurlencode($id), null, 'GET');
-
-                if ($response === null) {
-                    return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
-                }
-
-                [$status, $polled] = $response;
-
-                $error = $this->errorResult($status, $polled);
-
-                if ($error !== null) {
-                    return $error;
-                }
-
-                $payload = $polled;
-
-                continue;
-            }
-
-            if (in_array($state, ['PENDING', 'WAITING_ON_SOURCE'], true)) {
-                return [
-                    'configured' => true,
-                    'verified' => false,
-                    'status' => 'pending',
-                    'accountHolder' => null,
-                    'message' => 'Pengecekan nama rekening masih diproses. Tunggu beberapa detik lalu coba lagi.',
-                ];
-            }
-
-            if ($state === 'FAILED') {
-                Log::warning('Cek rekening Iluma gagal diproses', [
-                    'reason' => $payload['failure_reason'] ?? null,
-                ]);
-
-                return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
-            }
-
-            $result = is_array($payload['result'] ?? null) ? $payload['result'] : [];
-            $holder = trim((string) ($result[$holderKey] ?? ''));
-
-            if ($holder !== '') {
-                return $this->result(true, 'verified', $holder, null);
-            }
-
-            if (($result['is_found'] ?? null) === false) {
-                return $this->result(
-                    false,
-                    'rejected',
-                    null,
-                    'Nomor rekening tidak ditemukan. Periksa kembali nomor rekening Anda.',
-                );
-            }
-
-            // Rekening ada tetapi nama tidak tersedia (mis. e-wallet belum KYC).
-            return $this->unavailable(
-                'Nama pemilik tidak dapat ditampilkan otomatis oleh penyedia. Masukkan nama sesuai buku tabungan/aplikasi.',
-            );
-        }
-
-        return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
+        return ['deviceId' => bin2hex(random_bytes(6)), 'channel' => 'mobilephone'];
     }
 
     /**
-     * Panggil API Iluma. `null` berarti permintaan tidak mendapat jawaban HTTP
-     * (DNS gagal, koneksi putus, timeout).
+     * Panggil API Durianpay. `null` berarti permintaan tidak mendapat jawaban HTTP
+     * (DNS gagal, koneksi putus, timeout) atau token tidak bisa dibuat.
      *
-     * @param  array<string, string>|null  $payload
+     * @param  array<string, mixed>  $payload
      * @return array{0: int, 1: array<mixed>}|null
      */
-    private function send(string $path, ?array $payload, string $method = 'POST'): ?array
+    private function send(string $path, array $payload): ?array
     {
-        $url = rtrim((string) config('services.iluma.base_url'), '/').$path;
-        $key = trim((string) config('services.iluma.api_key'));
+        $token = $this->accessToken();
+
+        if ($token === null) {
+            // Kunci ditolak: laporkan statusnya supaya pesannya "belum aktif".
+            return $this->tokenStatus === null ? null : [$this->tokenStatus, []];
+        }
+
+        $body = json_encode($payload, JSON_UNESCAPED_SLASHES) ?: '{}';
+        $timestamp = $this->timestamp();
+        $signature = base64_encode(hash_hmac(
+            'sha512',
+            'POST:'.$path.':'.$token.':'.strtolower(hash('sha256', $body)).':'.$timestamp,
+            $this->clientSecret(),
+            true,
+        ));
 
         try {
-            $request = Http::withBasicAuth($key, '')
+            $response = Http::withToken($token)
+                ->withHeaders([
+                    'X-TIMESTAMP' => $timestamp,
+                    'X-SIGNATURE' => $signature,
+                    'X-PARTNER-ID' => $this->clientKey(),
+                    'X-EXTERNAL-ID' => bin2hex(random_bytes(8)),
+                    'CHANNEL-ID' => (string) config('services.durianpay.channel_id', '95221'),
+                ])
+                ->withBody($body, 'application/json')
                 ->acceptJson()
-                ->asJson()
-                ->timeout((int) config('services.iluma.timeout', 20));
-
-            $response = $method === 'GET'
-                ? $request->get($url)
-                : $request->post($url, $payload ?? []);
+                ->timeout($this->timeout())
+                ->post($this->url($path));
         } catch (\Throwable $error) {
-            Log::warning('Cek rekening Iluma tidak terhubung', ['path' => $path, 'error' => $error->getMessage()]);
+            Log::warning('Cek rekening Durianpay tidak terhubung', ['path' => $path, 'error' => $error->getMessage()]);
 
             return null;
         }
@@ -265,9 +248,78 @@ class BankAccountVerifier
     }
 
     /**
-     * 401/403 (kunci salah dikonfigurasi), 400 (bank/e-wallet tak didukung), 5xx
-     * atau balasan bukan JSON: penyedia tidak menjawab pertanyaan kita, jadi
-     * jangan memblokir pengajuan.
+     * Token B2B berlaku 900 detik; disimpan di cache sampai 60 detik sebelum
+     * kedaluwarsa supaya tidak minta token di setiap pengecekan.
+     */
+    private function accessToken(): ?string
+    {
+        $cached = Cache::get('durianpay:token');
+
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
+
+        $timestamp = $this->timestamp();
+        $signature = $this->rsaSignature($this->clientKey().'|'.$timestamp);
+
+        if ($signature === null) {
+            Log::warning('Private key Durianpay tidak bisa dipakai menandatangani permintaan token');
+            $this->tokenStatus = 401;
+
+            return null;
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'X-TIMESTAMP' => $timestamp,
+                'X-SIGNATURE' => $signature,
+                'X-CLIENT-KEY' => $this->clientKey(),
+            ])
+                ->acceptJson()
+                ->asJson()
+                ->timeout($this->timeout())
+                ->post($this->url(self::TOKEN_PATH), ['grantType' => 'AUTHORIZATION_CODE']);
+        } catch (\Throwable $error) {
+            Log::warning('Token Durianpay gagal diminta', ['error' => $error->getMessage()]);
+            $this->tokenStatus = null;
+
+            return null;
+        }
+
+        $this->tokenStatus = $response->status();
+        $payload = $response->json();
+        $token = is_array($payload) ? (string) ($payload['accessToken'] ?? '') : '';
+
+        if (! $response->successful() || $token === '') {
+            Log::warning('Token Durianpay ditolak', [
+                'status' => $response->status(),
+                'body' => mb_substr((string) json_encode($payload), 0, 300),
+            ]);
+
+            return null;
+        }
+
+        $expiresIn = (int) ($payload['expiresIn'] ?? 900);
+        Cache::put('durianpay:token', $token, now()->addSeconds(max(60, $expiresIn - 60)));
+
+        return $token;
+    }
+
+    private function rsaSignature(string $data): ?string
+    {
+        $signature = '';
+
+        if (! openssl_sign($data, $signature, $this->privateKey(), OPENSSL_ALGO_SHA256)) {
+            return null;
+        }
+
+        return base64_encode($signature);
+    }
+
+    /**
+     * 401/403 (kunci salah), 5xx, atau balasan bukan JSON: penyedia tidak
+     * menjawab pertanyaan kita, jadi jangan memblokir pengajuan. 404/409 =
+     * penyedia memastikan rekening tidak ada/tertutup → blokir pengajuan.
      *
      * @param  array<mixed>  $payload
      * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}|null
@@ -278,16 +330,68 @@ class BankAccountVerifier
             return null;
         }
 
-        Log::warning('Cek rekening Iluma tidak tersedia', [
+        Log::warning('Cek rekening Durianpay tidak tersedia', [
             'status' => $status,
             'body' => mb_substr((string) json_encode($payload), 0, 300),
         ]);
+
+        if ($status === 404 || $status === 409) {
+            return $this->result(
+                false,
+                'rejected',
+                null,
+                'Nomor rekening tidak ditemukan atau sudah tidak aktif. Periksa kembali nomor rekening Anda.',
+            );
+        }
 
         return $this->unavailable(
             $status === 401 || $status === 403
                 ? 'Pengecekan nama rekening otomatis belum aktif.'
                 : 'Pengecekan nama rekening otomatis sedang gangguan.',
         );
+    }
+
+    private function url(string $path): string
+    {
+        return rtrim((string) config('services.durianpay.base_url'), '/').$path;
+    }
+
+    private function timestamp(): string
+    {
+        return now()->format('Y-m-d\TH:i:s.vP');
+    }
+
+    private function timeout(): int
+    {
+        return (int) config('services.durianpay.timeout', 20);
+    }
+
+    private function clientKey(): string
+    {
+        return trim((string) config('services.durianpay.client_key'));
+    }
+
+    private function clientSecret(): string
+    {
+        return trim((string) config('services.durianpay.client_secret'));
+    }
+
+    /** Private key RSA merchant, boleh PEM mentah atau base64 dari file .pem. */
+    private function privateKey(): string
+    {
+        $value = trim((string) config('services.durianpay.private_key'));
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_contains($value, 'BEGIN')) {
+            return str_replace('\n', "\n", $value);
+        }
+
+        $decoded = base64_decode($value, true);
+
+        return $decoded === false ? '' : trim($decoded);
     }
 
     /**

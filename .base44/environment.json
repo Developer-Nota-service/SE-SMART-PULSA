@@ -14,8 +14,18 @@
       "requiredAtBoot": false
     },
     {
-      "name": "ILUMA_API_KEY",
-      "description": "API key Identity Iluma (didapat dari tim sales Iluma setelah pendaftaran; dashboard/Postman Iluma). Dipakai cek nama pemilik rekening bank (bank_account_validation_details) dan e-wallet (ewallet_account_data_requests) sebagai Basic auth username tanpa password. Tanpa nilai, form penarikan jatuh ke input nama manual.",
+      "name": "DURIANPAY_CLIENT_KEY",
+      "description": "Client Key Durianpay (Dashboard Durianpay > Settings > API Keys). Dipakai sebagai header X-CLIENT-KEY dan X-PARTNER-ID untuk cek nama pemilik rekening bank & e-wallet. Tanpa nilai, form penarikan jatuh ke input nama manual.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "DURIANPAY_CLIENT_SECRET",
+      "description": "Client Secret Durianpay (Dashboard Durianpay > Settings > API Keys) untuk HMAC-SHA512 signature transaksi SNAP.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "DURIANPAY_PRIVATE_KEY",
+      "description": "Private key RSA merchant (hasil `openssl genrsa -out rsa_private_key.pem 2048`, unggah public key-nya di Dashboard Durianpay > Settings > API Keys). Isi file .pem apa adanya atau base64 dari file itu. Dipakai menandatangani permintaan token B2B (SHA256withRSA).",
       "requiredAtBoot": false
     },
     {
