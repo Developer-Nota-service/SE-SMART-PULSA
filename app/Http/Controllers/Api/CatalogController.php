@@ -24,7 +24,7 @@ class CatalogController extends Controller
         }
 
         $rows = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'is_demo')
             ->where('active', true)
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->orderBy('category')
@@ -47,7 +47,7 @@ class CatalogController extends Controller
         }
 
         $product = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'is_demo')
             ->where('id', (int) $id)
             ->where('active', true)
             ->first();
@@ -72,6 +72,8 @@ class CatalogController extends Controller
             'category' => $row->category,
             'operator' => $row->operator,
             'name' => $row->name,
+            // Petunjuk input dari seller Digiflazz untuk produk ini (bisa null).
+            'instruction' => $row->instruction ?? null,
             // `price` adalah harga yang berlaku untuk tipe akun peminta;
             // `retailPrice` tetap harga publik sebagai pembanding.
             'price' => Pricing::unitPrice((int) $row->price, (int) $row->retail_price, $accountType),

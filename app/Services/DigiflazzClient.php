@@ -34,8 +34,11 @@ class DigiflazzClient
 
         $rows = $response['data'] ?? [];
 
-        if (! is_array($rows)) {
-            throw new RuntimeException('Daftar harga Digiflazz tidak dikenali.');
+        // Saat limit pengecekan daftar harga tercapai, Digiflazz membalas
+        // `data: { rc, message }` — jangan dianggap daftar produk kosong.
+        if (! is_array($rows) || isset($rows['message'])) {
+            $message = is_array($rows) ? ($rows['message'] ?? '') : '';
+            throw new RuntimeException(trim('Daftar harga Digiflazz tidak dikenali. '.$message));
         }
 
         return array_values(array_filter($rows, 'is_array'));
@@ -63,6 +66,12 @@ class DigiflazzClient
 
         if ($maxPrice !== null && $maxPrice > 0) {
             $payload['max_price'] = $maxPrice;
+        }
+
+        // Aturan Digiflazz: `allow_dot` wajib bila customer_no mengandung titik
+        // (mis. username game), supaya seller non-Jabber tidak menolaknya.
+        if (str_contains($customerNumber, '.')) {
+            $payload['allow_dot'] = true;
         }
 
         $response = $this->request('/v1/transaction', $payload);

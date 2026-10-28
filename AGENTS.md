@@ -305,6 +305,21 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   `voucher_inject`, bukan `voucher` — lihat `categoryFor()`. Harga reseller = harga supplier + margin, harga publik
   +5%, keduanya dibulatkan ke atas per Rp100. SKU yang hilang dari daftar
   dinonaktifkan (tidak dihapus) agar riwayat transaksi tetap utuh.
+- **Isi `customer_no` mengikuti produk Digiflazz** (satu kolom teks; formatnya
+  ditentukan seller lewat `desc` daftar harga): pulsa/data/e-wallet = nomor HP;
+  token PLN = ID pelanggan/nomor meter; game = ID game/User ID, sebagian produk
+  meminta gabungan ID + Zone ("Mobile Legends: gabungan user_id dan zone_id")
+  atau `UID|Server` (Genshin/Honkai); voucher = email penerima (kodenya dikirim
+  aplikasi sendiri dari `sn`); voucher inject = nomor voucher kosong. Validasi per
+  kategori ada di `destinationError()` — produk game menerima huruf dan pemisah
+  (`|`, titik, `#`), bukan hanya angka. `desc` seller disimpan di
+  `products.instruction` saat sync dan tampil sebagai "Petunjuk produk" di halaman
+  beli.
+- `allow_dot: true` dikirim otomatis bila `customer_no` berisi titik (aturan resmi
+  Digiflazz supaya seller non-Jabber tidak menolak).
+- Daftar harga dibatasi frekuensinya; balasan limit berupa `data: {rc, message}`,
+  **bukan** daftar kosong. `DigiflazzClient` melempar pesan limit itu (sync gagal
+  dengan jelas dan tidak menonaktifkan produk).
 - `app/Services/TransactionFulfillment.php` — `pending` → `success` / `failed`
   dengan `supplier_status`, `supplier_sn`, `supplier_message`, `fulfilled_at`.
   Transaksi saldo yang gagal di supplier dikembalikan **sekali** lewat

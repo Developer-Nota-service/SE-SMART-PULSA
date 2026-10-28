@@ -8,6 +8,7 @@ import { CheckIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
 import {
   categoryLabel,
+  GAME_INPUT_HINT,
   isVoucherCategory,
   rupiah,
   targetLabel,
@@ -65,6 +66,12 @@ export default function PurchasePage() {
     if (voucherInject) {
       if (!/^\d{8,20}$/.test(customerNumber)) {
         setFieldError('Nomor voucher kosong wajib diisi 8-20 digit angka.')
+        return
+      }
+    } else if (product.category === 'game') {
+      // Digiflazz meminta ID game / username, kadang gabungan ID + Zone.
+      if (!/^[A-Za-z0-9|.()_#\[\] -]{3,60}$/.test(customerNumber)) {
+        setFieldError('ID game harus 3-60 karakter sesuai petunjuk produk.')
         return
       }
     } else if (isVoucherCategory(product.category)) {
@@ -168,6 +175,7 @@ export default function PurchasePage() {
   }
 
   const emailTarget = product.category === 'voucher'
+  const gameTarget = product.category === 'game'
   const fieldLabel = voucherInject
     ? 'Nomor voucher kosong yang akan di-inject'
     : targetLabel(product.category)
@@ -175,10 +183,14 @@ export default function PurchasePage() {
     ? 'Contoh: 1234567890123456'
     : emailTarget
       ? 'nama@email.com'
-      : 'Contoh: 081234567890'
+      : gameTarget
+        ? 'Contoh: 12345678 atau 12345678|Asia'
+        : 'Contoh: 081234567890'
   const fieldHint = voucherInject
     ? 'Isi nomor yang tercetak pada voucher kosong Telkomsel Anda (8-20 digit). Nomor ini yang dikirim ke supplier untuk di-inject.'
-    : `Pastikan ${emailTarget ? 'email' : 'nomor'} benar. Transaksi yang sudah diproses tidak dapat dibatalkan.`
+    : gameTarget
+      ? GAME_INPUT_HINT
+      : `Pastikan ${emailTarget ? 'email' : 'nomor'} benar. Transaksi yang sudah diproses tidak dapat dibatalkan.`
   // Server mengirim `price` sesuai tipe akun (reseller atau pribadi).
   const unitPrice = product.price
   const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'
@@ -206,19 +218,25 @@ export default function PurchasePage() {
         <form onSubmit={submit} noValidate>
           {voucherInject ? <p className="category-note">{VOUCHER_INJECT_NOTE}</p> : null}
 
+          {product.instruction ? (
+            <p className="category-note">Petunjuk produk: {product.instruction}</p>
+          ) : null}
+
           <label className="field">
             <span className="field__label">{fieldLabel}</span>
             <input
               className="input"
               type={emailTarget ? 'email' : 'text'}
-              inputMode={emailTarget ? 'email' : 'numeric'}
-              autoComplete={voucherInject ? 'off' : emailTarget ? 'email' : 'tel'}
+              inputMode={emailTarget ? 'email' : gameTarget ? 'text' : 'numeric'}
+              autoComplete={emailTarget ? 'email' : 'tel'}
               value={customerNumber}
               onChange={(event) => {
                 const raw = event.target.value
                 const value = emailTarget
                   ? raw.trim().slice(0, 100)
-                  : raw.replace(/\D/g, '').slice(0, voucherInject ? 20 : 16)
+                  : gameTarget
+                    ? raw.replace(/[^A-Za-z0-9|.()_#\[\] -]/g, '').slice(0, 60)
+                    : raw.replace(/\D/g, '').slice(0, voucherInject ? 20 : 16)
                 setCustomerNumber(value)
                 setFieldError('')
                 setSubmitError('')

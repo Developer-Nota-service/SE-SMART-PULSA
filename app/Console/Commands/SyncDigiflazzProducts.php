@@ -63,6 +63,9 @@ class SyncDigiflazzProducts extends Command
                     'category' => $category,
                     'operator' => trim((string) ($row['brand'] ?? '')),
                     'name' => trim((string) ($row['product_name'] ?? $sku)),
+                    // Petunjuk input dari seller (mis. "gabungan user_id dan
+                    // zone_id") — ditampilkan di halaman beli.
+                    'instruction' => $this->instruction((string) ($row['desc'] ?? '')),
                     'price' => $reseller,
                     'retail_price' => $retail,
                     'active' => $enabled,
@@ -97,6 +100,13 @@ class SyncDigiflazzProducts extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    private function instruction(string $desc): ?string
+    {
+        $desc = trim(preg_replace('/\s+/', ' ', $desc) ?? '');
+
+        return $desc === '' || $desc === '-' ? null : $desc;
     }
 
     private function roundUp(float $value): int

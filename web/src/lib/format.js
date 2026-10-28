@@ -48,6 +48,13 @@ export const VOUCHER_INJECT_NOTE =
   'Siapkan voucher kosong terlebih dahulu, lalu isi nomor voucher kosong itu saat membeli. ' +
   'Kesalahan pengetikan nomor voucher bukan tanggung jawab kami.'
 
+// Digiflazz memakai satu kolom `customer_no`; isinya ditentukan seller per
+// produk (`instruction`). Untuk game, format paling umum: Mobile Legends =
+// User ID + Zone ID digabung, Genshin/Honkai = UID|Server.
+export const GAME_INPUT_HINT =
+  'Isi sesuai petunjuk produk di atas. Mobile Legends: gabungkan User ID + Zone ID ' +
+  'tanpa pemisah. Genshin Impact / Honkai: tulis UID|Server.'
+
 export const categoryLabel = (key) =>
   CATEGORIES.find((category) => category.key === key)?.label || 'Lainnya'
 

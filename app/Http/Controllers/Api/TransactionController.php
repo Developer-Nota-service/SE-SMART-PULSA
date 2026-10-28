@@ -434,6 +434,21 @@ class TransactionController extends Controller
                 : null;
         }
 
+        // Game top up memakai ID game / User ID / username, dan sebagian produk
+        // meminta gabungan ID + Zone/Server (mis. "UID|Server"), jadi bukan angka.
+        if ($category === 'game') {
+            return preg_match('/^[A-Za-z0-9|.()_#\[\] -]{3,60}$/', $customerNumber)
+                ? null
+                : 'ID game harus 3-60 karakter sesuai petunjuk produk.';
+        }
+
+        // Token PLN memakai ID pelanggan / nomor meter (bukan nomor HP).
+        if ($category === 'pln_token') {
+            return preg_match('/^\d{6,20}$/', $customerNumber)
+                ? null
+                : 'ID pelanggan/meter harus 6-20 digit angka.';
+        }
+
         return preg_match('/^\d{6,16}$/', $customerNumber) ? null : 'Nomor tujuan harus 6-16 digit angka.';
     }
 
