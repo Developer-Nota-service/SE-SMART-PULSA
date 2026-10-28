@@ -31,15 +31,14 @@ export default function PurchasePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [customerNumber, setCustomerNumber] = useState('')
-  const [voucherNumber, setVoucherNumber] = useState('')
-  const [voucherError, setVoucherError] = useState('')
   const [fieldError, setFieldError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const idempotencyKey = useRef(newIdempotencyKey())
 
-  // Voucher inject butuh nomor voucher kosong milik pembeli.
+  // Voucher inject tidak dikirim ke email: nomor voucher kosong pembeli itulah
+  // tujuan transaksi yang diteruskan ke Digiflazz.
   const voucherInject = product?.category === 'voucher_inject'
 
   const load = useCallback(async () => {
@@ -61,10 +60,14 @@ export default function PurchasePage() {
   async function submit(event) {
     event.preventDefault()
     setFieldError('')
-    setVoucherError('')
     setSubmitError('')
 
-    if (isVoucherCategory(product.category)) {
+    if (voucherInject) {
+      if (!/^\d{8,20}$/.test(customerNumber)) {
+        setFieldError('Nomor voucher kosong wajib diisi 8-20 digit angka.')
+        return
+      }
+    } else if (isVoucherCategory(product.category)) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerNumber)) {
         setFieldError('Email penerima voucher tidak valid.')
         return
@@ -74,13 +77,7 @@ export default function PurchasePage() {
       return
     }
 
-    if (voucherInject && !/^\d{8,20}$/.test(voucherNumber)) {
-      setVoucherError('Nomor voucher kosong wajib diisi 8-20 digit angka.')
-      return
-    }
-
     const payload = { productId: product.id, customerNumber }
-    if (voucherInject) payload.voucherNumber = voucherNumber
 
     setSubmitting(true)
     try {
@@ -101,7 +98,6 @@ export default function PurchasePage() {
       if (typeof data.balance === 'number') updateBalance(data.balance)
     } catch (requestError) {
       if (requestError.errors?.customerNumber) setFieldError(requestError.errors.customerNumber[0])
-      else if (requestError.errors?.voucherNumber) setVoucherError(requestError.errors.voucherNumber[0])
       else setSubmitError(requestError.message)
     } finally {
       setSubmitting(false)
@@ -171,7 +167,18 @@ export default function PurchasePage() {
     )
   }
 
-  const emailTarget = isVoucherCategory(product.category)
+  const emailTarget = product.category === 'voucher'
+  const fieldLabel = voucherInject
+    ? 'Nomor voucher kosong yang akan di-inject'
+    : targetLabel(product.category)
+  const fieldPlaceholder = voucherInject
+    ? 'Contoh: 1234567890123456'
+    : emailTarget
+      ? 'nama@email.com'
+      : 'Contoh: 081234567890'
+  const fieldHint = voucherInject
+    ? 'Isi nomor yang tercetak pada voucher kosong Telkomsel Anda (8-20 digit). Nomor ini yang dikirim ke supplier untuk di-inject.'
+    : `Pastikan ${emailTarget ? 'email' : 'nomor'} benar. Transaksi yang sudah diproses tidak dapat dibatalkan.`
   // Server mengirim `price` sesuai tipe akun (reseller atau pribadi).
   const unitPrice = product.price
   const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'
@@ -200,57 +207,33 @@ export default function PurchasePage() {
           {voucherInject ? <p className="category-note">{VOUCHER_INJECT_NOTE}</p> : null}
 
           <label className="field">
-            <span className="field__label">{targetLabel(product.category)}</span>
+            <span className="field__label">{fieldLabel}</span>
             <input
               className="input"
               type={emailTarget ? 'email' : 'text'}
               inputMode={emailTarget ? 'email' : 'numeric'}
-              autoComplete={emailTarget ? 'email' : 'tel'}
+              autoComplete={voucherInject ? 'off' : emailTarget ? 'email' : 'tel'}
               value={customerNumber}
               onChange={(event) => {
+                const raw = event.target.value
                 const value = emailTarget
-                  ? event.target.value.trim().slice(0, 100)
-                  : event.target.value.replace(/\D/g, '').slice(0, 16)
+                  ? raw.trim().slice(0, 100)
+                  : raw.replace(/\D/g, '').slice(0, voucherInject ? 20 : 16)
                 setCustomerNumber(value)
                 setFieldError('')
                 setSubmitError('')
               }}
-              placeholder={emailTarget ? 'nama@email.com' : 'Contoh: 081234567890'}
+              placeholder={fieldPlaceholder}
             />
-            <span className="field__hint">
-              Pastikan {emailTarget ? 'email' : 'nomor'} benar. Transaksi yang sudah diproses tidak
-              dapat dibatalkan.
-            </span>
+            <span className="field__hint">{fieldHint}</span>
             {fieldError ? <span className="field__error">{fieldError}</span> : null}
           </label>
 
           {voucherInject ? (
-            <>
-              <label className="field">
-                <span className="field__label">Nomor voucher kosong yang akan di-inject</span>
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={voucherNumber}
-                  onChange={(event) => {
-                    setVoucherNumber(event.target.value.replace(/\D/g, '').slice(0, 20))
-                    setVoucherError('')
-                    setSubmitError('')
-                  }}
-                  placeholder="Contoh: 1234567890123456"
-                />
-                <span className="field__hint">
-                  Isi nomor yang tercetak pada voucher kosong Telkomsel Anda (8-20 digit).
-                </span>
-                {voucherError ? <span className="field__error">{voucherError}</span> : null}
-              </label>
-              <p className="category-note category-note--warn">
-                Periksa kembali nomor voucher kosong. Kesalahan pengetikan nomor bukan tanggung
-                jawab kami dan transaksi yang sudah diproses tidak dapat dibatalkan.
-              </p>
-            </>
+            <p className="category-note category-note--warn">
+              Periksa kembali nomor voucher kosong. Kesalahan pengetikan nomor bukan tanggung
+              jawab kami dan transaksi yang sudah diproses tidak dapat dibatalkan.
+            </p>
           ) : null}
 
           {isPersonal ? null : (
@@ -306,7 +289,7 @@ export default function PurchasePage() {
 
       <p className="note note--muted">
         Harga mengikuti tipe akun Anda ({priceLabel}) dan ditentukan oleh server. Halaman ini hanya
-        mengirim nomor tujuan{voucherInject ? ' dan nomor voucher kosong' : ''}.
+        mengirim {voucherInject ? 'nomor voucher kosong' : 'nomor tujuan'}.
       </p>
     </div>
   )

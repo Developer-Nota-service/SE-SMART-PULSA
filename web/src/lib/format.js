@@ -73,8 +73,9 @@ export const targetLabel = (category) => {
     case 'game':
       return 'ID game / User ID'
     case 'voucher':
-    case 'voucher_inject':
       return 'Email penerima voucher'
+    case 'voucher_inject':
+      return 'Nomor voucher kosong'
     case 'ewallet':
       return 'Nomor HP akun e-wallet'
     default:

@@ -95,8 +95,10 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
 - `POST /transactions` `{productId,customerNumber,voucherNumber?}` + header opsional
   `Idempotency-Key` — **reseller saja**: bayar pakai saldo, harga reseller (akun
-  pribadi ditolak 422). `voucherNumber` wajib untuk produk `voucher_inject`
-  (nomor voucher kosong, 8-20 digit).
+  pribadi ditolak 422). Untuk produk `voucher_inject`, `customerNumber` **adalah
+  nomor voucher kosong** (8-20 digit), bukan email — `customer_no` inilah yang
+  dikirim ke Digiflazz. `voucherNumber` masih diterima (opsional) dan diisi dari
+  `customerNumber` bila kosong.
   Produk supplier (`is_demo = false`) dibuat `pending` lalu diselesaikan Digiflazz
   (lihat "Pemenuhan transaksi (Digiflazz)"); produk demo langsung `success`
 - `POST /transactions/direct` `{productId,customerNumber,voucherNumber?}` → transaksi `pending` +
@@ -409,17 +411,18 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   beda huruf besar/kecil digabung (TELKOMSEL = Telkomsel).
   Kategori `voucher_inject` (Voucher Inject) berisi voucher Telkomsel yang harus
   di-inject ke voucher kosong; `CATEGORY_NOTES` di `CategoryPage.jsx` menampilkan
-  penjelasan itu di atas chip provider, dan `isVoucherCategory()` di
-  `web/src/lib/format.js` membuat produknya memakai target email seperti voucher
-  biasa (backend: `CATEGORIES` di `CatalogController` dan `destinationError()` di
-  `TransactionController`).
+  penjelasan itu di atas chip provider. Berbeda dari voucher biasa (yang dikirim ke
+  email penerima), voucher inject memakai **nomor voucher kosong** sebagai
+  `customerNumber` — itu yang diteruskan ke Digiflazz sebagai `customer_no`
+  (backend: `destinationError()` di `TransactionController` hanya menerima email
+  untuk kategori `voucher`).
   Teks penjelasan + peringatan "salah ketik nomor bukan tanggung jawab kami" ada di
   `VOUCHER_INJECT_NOTE` (`web/src/lib/format.js`) dan dipakai halaman kategori
-  maupun halaman beli. Khusus kategori ini halaman beli menampilkan kolom tambahan
-  **Nomor voucher kosong yang akan di-inject**: wajib 8-20 digit angka, divalidasi
-  di `voucherNumberError()` (`TransactionController`) dan disimpan di
-  `transactions.voucher_number`, lalu ditampilkan di detail pesanan
-  (`voucherNumber`). Kategori lain tidak mengirim kolom ini.
+  maupun halaman beli. Khusus kategori ini halaman beli hanya punya **satu** kolom
+  (tidak ada email): **Nomor voucher kosong yang akan di-inject**, wajib 8-20 digit
+  angka. Nomor itu dikirim sebagai `customerNumber`, disalin ke
+  `transactions.voucher_number` (`TransactionController`) dan ditampilkan di detail
+  pesanan (`voucherNumber`). Kategori lain tidak memakai kolom ini.
   Semua selain `/login` butuh sesi; `/admin`
   hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
   menu Admin tidak muncul di navigasi bawah).

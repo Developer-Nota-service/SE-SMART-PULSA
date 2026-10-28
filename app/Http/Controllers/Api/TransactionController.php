@@ -125,7 +125,8 @@ class TransactionController extends Controller
             return response()->json(['message' => 'Produk tidak tersedia.'], 404);
         }
 
-        // Voucher dikirim ke email penerima, kategori lain ke nomor tujuan.
+        // Voucher dikirim ke email penerima; voucher inject memakai nomor voucher
+        // kosong sebagai tujuan karena itulah data yang dibutuhkan supplier.
         $destinationError = $this->destinationError($productCategory, $customerNumber);
 
         if ($destinationError !== null) {
@@ -135,7 +136,11 @@ class TransactionController extends Controller
             ], 422);
         }
 
-        // Voucher inject wajib menyebut nomor voucher kosong yang akan diisi.
+        // Voucher inject: nomor voucher kosong adalah tujuan transaksinya.
+        if ($productCategory === 'voucher_inject' && $voucherNumber === '') {
+            $voucherNumber = $customerNumber;
+        }
+
         $voucherError = $this->voucherNumberError($productCategory, $voucherNumber);
 
         if ($voucherError !== null) {
@@ -314,6 +319,11 @@ class TransactionController extends Controller
             ], 422);
         }
 
+        // Voucher inject: nomor voucher kosong adalah tujuan transaksinya.
+        if ($product->category === 'voucher_inject' && $voucherNumber === '') {
+            $voucherNumber = $customerNumber;
+        }
+
         $voucherError = $this->voucherNumberError($product->category, $voucherNumber);
 
         if ($voucherError !== null) {
@@ -410,7 +420,15 @@ class TransactionController extends Controller
 
     private function destinationError(string $category, string $customerNumber): ?string
     {
-        if (in_array($category, ['voucher', 'voucher_inject'], true)) {
+        // Voucher inject diisi nomor voucher kosong (dikirim ke supplier sebagai
+        // customer_no), bukan email penerima.
+        if ($category === 'voucher_inject') {
+            return preg_match('/^\d{8,20}$/', $customerNumber)
+                ? null
+                : 'Nomor voucher kosong harus 8-20 digit angka.';
+        }
+
+        if ($category === 'voucher') {
             return filter_var($customerNumber, FILTER_VALIDATE_EMAIL) === false
                 ? 'Email penerima voucher tidak valid.'
                 : null;
