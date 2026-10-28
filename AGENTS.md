@@ -207,6 +207,10 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
   `verification_status = unverified` + `verified_holder = NULL`. Pengelola wajib
   mencocokkan nama dan nomor rekening dengan data pengguna sebelum dana
   ditransfer. Jangan menandai `matched` tanpa sumber pengecekan yang nyata.
+- Halaman penarikan menautkan `https://cekrekening.id/` di samping kolom nomor
+  rekening. Itu portal Komdigi untuk memeriksa **laporan penipuan** sebuah nomor
+  rekening — bukan penampil nama pemilik. Jangan menampilkannya sebagai hasil
+  verifikasi nama.
 - Bila kelak ada penyedia yang bisa dipakai (mis. Xendit Data Services setelah
   akun badan usaha disetujui), tambahkan sebagai service baru yang mengembalikan
   nama pemilik rekening dan pasang di `store()`; frontend tidak perlu diubah.

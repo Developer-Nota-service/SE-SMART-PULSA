@@ -695,6 +695,12 @@ select.input {
   color: var(--muted);
 }
 
+.field__hint .hint-link {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 .field__error {
   display: block;
   margin-top: 6px;

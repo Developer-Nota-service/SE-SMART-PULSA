@@ -195,7 +195,17 @@ export default function WithdrawForm({ balance = 0, onCreated }) {
             }}
             placeholder={channelType === 'bank' ? 'Contoh: 1234567890' : 'Contoh: 081234567890'}
           />
-          <span className="field__hint">Periksa kembali nomor rekening/e-wallet sebelum mengajukan.</span>
+          <span className="field__hint">
+            Periksa kembali nomor rekening/e-wallet sebelum mengajukan.{' '}
+            <a
+              className="hint-link"
+              href="https://cekrekening.id/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Cek nomor di cekrekening.id
+            </a>
+          </span>
         </label>
 
         <label className="field">
