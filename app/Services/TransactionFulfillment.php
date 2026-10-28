@@ -19,8 +19,10 @@ class TransactionFulfillment
 {
     private const SUPPLIER = 'digiflazz';
 
-    public function __construct(private readonly DigiflazzClient $digiflazz)
-    {
+    public function __construct(
+        private readonly DigiflazzClient $digiflazz,
+        private readonly TransactionRefund $refunds,
+    ) {
     }
 
     public function isConfigured(): bool
@@ -77,7 +79,9 @@ class TransactionFulfillment
             return;
         }
 
-        DB::transaction(function () use ($transactionId, $status, $message, $serial): void {
+        $failed = null;
+
+        DB::transaction(function () use ($transactionId, $status, $message, $serial, &$failed): void {
             $current = DB::table('transactions')->where('id', $transactionId)->lockForUpdate()->first();
 
             if ($current === null || $this->isFinal($current->supplier_status)) {
@@ -109,6 +113,8 @@ class TransactionFulfillment
 
                 $this->refundBalance($current);
 
+                $failed = $current;
+
                 return;
             }
 
@@ -118,6 +124,12 @@ class TransactionFulfillment
                 'status' => 'pending',
             ]);
         });
+
+        // Refund Midtrans memanggil API eksternal; jalankan setelah transaksi DB
+        // selesai supaya lock baris tidak ditahan selama request HTTP.
+        if ($failed !== null) {
+            $this->refunds->refundFailed($failed);
+        }
     }
 
     /**

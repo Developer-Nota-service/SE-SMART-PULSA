@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { categoryLabel, dateTime, rupiah } from '../lib/format.js'
+import { categoryLabel, dateTime, refundLabel, rupiah } from '../lib/format.js'
 import CopyButton from './CopyButton.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import { CloseIcon } from './Icons.jsx'
@@ -73,6 +73,12 @@ export default function OrderDetailSheet({ order, onClose }) {
             <div className="row">
               <span className="row__label">Keterangan</span>
               <span className="row__value">{order.supplierMessage}</span>
+            </div>
+          ) : null}
+          {order.status === 'failed' && order.supplierStatus === 'failed' ? (
+            <div className="row">
+              <span className="row__label">Pengembalian dana</span>
+              <span className="row__value">{refundLabel(order)}</span>
             </div>
           ) : null}
           <div className="row">

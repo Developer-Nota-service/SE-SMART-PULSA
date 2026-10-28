@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api.js'
-import { dateTime, rupiah } from '../../lib/format.js'
+import { dateTime, refundLabel, rupiah } from '../../lib/format.js'
 import { EmptyState, ErrorState, LoadingState } from '../StateViews.jsx'
 import StatusBadge from '../StatusBadge.jsx'
 
@@ -110,6 +110,12 @@ export default function AdminTransactions() {
                     {row.paymentMethod === 'midtrans' ? 'Midtrans' : 'Saldo'}
                   </span>
                 </div>
+                {row.refundStatus ? (
+                  <div className="row">
+                    <span className="row__label">Pengembalian dana</span>
+                    <span className="row__value">{refundLabel(row)}</span>
+                  </div>
+                ) : null}
               </div>
             </article>
           ))}

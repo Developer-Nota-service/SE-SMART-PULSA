@@ -116,6 +116,65 @@ class MidtransService
         return $response->json();
     }
 
+    /**
+     * Minta pengembalian dana penuh ke Midtrans (POST /v2/{order_id}/refund).
+     *
+     * Refund hanya didukung sebagian metode pembayaran (kartu, GoPay,
+     * ShopeePay, DANA, OVO, QRIS, Kredivo, Akulaku); VA/transfer bank ditolak
+     * Midtrans, sehingga pemanggil memakai saldo pengguna sebagai cadangan.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function refund(string $orderId, int $amount, string $reason): array
+    {
+        $key = (string) config('services.midtrans.server_key');
+
+        if (! $this->isConfigured() || $key === self::PLACEHOLDER_KEY) {
+            return ['ok' => false, 'message' => 'Midtrans belum dikonfigurasi untuk refund.'];
+        }
+
+        try {
+            $response = Http::withBasicAuth($key, '')
+                ->acceptJson()
+                ->timeout(20)
+                ->post($this->apiBaseUrl().'/v2/'.rawurlencode($orderId).'/refund', [
+                    'refund_key' => 'refund-'.$orderId,
+                    'amount' => $amount,
+                    'reason' => mb_substr($reason, 0, 255),
+                ]);
+        } catch (\Throwable $error) {
+            Log::warning('Midtrans refund gagal dihubungi', [
+                'order_id' => $orderId,
+                'error' => $error->getMessage(),
+            ]);
+
+            return ['ok' => false, 'message' => 'Midtrans tidak dapat dihubungi: '.$error->getMessage()];
+        }
+
+        $body = (array) $response->json();
+        $statusCode = (string) ($body['status_code'] ?? '');
+        $statusMessage = trim((string) ($body['status_message'] ?? ''));
+        $transactionStatus = strtolower((string) ($body['transaction_status'] ?? ''));
+
+        if ($response->successful() && $statusCode === '200' && str_contains($transactionStatus, 'refund')) {
+            return [
+                'ok' => true,
+                'message' => $statusMessage !== '' ? $statusMessage : 'Refund disetujui Midtrans.',
+            ];
+        }
+
+        Log::warning('Midtrans menolak refund', [
+            'order_id' => $orderId,
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ]);
+
+        return [
+            'ok' => false,
+            'message' => $statusMessage !== '' ? $statusMessage : 'Midtrans menolak permintaan refund.',
+        ];
+    }
+
     public function verifySignature(string $orderId, string $statusCode, string $grossAmount, string $signature): bool
     {
         $key = (string) config('services.midtrans.server_key');

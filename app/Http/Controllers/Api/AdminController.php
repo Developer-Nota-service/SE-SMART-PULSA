@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\MidtransPaymentStatus;
 use App\Services\MidtransService;
 use App\Services\TransactionFulfillment;
+use App\Services\TransactionRefund;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -40,6 +41,7 @@ class AdminController extends Controller
         private readonly MidtransService $midtrans,
         private readonly MidtransPaymentStatus $status,
         private readonly TransactionFulfillment $fulfillment,
+        private readonly TransactionRefund $refunds,
     ) {
     }
 
@@ -395,6 +397,9 @@ class AdminController extends Controller
                 'transactions.supplier_status',
                 'transactions.supplier_sn',
                 'transactions.supplier_message',
+                'transactions.refund_status',
+                'transactions.refund_message',
+                'transactions.refunded_at',
                 'users.id as user_id',
                 'users.name as user_name',
                 'users.email as user_email',
@@ -425,12 +430,22 @@ class AdminController extends Controller
 
         $this->fulfillment->fulfill((int) $id);
 
+        // Transaksi yang gagal di supplier: coba ulang pengembalian dananya
+        // (mis. percobaan refund Midtrans sebelumnya error).
+        $failed = DB::table('transactions')->where('id', (int) $id)->first();
+
+        if ($failed !== null && $failed->status === 'failed') {
+            $this->refunds->refundFailed($failed);
+        }
+
         $row = DB::table('transactions')->where('id', (int) $id)->first([
             'id',
             'status',
             'supplier_status',
             'supplier_sn',
             'supplier_message',
+            'refund_status',
+            'refund_message',
         ]);
 
         return response()->json(['data' => [
@@ -439,6 +454,8 @@ class AdminController extends Controller
             'supplierStatus' => $row->supplier_status,
             'serialNumber' => $row->supplier_sn,
             'supplierMessage' => $row->supplier_message,
+            'refundStatus' => $row->refund_status,
+            'refundMessage' => $row->refund_message,
         ]]);
     }
 
@@ -586,6 +603,9 @@ class AdminController extends Controller
             'supplierStatus' => $row->supplier_status ?? null,
             'serialNumber' => $row->supplier_sn ?? null,
             'supplierMessage' => $row->supplier_message ?? null,
+            'refundStatus' => $row->refund_status ?? null,
+            'refundMessage' => $row->refund_message ?? null,
+            'refundedAt' => $row->refunded_at ?? null,
             'user' => [
                 'id' => (int) $row->user_id,
                 'name' => $row->user_name,

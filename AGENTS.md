@@ -230,6 +230,12 @@ pending milik pengguna diperiksa. Frontend memanggilnya lewat
 `/transaksi?order_id=...` dari redirect Midtrans), lalu memuat ulang data bila ada
 yang berubah.
 
+Refund: `MidtransService::refund()` memanggil `POST /v2/{order_id}/refund` dengan
+`refund_key = refund-<order_number>` (mengulang permintaan yang sama aman, tidak
+membuat refund ganda). Kapabilitas refund harus aktif di akun Midtrans — bila
+dashboard menolak, ajukan aktivasi ke support Midtrans; sampai aktif, jalur saldo
+di `TransactionRefund` yang dipakai.
+
 Env (`config/services.php → midtrans`): `MIDTRANS_SERVER_KEY`,
 `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION`, `MIDTRANS_FINISH_URL`. Di sandbox
 nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
@@ -325,14 +331,28 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   Transaksi saldo yang gagal di supplier dikembalikan **sekali** lewat
   `balance_entries` (credit); `supplier_status` final membuat webhook/cek berulang
   tidak mengubah apa pun.
+- **Transaksi yang dibayar lewat Midtrans** dan gagal di supplier dikembalikan
+  `app/Services/TransactionRefund.php`: minta refund penuh ke
+  `POST /v2/{order_id}/refund` Midtrans (dana kembali ke metode pembayaran asal).
+  Midtrans hanya mendukung refund untuk kartu, GoPay, ShopeePay, DANA, OVO, QRIS,
+  Kredivo, Akulaku; bila ditolak (mis. VA/transfer bank), nominal transaksi
+  dikreditkan ke saldo pengguna lewat `balance_entries` supaya tetap bisa ditarik.
+  Hasilnya di `transactions.refund_status` — `processing` → `midtrans` (refund ke
+  metode asal) atau `balance` (dikreditkan ke saldo), `failed` bila keduanya gagal
+  — plus `refund_message`/`refunded_at`. Klaim `refund_status` membuat pengembalian
+  hanya terjadi **sekali** (webhook/cek berulang aman). Panggilan refund Midtrans
+  dilakukan setelah transaksi DB selesai, bukan di dalamnya. Admin bisa memicu
+  ulang pengembalian lewat `POST /admin/transactions/{id}/check`.
 - `POST /api/v1/digiflazz/webhook` — publik, wajib `X-Hub-Signature:
   sha1=<hmac>` dari `DIGIFLAZZ_WEBHOOK_SECRET`; menjawab 503 bila secret belum
   diisi. Event `ping` dijawab `pong`, ref_id tak dikenal dijawab 200 agar
   Digiflazz tidak mengulang terus.
 - `POST /api/v1/admin/transactions/{id}/check` — admin mengirim ulang/cek status ke
   supplier untuk transaksi `pending`.
-- Respons transaksi memuat `serialNumber`, `supplierStatus`, `supplierMessage`;
-  detail pesanan menampilkan nomor seri (token PLN/pulsa) beserta tombol salin.
+- Respons transaksi memuat `serialNumber`, `supplierStatus`, `supplierMessage`,
+  `refundStatus`, `refundMessage`, `refundedAt`; detail pesanan menampilkan nomor
+  seri (token PLN/pulsa) beserta tombol salin, dan baris **Pengembalian dana**
+  untuk transaksi yang gagal di supplier.
 
 ## Invariant keamanan (jangan dilanggar)
 
@@ -413,6 +433,13 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   Produk hasil `digiflazz:sync-products` ber-`is_demo = false` dan benar-benar
   dikirim ke Digiflazz saat dibayar; harganya datang dari daftar harga supplier,
   jangan dikarang manual.
+- Sebelum transaksi dikirim, halaman beli menampilkan `PurchaseConfirmSheet`
+  (`web/src/components/PurchaseConfirmSheet.jsx`): produk, tujuan yang sudah
+  diketik, total, dan `PURCHASE_DISCLAIMER` dari `web/src/lib/format.js` —
+  kesalahan pengisian nomor/data lain bukan tanggung jawab pengelola dan transaksi
+  yang sudah diproses tidak dapat dibatalkan. Permintaan baru dikirim setelah
+  tombol "Ya, lanjutkan" ditekan; "Periksa lagi" menutup sheet tanpa transaksi.
+  Keterangan pengembalian dana memakai `refundLabel()` di file yang sama.
 - Tabel `products` menyimpan nama operator di kolom **`operator`**, bukan `brand`:
   field `brand` dari payload Digiflazz dipetakan ke `operator` oleh
   `SyncDigiflazzProducts`. Query inspeksi yang memakai `brand` gagal

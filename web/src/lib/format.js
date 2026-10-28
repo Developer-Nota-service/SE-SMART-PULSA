@@ -48,6 +48,28 @@ export const VOUCHER_INJECT_NOTE =
   'Siapkan voucher kosong terlebih dahulu, lalu isi nomor voucher kosong itu saat membeli. ' +
   'Kesalahan pengetikan nomor voucher bukan tanggung jawab kami.'
 
+// Konfirmasi terakhir sebelum membeli. Kesalahan isi tujuan bukan tanggung jawab
+// pengelola, dan transaksi yang sudah diproses tidak bisa dibatalkan.
+export const PURCHASE_DISCLAIMER =
+  'Periksa kembali nomor, ID, atau email tujuan sebelum melanjutkan. Kesalahan pengisian ' +
+  'nomor atau data lain akibat kelalaian pembeli bukan tanggung jawab kami, dan transaksi ' +
+  'yang sudah diproses tidak dapat dibatalkan atau diubah.'
+
+// Keterangan pengembalian dana untuk transaksi yang gagal di supplier.
+export const refundLabel = (order) => {
+  if (order.paymentMethod === 'balance') return 'Saldo sudah dikembalikan'
+  switch (order.refundStatus) {
+    case 'midtrans':
+      return 'Dana dikembalikan ke metode pembayaran'
+    case 'balance':
+      return 'Dana dikembalikan ke saldo aplikasi'
+    case 'failed':
+      return 'Belum berhasil — hubungi admin'
+    default:
+      return 'Sedang diproses'
+  }
+}
+
 // Digiflazz memakai satu kolom `customer_no`; isinya ditentukan seller per
 // produk (`instruction`). Untuk game, format paling umum: Mobile Legends =
 // User ID + Zone ID digabung, Genshin/Honkai = UID|Server.

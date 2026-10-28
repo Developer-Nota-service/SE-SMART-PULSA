@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import CopyButton from '../components/CopyButton.jsx'
 import PaymentOptions from '../components/PaymentOptions.jsx'
+import PurchaseConfirmSheet from '../components/PurchaseConfirmSheet.jsx'
 import { ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { CheckIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
@@ -35,6 +36,7 @@ export default function PurchasePage() {
   const [fieldError, setFieldError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState(null)
   const idempotencyKey = useRef(newIdempotencyKey())
 
@@ -58,7 +60,9 @@ export default function PurchasePage() {
     load()
   }, [load])
 
-  async function submit(event) {
+  // Validasi dulu, lalu tampilkan konfirmasi; transaksi baru dikirim setelah
+  // pembeli menyetujui peringatan kesalahan pengisian nomor.
+  function submit(event) {
     event.preventDefault()
     setFieldError('')
     setSubmitError('')
@@ -83,6 +87,12 @@ export default function PurchasePage() {
       setFieldError('Nomor tujuan harus 6-16 digit angka.')
       return
     }
+
+    setConfirming(true)
+  }
+
+  async function purchase() {
+    setConfirming(false)
 
     const payload = { productId: product.id, customerNumber }
 
@@ -309,6 +319,18 @@ export default function PurchasePage() {
         Harga mengikuti tipe akun Anda ({priceLabel}) dan ditentukan oleh server. Halaman ini hanya
         mengirim {voucherInject ? 'nomor voucher kosong' : 'nomor tujuan'}.
       </p>
+
+      {confirming ? (
+        <PurchaseConfirmSheet
+          product={product}
+          customerNumber={customerNumber}
+          voucherInject={voucherInject}
+          amount={unitPrice}
+          methodLabel={isPersonal ? 'Midtrans (bayar langsung)' : 'Saldo'}
+          onConfirm={purchase}
+          onClose={() => setConfirming(false)}
+        />
+      ) : null}
     </div>
   )
 }
