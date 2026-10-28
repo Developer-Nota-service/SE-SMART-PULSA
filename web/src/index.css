@@ -438,10 +438,18 @@ p {
 }
 
 /* ---------- products ---------- */
-.group-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.provider-chips {
+  margin-top: 0;
+}
+
+.chip__count {
+  margin-left: 5px;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.provider-head {
+  margin: 14px 0 10px;
 }
 
 .product-grid {

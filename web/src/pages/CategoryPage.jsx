@@ -32,17 +32,20 @@ function groupByProvider(products) {
     .sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label))
 }
 
-// Produk tampil setelah kategori dipilih, dikelompokkan per provider.
+// Produk tampil setelah kategori dipilih: provider dipilih dulu pada deret
+// menyamping, produk provider tersebut muncul menurun di bawahnya.
 export default function CategoryPage() {
   const { category } = useParams()
   const valid = CATEGORY_KEYS.includes(category)
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [provider, setProvider] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
+    setProvider(null)
     try {
       setProducts(await api.products({ category }))
     } catch (requestError) {
@@ -57,6 +60,10 @@ export default function CategoryPage() {
   }, [load, valid])
 
   const groups = useMemo(() => groupByProvider(products), [products])
+  const active = useMemo(
+    () => groups.find((group) => group.key === provider) || groups[0] || null,
+    [groups, provider],
+  )
 
   if (!valid) return <Navigate to="/" replace />
 
@@ -76,27 +83,36 @@ export default function CategoryPage() {
         <LoadingState label="Memuat produk…" />
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
-      ) : groups.length === 0 ? (
+      ) : !active ? (
         <EmptyState
           title="Belum ada produk"
           description="Produk untuk kategori ini belum tersedia."
         />
       ) : (
-        <div className="group-list">
-          {groups.map((group) => (
-            <section key={group.key}>
-              <div className="section-head">
-                <h2 className="section-title">{group.label}</h2>
-                <span className="section-hint">{group.items.length} produk</span>
-              </div>
-              <div className="product-grid">
-                {group.items.map((product) => (
-                  <ProductCard key={product.id} product={product} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <section>
+          <div className="chips provider-chips">
+            {groups.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                className={`chip${group.key === active.key ? ' is-active' : ''}`}
+                onClick={() => setProvider(group.key)}
+              >
+                {group.label}
+                <span className="chip__count">{group.items.length}</span>
+              </button>
+            ))}
+          </div>
+          <div className="section-head provider-head">
+            <h2 className="section-title">{active.label}</h2>
+            <span className="section-hint">{active.items.length} produk</span>
+          </div>
+          <div className="product-grid">
+            {active.items.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
       )}
     </div>
   )
