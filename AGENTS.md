@@ -413,6 +413,10 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   Produk hasil `digiflazz:sync-products` ber-`is_demo = false` dan benar-benar
   dikirim ke Digiflazz saat dibayar; harganya datang dari daftar harga supplier,
   jangan dikarang manual.
+- Tabel `products` menyimpan nama operator di kolom **`operator`**, bukan `brand`:
+  field `brand` dari payload Digiflazz dipetakan ke `operator` oleh
+  `SyncDigiflazzProducts`. Query inspeksi yang memakai `brand` gagal
+  (`column "brand" does not exist`).
 - Halaman: `/login`, `/` (beranda), `/kategori/:category`, `/transaksi`, `/saldo`,
   `/profil`, `/beli/:id`, `/bantuan`, `/legal/:doc`, `/admin`. Beranda hanya
   menampilkan kartu kategori (`web/src/components/CategoryGrid.jsx` → tautan);
