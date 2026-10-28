@@ -438,6 +438,17 @@ p {
 }
 
 /* ---------- products ---------- */
+.category-note {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 11px 13px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  line-height: 1.65;
+  color: #334155;
+}
+
 .provider-chips {
   margin-top: 0;
 }

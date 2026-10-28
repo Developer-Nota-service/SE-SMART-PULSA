@@ -22,6 +22,12 @@ const PROVIDER_NAMES = {
   tri: 'Tri',
 }
 
+// Penjelasan khusus kategori (mis. voucher inject butuh voucher kosong).
+const CATEGORY_NOTES = {
+  voucher_inject:
+    'Voucher ini bukan voucher siap pakai. Kode voucher harus di-inject sendiri ke voucher kosong Telkomsel, jadi siapkan voucher kosong terlebih dahulu sebelum membeli.',
+}
+
 const rankOf = (label) => {
   const index = PROVIDER_ORDER.indexOf(label)
   return index === -1 ? PROVIDER_ORDER.length : index
@@ -116,6 +122,9 @@ export default function CategoryPage() {
         />
       ) : (
         <section>
+          {CATEGORY_NOTES[category] ? (
+            <p className="category-note">{CATEGORY_NOTES[category]}</p>
+          ) : null}
           <div className="chips provider-chips">
             {groups.map((group) => (
               <button

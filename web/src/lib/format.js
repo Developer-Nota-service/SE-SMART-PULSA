@@ -35,7 +35,11 @@ export const CATEGORIES = [
   { key: 'ewallet', label: 'E-Wallet', icon: 'wallet' },
   { key: 'game', label: 'Top Up Game', icon: 'game' },
   { key: 'voucher', label: 'Voucher Digital', icon: 'ticket' },
+  { key: 'voucher_inject', label: 'Voucher Inject', icon: 'inject' },
 ]
+
+// Voucher biasa dan voucher inject sama-sama dikirim sebagai kode ke email pembeli.
+export const isVoucherCategory = (key) => key === 'voucher' || key === 'voucher_inject'
 
 export const categoryLabel = (key) =>
   CATEGORIES.find((category) => category.key === key)?.label || 'Lainnya'
@@ -62,6 +66,7 @@ export const targetLabel = (category) => {
     case 'game':
       return 'ID game / User ID'
     case 'voucher':
+    case 'voucher_inject':
       return 'Email penerima voucher'
     case 'ewallet':
       return 'Nomor HP akun e-wallet'

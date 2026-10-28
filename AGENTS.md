@@ -297,7 +297,8 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   resmi Digiflazz).
 - `php artisan digiflazz:sync-products` — impor produk `is_demo = false` untuk
   kategori Pulsa, Data, PLN token, E-Money, Games, Voucher. Pascabayar, masa aktif,
-  TV, dan eSIM dilewati. Harga reseller = harga supplier + margin, harga publik
+  TV, dan eSIM dilewati. Voucher Telkomsel (produk inject) masuk kategori
+  `voucher_inject`, bukan `voucher` — lihat `categoryFor()`. Harga reseller = harga supplier + margin, harga publik
   +5%, keduanya dibulatkan ke atas per Rp100. SKU yang hilang dari daftar
   dinonaktifkan (tidak dihapus) agar riwayat transaksi tetap utuh.
 - `app/Services/TransactionFulfillment.php` — `pending` → `success` / `failed`
@@ -404,6 +405,12 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   `PROVIDER_NAMES`),
   produk provider terpilih muncul menurun di bawahnya. Nama operator supplier yang
   beda huruf besar/kecil digabung (TELKOMSEL = Telkomsel).
+  Kategori `voucher_inject` (Voucher Inject) berisi voucher Telkomsel yang harus
+  di-inject ke voucher kosong; `CATEGORY_NOTES` di `CategoryPage.jsx` menampilkan
+  penjelasan itu di atas chip provider, dan `isVoucherCategory()` di
+  `web/src/lib/format.js` membuat produknya memakai target email seperti voucher
+  biasa (backend: `CATEGORIES` di `CatalogController` dan `destinationError()` di
+  `TransactionController`).
   Semua selain `/login` butuh sesi; `/admin`
   hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
   menu Admin tidak muncul di navigasi bawah).

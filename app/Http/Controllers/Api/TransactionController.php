@@ -383,7 +383,7 @@ class TransactionController extends Controller
 
     private function destinationError(string $category, string $customerNumber): ?string
     {
-        if ($category === 'voucher') {
+        if (in_array($category, ['voucher', 'voucher_inject'], true)) {
             return filter_var($customerNumber, FILTER_VALIDATE_EMAIL) === false
                 ? 'Email penerima voucher tidak valid.'
                 : null;

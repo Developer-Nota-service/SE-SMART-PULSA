@@ -111,6 +111,7 @@ class SyncDigiflazzProducts extends Command
     {
         $category = strtolower(trim((string) ($row['category'] ?? '')));
         $name = strtolower(trim((string) ($row['product_name'] ?? '')));
+        $brand = strtolower(trim((string) ($row['brand'] ?? '')));
 
         return match (true) {
             $category === 'pulsa' => 'pulsa',
@@ -118,6 +119,9 @@ class SyncDigiflazzProducts extends Command
             $category === 'pln' && str_contains($name, 'token') => 'pln_token',
             str_contains($category, 'money') => 'ewallet',
             str_contains($category, 'game') => 'game',
+            // Voucher Telkomsel dari Digiflazz adalah voucher inject: kodenya
+            // dimasukkan sendiri ke voucher/kartu kosong, jadi dipisah kategorinya.
+            $category === 'voucher' && (str_contains($brand, 'telkomsel') || str_contains($name, 'telkomsel')) => 'voucher_inject',
             $category === 'voucher' => 'voucher',
             // Pascabayar, masa aktif, TV, eSIM belum didukung alur aplikasi ini.
             default => null,

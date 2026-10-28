@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class CatalogController extends Controller
 {
-    public const CATEGORIES = ['pulsa', 'data', 'pln_token', 'pln_bill', 'ewallet', 'game', 'voucher'];
+    public const CATEGORIES = ['pulsa', 'data', 'pln_token', 'pln_bill', 'ewallet', 'game', 'voucher', 'voucher_inject'];
 
     public function index(Request $request): JsonResponse
     {

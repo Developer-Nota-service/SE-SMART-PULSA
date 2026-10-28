@@ -4,6 +4,7 @@ import {
   BillIcon,
   BoltIcon,
   GameIcon,
+  InjectIcon,
   SignalIcon,
   TicketIcon,
   WalletIcon,
@@ -18,6 +19,7 @@ const icons = {
   wallet: WalletIcon,
   game: GameIcon,
   ticket: TicketIcon,
+  inject: InjectIcon,
 }
 
 // Setiap kategori adalah tautan ke halamannya sendiri, jadi produk baru

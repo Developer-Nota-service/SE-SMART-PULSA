@@ -6,7 +6,7 @@ import PaymentOptions from '../components/PaymentOptions.jsx'
 import { ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { CheckIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
-import { categoryLabel, rupiah, targetLabel } from '../lib/format.js'
+import { categoryLabel, isVoucherCategory, rupiah, targetLabel } from '../lib/format.js'
 
 function newIdempotencyKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -52,7 +52,7 @@ export default function PurchasePage() {
     setFieldError('')
     setSubmitError('')
 
-    if (product.category === 'voucher') {
+    if (isVoucherCategory(product.category)) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerNumber)) {
         setFieldError('Email penerima voucher tidak valid.')
         return
@@ -147,7 +147,7 @@ export default function PurchasePage() {
     )
   }
 
-  const emailTarget = product.category === 'voucher'
+  const emailTarget = isVoucherCategory(product.category)
   // Server mengirim `price` sesuai tipe akun (reseller atau pribadi).
   const unitPrice = product.price
   const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'

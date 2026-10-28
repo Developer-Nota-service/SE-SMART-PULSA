@@ -3,6 +3,7 @@ import {
   BillIcon,
   BoltIcon,
   GameIcon,
+  InjectIcon,
   SignalIcon,
   TicketIcon,
   WalletIcon,
@@ -18,6 +19,7 @@ const icons = {
   ewallet: WalletIcon,
   game: GameIcon,
   voucher: TicketIcon,
+  voucher_inject: InjectIcon,
 }
 
 export default function TransactionItem({ transaction, onClick }) {

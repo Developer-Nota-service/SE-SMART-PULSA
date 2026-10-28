@@ -82,6 +82,14 @@ export const TicketIcon = (p) => (
   </svg>
 )
 
+export const InjectIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 4.5v8" />
+    <path d="m8.6 9.4 3.4 3.4 3.4-3.4" />
+    <path d="M4.5 15v2.5A2 2 0 0 0 6.5 19.5h11a2 2 0 0 0 2-2V15" />
+  </svg>
+)
+
 export const ChevronRightIcon = (p) => (
   <svg {...base} {...p}>
     <path d="m9.5 6 6 6-6 6" />
