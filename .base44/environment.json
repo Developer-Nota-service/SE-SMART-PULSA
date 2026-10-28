@@ -14,6 +14,46 @@
       "requiredAtBoot": false
     },
     {
+      "name": "MAIL_MAILER",
+      "description": "Transport email Laravel. Isi `smtp` agar OTP perubahan email dan tautan atur sandi admin benar-benar terkirim; default sandbox `log` (email hanya ditulis ke log).",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_HOST",
+      "description": "Host SMTP penyedia email (Gmail: smtp.gmail.com; hosting: mail.namadomain.com).",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_PORT",
+      "description": "Port SMTP: 587 (TLS) atau 465 (SSL).",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_SCHEME",
+      "description": "Skema SMTP: `smtp` untuk port 587, `smtps` untuk port 465.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_USERNAME",
+      "description": "Alamat email penuh yang dipakai mengirim lewat SMTP.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_PASSWORD",
+      "description": "Sandi SMTP / App Password Gmail (myaccount.google.com > Security > App passwords).",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_FROM_ADDRESS",
+      "description": "Alamat pengirim yang tampil di email masuk, biasanya sama dengan MAIL_USERNAME.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "MAIL_FROM_NAME",
+      "description": "Nama pengirim yang tampil di kotak masuk, mis. SE SMART PULSA.",
+      "requiredAtBoot": false
+    },
+    {
       "name": "FONNTE_TOKEN",
       "description": "Token device Fonnte (fonnte.com > Device > Token) untuk mengirim kode OTP WhatsApp saat pendaftaran dan verifikasi akun. Tanpa token, kode OTP tidak terkirim dan akun baru tidak bisa menyelesaikan verifikasi.",
       "requiredAtBoot": false
