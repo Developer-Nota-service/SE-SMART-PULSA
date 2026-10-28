@@ -101,6 +101,11 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
   (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap; hanya akun
   reseller — akun pribadi ditolak 422 karena tidak memakai saldo)
+- `GET /admin/overview` — angka ringkas + antrean masalah. `GET /admin/withdrawals?status=`,
+  `POST /admin/withdrawals/{id}` `{action: process|paid|reject, note?}` (tolak =
+  saldo kembali), `GET /admin/deposits?status=`, `POST /admin/deposits/{id}/sync`,
+  `POST /admin/deposits/{id}/cancel`, `GET /admin/transactions?status=&q=`,
+  `GET /admin/users?q=`. Semua butuh `role = admin` (middleware `admin.only`).
 - `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
 - `POST /midtrans/sync` `{orderNumber?}` — cek status resmi ke API Midtrans untuk
   pesanan pending milik pengguna (cadangan bila webhook tidak sampai), signature
@@ -191,6 +196,27 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 `/run/base44/app.env` (nilai asli menang). Placeholder sengaja ditolak saat
 `APP_ENV=production`, jadi produksi wajib mengisi Server Key asli.
 
+## Konsol admin (`/admin`)
+
+`app/Http/Controllers/Api/AdminController.php` + `web/src/pages/AdminPage.jsx`
+(tab: Ringkasan, Penarikan, Deposit, Transaksi, Pengguna). Dijaga
+`app/Http/Middleware/EnsureAdmin.php` (alias `admin.only`).
+
+- **Penarikan** — `pending → processing → paid`; `pending|processing → rejected`.
+  Status final tidak bisa diubah (409), jadi saldo tidak bisa kembali dua kali.
+  Tolak menambah saldo pengguna secara atomik + satu baris `balance_entries`
+  (credit, "Pengembalian saldo: penarikan ditolak") dalam transaksi DB yang sama,
+  lalu menulis `audit_logs` (`admin.withdrawal.*`) dengan id admin.
+- **Deposit** — `sync` memakai `MidtransService::fetchStatus()` lalu **wajib**
+  memverifikasi `signature_key` respons sebelum `MidtransPaymentStatus::apply()`
+  (jalur yang sama dengan webhook). 404 dari Midtrans = halaman pembayaran belum
+  pernah dibuka, dijawab 409 dan sarankan membatalkan. `cancel` hanya untuk
+  `pending` (409 untuk status lain) dan tidak menyentuh saldo karena deposit
+  pending belum pernah menambah saldo. Tidak ada tombol "tandai lunas" manual.
+- **Deposit menggantung** — deposit `pending` lebih tua dari 30 menit ditandai
+  `stale` (+ `ageMinutes`) supaya gampang ditindak.
+- Akun admin demo: `admin@sesmartpulsa.id` / `admin12345` (di-seed).
+
 ## Penarikan saldo (withdraw)
 
 `GET /withdrawals/channels` · `GET /withdrawals` ·
@@ -227,11 +253,12 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Harga selalu `Pricing::unitPrice(price, retail_price, account_type)`. Jangan
   pernah menerima nominal dari browser, dan jangan mengambil tipe akun dari body
   request — hanya dari pengguna yang terautentikasi.
-- Hanya dua jalur yang boleh menandai deposit `paid` (dan menambah saldo):
-  webhook Midtrans yang `signature_key`-nya valid, dan `POST /midtrans/sync` yang
-  membaca status resmi dari API Midtrans lalu memverifikasi `signature_key` pada
-  responsnya. Jangan tambahkan tombol "tandai lunas" atau mempercayai status dari
-  browser.
+- Hanya tiga jalur yang boleh menandai deposit `paid` (dan menambah saldo), dan
+  semuanya berdasar data Midtrans ber-signature: webhook
+  `POST /midtrans/notification`, `POST /midtrans/sync` milik pengguna, dan
+  `POST /admin/deposits/{id}/sync` (admin) — ketiganya memanggil
+  `MidtransPaymentStatus::apply()` setelah `signature_key` terverifikasi. Jangan
+  tambahkan tombol "tandai lunas" atau mempercayai status dari browser.
 - Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.
 - Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per email.
 - Sesi hanya terbit setelah OTP WhatsApp terverifikasi (registrasi maupun
@@ -296,4 +323,6 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
 - Produk disimpan dengan `is_demo = true` dan selalu ditampilkan dengan label DEMO.
   Tidak ada provider PPOB nyata; jangan mengarang harga real-time.
 - Halaman: `/login`, `/` (beranda), `/transaksi`, `/saldo`, `/profil`, `/beli/:id`,
-  `/bantuan`, `/legal/:doc`. Semua selain `/login` butuh sesi.
+  `/bantuan`, `/legal/:doc`, `/admin`. Semua selain `/login` butuh sesi; `/admin`
+  hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
+  menu Admin tidak muncul di navigasi bawah).

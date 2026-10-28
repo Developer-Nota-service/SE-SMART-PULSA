@@ -182,6 +182,17 @@ export const api = {
   withdrawals: () => request('/withdrawals'),
   createWithdrawal: (payload) => request('/withdrawals', { method: 'POST', body: payload }),
 
+  // Konsol admin (hanya akun ber-role admin).
+  adminOverview: () => request('/admin/overview'),
+  adminWithdrawals: (params) => request(`/admin/withdrawals${query(params)}`),
+  adminWithdrawalAction: (id, action, note) =>
+    request(`/admin/withdrawals/${id}`, { method: 'POST', body: { action, note } }),
+  adminDeposits: (params) => request(`/admin/deposits${query(params)}`),
+  adminDepositSync: (id) => request(`/admin/deposits/${id}/sync`, { method: 'POST', body: {} }),
+  adminDepositCancel: (id) => request(`/admin/deposits/${id}/cancel`, { method: 'POST', body: {} }),
+  adminTransactions: (params) => request(`/admin/transactions${query(params)}`),
+  adminUsers: (params) => request(`/admin/users${query(params)}`),
+
   // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).
   syncPayments: (orderNumber) =>
     request('/midtrans/sync', {

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { HistoryIcon, HomeIcon, UserIcon, WalletIcon } from './Icons.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
+import { HistoryIcon, HomeIcon, ShieldIcon, UserIcon, WalletIcon } from './Icons.jsx'
 
 const items = [
   { to: '/', label: 'Beranda', Icon: HomeIcon },
@@ -9,9 +10,17 @@ const items = [
 ]
 
 export default function BottomNav() {
+  const { user } = useAuth()
+
+  // Konsol admin hanya muncul untuk akun ber-role admin.
+  const links =
+    user?.role === 'admin'
+      ? [...items.slice(0, 3), { to: '/admin', label: 'Admin', Icon: ShieldIcon }, items[3]]
+      : items
+
   return (
     <nav className="bottom-nav" aria-label="Navigasi utama">
-      {items.map(({ to, label, Icon }) => (
+      {links.map(({ to, label, Icon }) => (
         <NavLink
           key={to}
           to={to}

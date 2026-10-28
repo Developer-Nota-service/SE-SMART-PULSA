@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext.jsx'
 import AppShell from './components/AppShell.jsx'
+import AdminPage from './pages/AdminPage.jsx'
 import BalancePage from './pages/BalancePage.jsx'
 import HelpPage from './pages/HelpPage.jsx'
 import HomePage from './pages/HomePage.jsx'
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/transaksi" element={<TransactionsPage />} />
         <Route path="/saldo" element={<BalancePage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/profil" element={<ProfilePage />} />
         <Route path="/beli/:productId" element={<PurchasePage />} />
         <Route path="/bantuan" element={<HelpPage />} />

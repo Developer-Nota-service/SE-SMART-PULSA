@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\MidtransController;
@@ -29,6 +30,18 @@ Route::prefix('v1')->group(function () {
 
     // Foto profil: nama file acak, dipakai langsung oleh <img>.
     Route::get('avatar/{file}', [ProfileController::class, 'avatar']);
+
+    // Konsol admin: pantau & selesaikan deposit, transaksi, dan penarikan.
+    Route::middleware(['session.token', 'admin.only'])->prefix('admin')->group(function () {
+        Route::get('overview', [AdminController::class, 'overview']);
+        Route::get('withdrawals', [AdminController::class, 'withdrawals']);
+        Route::post('withdrawals/{id}', [AdminController::class, 'updateWithdrawal']);
+        Route::get('deposits', [AdminController::class, 'deposits']);
+        Route::post('deposits/{id}/sync', [AdminController::class, 'syncDeposit']);
+        Route::post('deposits/{id}/cancel', [AdminController::class, 'cancelDeposit']);
+        Route::get('transactions', [AdminController::class, 'transactions']);
+        Route::get('users', [AdminController::class, 'users']);
+    });
 
     Route::middleware('session.token')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
