@@ -396,7 +396,8 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
 - Halaman: `/login`, `/` (beranda), `/kategori/:category`, `/transaksi`, `/saldo`,
   `/profil`, `/beli/:id`, `/bantuan`, `/legal/:doc`, `/admin`. Beranda hanya
   menampilkan kartu kategori (`web/src/components/CategoryGrid.jsx` → tautan);
-  daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`):
+  daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`)
+  tanpa kartu kategori lagi (hanya judul kategori):
   provider tampil sebagai deret chip menyamping (bisa di-scroll, terbesar dulu),
   produk provider terpilih muncul menurun di bawahnya. Nama operator supplier yang
   beda huruf besar/kecil digabung (TELKOMSEL = Telkomsel).

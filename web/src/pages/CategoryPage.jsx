@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import CategoryGrid from '../components/CategoryGrid.jsx'
 import ProductCard from '../components/ProductCard.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
@@ -69,15 +68,12 @@ export default function CategoryPage() {
 
   return (
     <div className="stack">
-      <section>
-        <div className="section-head">
-          <h2 className="section-title">{categoryLabel(category)}</h2>
-          <span className="section-hint">
-            {loading ? 'Memuat…' : `${products.length} produk`}
-          </span>
-        </div>
-        <CategoryGrid value={category} />
-      </section>
+      <div className="section-head">
+        <h2 className="section-title">{categoryLabel(category)}</h2>
+        <span className="section-hint">
+          {loading ? 'Memuat…' : `${products.length} produk`}
+        </span>
+      </div>
 
       {loading ? (
         <LoadingState label="Memuat produk…" />
