@@ -41,6 +41,13 @@ export const CATEGORIES = [
 // Voucher biasa dan voucher inject sama-sama dikirim sebagai kode ke email pembeli.
 export const isVoucherCategory = (key) => key === 'voucher' || key === 'voucher_inject'
 
+// Voucher inject bukan voucher siap pakai: kodenya harus dimasukkan sendiri ke
+// voucher kosong, jadi pembeli wajib menyiapkan dan menyebutkan nomor voucher itu.
+export const VOUCHER_INJECT_NOTE =
+  'Voucher ini untuk di-inject ke voucher kosong Telkomsel, bukan voucher siap pakai. ' +
+  'Siapkan voucher kosong terlebih dahulu, lalu isi nomor voucher kosong itu saat membeli. ' +
+  'Kesalahan pengetikan nomor voucher bukan tanggung jawab kami.'
+
 export const categoryLabel = (key) =>
   CATEGORIES.find((category) => category.key === key)?.label || 'Lainnya'
 

@@ -19,6 +19,7 @@ class TransactionController extends Controller
         'transactions.id',
         'transactions.order_number',
         'transactions.customer_number',
+        'transactions.voucher_number',
         'transactions.amount',
         'transactions.status',
         'transactions.payment_method',
@@ -111,6 +112,7 @@ class TransactionController extends Controller
 
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
+        $voucherNumber = $this->voucherNumber($request->input('voucherNumber'));
         $idempotencyKey = $request->header('Idempotency-Key') ?: null;
 
         if (! is_numeric($productId) || (int) $productId != $productId) {
@@ -133,6 +135,16 @@ class TransactionController extends Controller
             ], 422);
         }
 
+        // Voucher inject wajib menyebut nomor voucher kosong yang akan diisi.
+        $voucherError = $this->voucherNumberError($productCategory, $voucherNumber);
+
+        if ($voucherError !== null) {
+            return response()->json([
+                'message' => $voucherError,
+                'errors' => ['voucherNumber' => [$voucherError]],
+            ], 422);
+        }
+
         if ($idempotencyKey) {
             $previous = $this->findByKey($user->id, $idempotencyKey);
             if ($previous) {
@@ -141,7 +153,7 @@ class TransactionController extends Controller
         }
 
         try {
-            $result = DB::transaction(function () use ($user, $productId, $customerNumber, $idempotencyKey) {
+            $result = DB::transaction(function () use ($user, $productId, $customerNumber, $voucherNumber, $idempotencyKey) {
                 $locked = DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
                 abort_if($locked === null, 404, 'Pengguna tidak ditemukan.');
 
@@ -175,12 +187,13 @@ class TransactionController extends Controller
 
                 $balance = (int) DB::table('users')->where('id', $user->id)->value('balance');
 
-                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $idempotencyKey, $amount) {
+                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $idempotencyKey, $amount) {
                     $id = DB::table('transactions')->insertGetId([
                         'user_id' => $user->id,
                         'product_id' => $product->id,
                         'order_number' => $orderNumber,
                         'customer_number' => $customerNumber,
+                        'voucher_number' => $voucherNumber ?: null,
                         'amount' => $amount,
                         // Produk nyata (supplier) selesai setelah Digiflazz menjawab;
                         // produk demo langsung sukses seperti sebelumnya.
@@ -189,7 +202,7 @@ class TransactionController extends Controller
                         'created_at' => now(),
                     ]);
 
-                    return DB::table('transactions')->find($id, ['id', 'order_number', 'customer_number', 'amount', 'status', 'created_at']);
+                    return DB::table('transactions')->find($id, ['id', 'order_number', 'customer_number', 'voucher_number', 'amount', 'status', 'created_at']);
                 });
 
                 DB::table('balance_entries')->insert([
@@ -240,6 +253,7 @@ class TransactionController extends Controller
                     'id' => $transaction->id,
                     'order_number' => $transaction->order_number,
                     'customer_number' => $transaction->customer_number,
+                    'voucher_number' => $transaction->voucher_number,
                     'amount' => $transaction->amount,
                     'status' => $fresh->status ?? $transaction->status,
                     'payment_method' => 'balance',
@@ -276,6 +290,7 @@ class TransactionController extends Controller
 
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
+        $voucherNumber = $this->voucherNumber($request->input('voucherNumber'));
 
         if (! is_numeric($productId) || (int) $productId != $productId) {
             return response()->json(['message' => 'Produk tidak valid.'], 422);
@@ -299,18 +314,28 @@ class TransactionController extends Controller
             ], 422);
         }
 
+        $voucherError = $this->voucherNumberError($product->category, $voucherNumber);
+
+        if ($voucherError !== null) {
+            return response()->json([
+                'message' => $voucherError,
+                'errors' => ['voucherNumber' => [$voucherError]],
+            ], 422);
+        }
+
         $amount = Pricing::unitPrice(
             (int) $product->price,
             (int) $product->retail_price,
             (string) ($user->account_type ?? 'reseller'),
         );
 
-        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $amount) {
+        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $amount) {
             $id = DB::table('transactions')->insertGetId([
                 'user_id' => $user->id,
                 'product_id' => $product->id,
                 'order_number' => $orderNumber,
                 'customer_number' => $customerNumber,
+                'voucher_number' => $voucherNumber ?: null,
                 'amount' => $amount,
                 'status' => 'pending',
                 'payment_method' => 'midtrans',
@@ -322,6 +347,7 @@ class TransactionController extends Controller
                 'id',
                 'order_number',
                 'customer_number',
+                'voucher_number',
                 'amount',
                 'status',
                 'payment_method',
@@ -352,6 +378,7 @@ class TransactionController extends Controller
                     'id' => $transaction->id,
                     'order_number' => $transaction->order_number,
                     'customer_number' => $transaction->customer_number,
+                    'voucher_number' => $transaction->voucher_number,
                     'amount' => $transaction->amount,
                     'status' => $transaction->status,
                     'payment_method' => $transaction->payment_method,
@@ -392,6 +419,23 @@ class TransactionController extends Controller
         return preg_match('/^\d{6,16}$/', $customerNumber) ? null : 'Nomor tujuan harus 6-16 digit angka.';
     }
 
+    /** Nomor voucher kosong hanya berisi angka; spasi/pemisah dibuang. */
+    private function voucherNumber(mixed $value): string
+    {
+        return preg_replace('/\D/', '', (string) $value) ?? '';
+    }
+
+    private function voucherNumberError(string $category, string $voucherNumber): ?string
+    {
+        if ($category !== 'voucher_inject') {
+            return null;
+        }
+
+        return preg_match('/^\d{8,20}$/', $voucherNumber)
+            ? null
+            : 'Nomor voucher kosong wajib diisi 8-20 digit angka.';
+    }
+
     private function findByKey(int $userId, string $key): ?object
     {
         return DB::table('transactions')
@@ -407,6 +451,7 @@ class TransactionController extends Controller
             'id' => (int) $row->id,
             'orderNumber' => $row->order_number,
             'customerNumber' => $row->customer_number,
+            'voucherNumber' => $row->voucher_number ?? null,
             'amount' => (int) $row->amount,
             'status' => $row->status,
             'paymentMethod' => $row->payment_method ?? 'balance',

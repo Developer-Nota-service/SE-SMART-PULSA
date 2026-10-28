@@ -55,6 +55,12 @@ export default function OrderDetailSheet({ order, onClose }) {
             <span className="row__label">Nomor tujuan</span>
             <span className="row__value">{order.customerNumber}</span>
           </div>
+          {order.voucherNumber ? (
+            <div className="row">
+              <span className="row__label">Voucher kosong di-inject</span>
+              <span className="row__value">{order.voucherNumber}</span>
+            </div>
+          ) : null}
           {order.serialNumber ? (
             <div className="row">
               <span className="row__label">Nomor seri</span>

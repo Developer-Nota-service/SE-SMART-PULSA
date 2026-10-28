@@ -3,7 +3,7 @@ import { Navigate, useParams } from 'react-router-dom'
 import ProductCard from '../components/ProductCard.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
-import { CATEGORIES, categoryLabel } from '../lib/format.js'
+import { CATEGORIES, categoryLabel, VOUCHER_INJECT_NOTE } from '../lib/format.js'
 
 const CATEGORY_KEYS = CATEGORIES.map((item) => item.key)
 
@@ -24,8 +24,7 @@ const PROVIDER_NAMES = {
 
 // Penjelasan khusus kategori (mis. voucher inject butuh voucher kosong).
 const CATEGORY_NOTES = {
-  voucher_inject:
-    'Voucher ini bukan voucher siap pakai. Kode voucher harus di-inject sendiri ke voucher kosong Telkomsel, jadi siapkan voucher kosong terlebih dahulu sebelum membeli.',
+  voucher_inject: VOUCHER_INJECT_NOTE,
 }
 
 const rankOf = (label) => {

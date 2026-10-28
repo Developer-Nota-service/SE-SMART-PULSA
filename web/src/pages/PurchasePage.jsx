@@ -6,7 +6,13 @@ import PaymentOptions from '../components/PaymentOptions.jsx'
 import { ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { CheckIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
-import { categoryLabel, isVoucherCategory, rupiah, targetLabel } from '../lib/format.js'
+import {
+  categoryLabel,
+  isVoucherCategory,
+  rupiah,
+  targetLabel,
+  VOUCHER_INJECT_NOTE,
+} from '../lib/format.js'
 
 function newIdempotencyKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -25,11 +31,16 @@ export default function PurchasePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [customerNumber, setCustomerNumber] = useState('')
+  const [voucherNumber, setVoucherNumber] = useState('')
+  const [voucherError, setVoucherError] = useState('')
   const [fieldError, setFieldError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const idempotencyKey = useRef(newIdempotencyKey())
+
+  // Voucher inject butuh nomor voucher kosong milik pembeli.
+  const voucherInject = product?.category === 'voucher_inject'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -50,6 +61,7 @@ export default function PurchasePage() {
   async function submit(event) {
     event.preventDefault()
     setFieldError('')
+    setVoucherError('')
     setSubmitError('')
 
     if (isVoucherCategory(product.category)) {
@@ -62,10 +74,18 @@ export default function PurchasePage() {
       return
     }
 
+    if (voucherInject && !/^\d{8,20}$/.test(voucherNumber)) {
+      setVoucherError('Nomor voucher kosong wajib diisi 8-20 digit angka.')
+      return
+    }
+
+    const payload = { productId: product.id, customerNumber }
+    if (voucherInject) payload.voucherNumber = voucherNumber
+
     setSubmitting(true)
     try {
       if (isPersonal) {
-        const data = await api.directPurchase({ productId: product.id, customerNumber })
+        const data = await api.directPurchase(payload)
 
         if (!data.payment?.redirectUrl) {
           setSubmitError('Tautan pembayaran Midtrans tidak tersedia.')
@@ -76,14 +96,12 @@ export default function PurchasePage() {
         return
       }
 
-      const data = await api.purchase(
-        { productId: product.id, customerNumber },
-        idempotencyKey.current,
-      )
+      const data = await api.purchase(payload, idempotencyKey.current)
       setResult(data)
       if (typeof data.balance === 'number') updateBalance(data.balance)
     } catch (requestError) {
       if (requestError.errors?.customerNumber) setFieldError(requestError.errors.customerNumber[0])
+      else if (requestError.errors?.voucherNumber) setVoucherError(requestError.errors.voucherNumber[0])
       else setSubmitError(requestError.message)
     } finally {
       setSubmitting(false)
@@ -114,6 +132,12 @@ export default function PurchasePage() {
           </div>
 
           <div className="rows">
+            {result.transaction.voucherNumber ? (
+              <div className="row">
+                <span className="row__label">Voucher kosong di-inject</span>
+                <span className="row__value">{result.transaction.voucherNumber}</span>
+              </div>
+            ) : null}
             <div className="row">
               <span className="row__label">Total bayar</span>
               <span className="row__value">{rupiah(result.transaction.amount)}</span>
@@ -173,6 +197,8 @@ export default function PurchasePage() {
         </div>
 
         <form onSubmit={submit} noValidate>
+          {voucherInject ? <p className="category-note">{VOUCHER_INJECT_NOTE}</p> : null}
+
           <label className="field">
             <span className="field__label">{targetLabel(product.category)}</span>
             <input
@@ -197,6 +223,35 @@ export default function PurchasePage() {
             </span>
             {fieldError ? <span className="field__error">{fieldError}</span> : null}
           </label>
+
+          {voucherInject ? (
+            <>
+              <label className="field">
+                <span className="field__label">Nomor voucher kosong yang akan di-inject</span>
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={voucherNumber}
+                  onChange={(event) => {
+                    setVoucherNumber(event.target.value.replace(/\D/g, '').slice(0, 20))
+                    setVoucherError('')
+                    setSubmitError('')
+                  }}
+                  placeholder="Contoh: 1234567890123456"
+                />
+                <span className="field__hint">
+                  Isi nomor yang tercetak pada voucher kosong Telkomsel Anda (8-20 digit).
+                </span>
+                {voucherError ? <span className="field__error">{voucherError}</span> : null}
+              </label>
+              <p className="category-note category-note--warn">
+                Periksa kembali nomor voucher kosong. Kesalahan pengetikan nomor bukan tanggung
+                jawab kami dan transaksi yang sudah diproses tidak dapat dibatalkan.
+              </p>
+            </>
+          ) : null}
 
           {isPersonal ? null : (
             <div className="info-row">
@@ -251,7 +306,7 @@ export default function PurchasePage() {
 
       <p className="note note--muted">
         Harga mengikuti tipe akun Anda ({priceLabel}) dan ditentukan oleh server. Halaman ini hanya
-        mengirim nomor tujuan.
+        mengirim nomor tujuan{voucherInject ? ' dan nomor voucher kosong' : ''}.
       </p>
     </div>
   )

@@ -93,11 +93,13 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /products?category=` · `GET /products/:id` — `price` adalah harga untuk tipe
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
-- `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
-  — **reseller saja**: bayar pakai saldo, harga reseller (akun pribadi ditolak 422).
+- `POST /transactions` `{productId,customerNumber,voucherNumber?}` + header opsional
+  `Idempotency-Key` — **reseller saja**: bayar pakai saldo, harga reseller (akun
+  pribadi ditolak 422). `voucherNumber` wajib untuk produk `voucher_inject`
+  (nomor voucher kosong, 8-20 digit).
   Produk supplier (`is_demo = false`) dibuat `pending` lalu diselesaikan Digiflazz
   (lihat "Pemenuhan transaksi (Digiflazz)"); produk demo langsung `success`
-- `POST /transactions/direct` `{productId,customerNumber}` → transaksi `pending` +
+- `POST /transactions/direct` `{productId,customerNumber,voucherNumber?}` → transaksi `pending` +
   `{transaction, payment:{token,redirectUrl}}` — **akun pribadi saja**: bayar langsung
   Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo)
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
@@ -411,6 +413,13 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   `web/src/lib/format.js` membuat produknya memakai target email seperti voucher
   biasa (backend: `CATEGORIES` di `CatalogController` dan `destinationError()` di
   `TransactionController`).
+  Teks penjelasan + peringatan "salah ketik nomor bukan tanggung jawab kami" ada di
+  `VOUCHER_INJECT_NOTE` (`web/src/lib/format.js`) dan dipakai halaman kategori
+  maupun halaman beli. Khusus kategori ini halaman beli menampilkan kolom tambahan
+  **Nomor voucher kosong yang akan di-inject**: wajib 8-20 digit angka, divalidasi
+  di `voucherNumberError()` (`TransactionController`) dan disimpan di
+  `transactions.voucher_number`, lalu ditampilkan di detail pesanan
+  (`voucherNumber`). Kategori lain tidak mengirim kolom ini.
   Semua selain `/login` butuh sesi; `/admin`
   hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
   menu Admin tidak muncul di navigasi bawah).

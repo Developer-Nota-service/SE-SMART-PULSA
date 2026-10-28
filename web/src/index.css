@@ -449,6 +449,13 @@ p {
   color: #334155;
 }
 
+.category-note--warn {
+  margin: 8px 0 0;
+  border-color: #f2d3a7;
+  background: var(--pending-soft);
+  color: #8a4b08;
+}
+
 .provider-chips {
   margin-top: 0;
 }
