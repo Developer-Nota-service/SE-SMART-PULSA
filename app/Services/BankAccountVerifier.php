@@ -7,62 +7,58 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Cek nama pemilik rekening bank & e-wallet tujuan penarikan lewat **Durianpay**
- * SNAP API — penyedia yang punya endpoint nama untuk bank maupun e-wallet.
+ * Cek nama pemilik rekening bank & e-wallet tujuan penarikan lewat
+ * **Xendit Data Services (Name Validator)**.
  *
- * - Token B2B: `POST /v1.0/access-token/b2b` dengan `X-SIGNATURE` = RSA-SHA256
- *   dari `{clientKey}|{timestamp}` memakai private key merchant (public key-nya
- *   diunggah di Dashboard Durianpay → Settings → API Keys), header
- *   `X-CLIENT-KEY`, body `{"grantType":"AUTHORIZATION_CODE"}`.
- * - Bank: `POST /v1.0/account-inquiry-external`
- *   `{beneficiaryAccountNo, beneficiaryBankCode}` → `beneficiaryAccountName`
- *   (`beneficiaryBankCode` = kode bank SNAP, mis. BCA `014`).
- * - E-wallet: `POST /v1.0/emoney/account-inquiry`
- *   `{customerNumber, amount, partnerReferenceNo, additionalInfo.platformCode}`
- *   → `customerName`. `amount.value = "1"` mematikan validasi nominal karena
- *   kita hanya meminta nama.
+ * Autentikasi HTTP Basic: secret key Xendit sebagai username, password kosong.
+ * Produk ini harus diaktifkan Xendit lebih dulu (minta aktivasi ke
+ * help@xendit.co); tanpa aktivasi semua permintaan dijawab 401/403 dan hasilnya
+ * `configured: false` sehingga pengguna mengisi nama sendiri.
  *
- * Signature transaksi = HMAC-SHA512 (client secret, base64) dari
- * `POST:{path}:{accessToken}:{sha256hex(minifiedBody)}:{timestamp}`.
+ * - Bank: `POST /bank_account_data_requests` `{bank_account_number, bank_code}`
+ *   → `is_found` + `result.account_holder_name`.
+ * - E-wallet: `POST /ewallet_account_data_requests`
+ *   `{ewallet_account_number, ewallet_type}` → `result.ewallet_account_name`.
  *
  * Bedakan dua jenis kegagalan:
- * - penyedia menjawab rekening tidak ada (HTTP 404/409) → pengajuan diblokir;
- * - penyedia tidak bisa menjawab (kunci kosong/ditolak 401/403, 5xx, timeout) →
- *   hasil `configured: false`: pengguna mengisi nama sendiri dan catatan ditandai
- *   `unverified`. Satu kunci salah tidak boleh mematikan seluruh penarikan.
+ * - penyedia memastikan rekening tidak ada (`is_found: false`, atau
+ *   `error_code` invalid/not found) → pengajuan diblokir;
+ * - penyedia tidak bisa menjawab (kunci kosong/ditolak 401/403, 5xx, timeout,
+ *   DNS gagal) → `configured: false`: pengguna mengisi nama sendiri dan catatan
+ *   ditandai `unverified`. Satu kunci salah tidak boleh mematikan penarikan.
  */
 class BankAccountVerifier
 {
-    private const TOKEN_PATH = '/v1.0/access-token/b2b';
+    private const BANK_PATH = '/bank_account_data_requests';
 
-    private const BANK_PATH = '/v1.0/account-inquiry-external';
+    private const EWALLET_PATH = '/ewallet_account_data_requests';
 
-    private const EWALLET_PATH = '/v1.0/emoney/account-inquiry';
-
-    /** Kode bank SNAP untuk daftar bank di App\Support\TransferChannels. */
+    /** Kode bank Xendit untuk daftar bank di App\Support\TransferChannels. */
     private const BANK_CODES = [
-        'bca' => '014',
-        'bni' => '009',
-        'bri' => '002',
-        'mandiri' => '008',
-        'permata' => '013',
-        'cimb' => '022',
-        'danamon' => '011',
-        'btn' => '200',
-        'bsi' => '451',
-        'jago' => '542',
-        'seabank' => '535',
-        'blu' => '501',
+        'bca' => 'BCA',
+        'bni' => 'BNI',
+        'bri' => 'BRI',
+        'mandiri' => 'MANDIRI',
+        'permata' => 'PERMATA',
+        'cimb' => 'CIMB',
+        'danamon' => 'DANAMON',
+        'btn' => 'BTN',
+        'bsi' => 'BSI',
+        'jago' => 'JAGO',
     ];
 
-    /** Status HTTP permintaan token terakhir (401/403 = kunci salah). */
-    private ?int $tokenStatus = null;
+    /** Kode e-wallet Xendit untuk daftar e-wallet di App\Support\TransferChannels. */
+    private const EWALLET_CODES = [
+        'gopay' => 'GOPAY',
+        'ovo' => 'OVO',
+        'dana' => 'DANA',
+        'shopeepay' => 'SHOPEEPAY',
+        'linkaja' => 'LINKAJA',
+    ];
 
     public function isConfigured(): bool
     {
-        return $this->clientKey() !== ''
-            && $this->clientSecret() !== ''
-            && $this->privateKey() !== '';
+        return $this->secretKey() !== '';
     }
 
     /**
@@ -74,7 +70,7 @@ class BankAccountVerifier
             return $this->unavailable('Pengecekan nama rekening otomatis belum aktif.');
         }
 
-        $cacheKey = "durianpay:{$channelType}:{$providerCode}:{$accountNumber}";
+        $cacheKey = "xendit:{$channelType}:{$providerCode}:{$accountNumber}";
         $cached = Cache::get($cacheKey);
 
         if (is_array($cached)) {
@@ -136,28 +132,20 @@ class BankAccountVerifier
         }
 
         $response = $this->send(self::BANK_PATH, [
-            'beneficiaryAccountNo' => $accountNumber,
-            'beneficiaryBankCode' => $bankCode,
-            'additionalInfo' => $this->additionalInfo(),
+            'bank_account_number' => $accountNumber,
+            'bank_code' => $bankCode,
         ]);
 
         if ($response === null) {
             return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
 
-        [$status, $payload] = $response;
-
-        $error = $this->errorResult($status, $payload);
-
-        if ($error !== null) {
-            return $error;
-        }
-
-        $holder = trim((string) ($payload['beneficiaryAccountName'] ?? ''));
-
-        return $holder !== ''
-            ? $this->result(true, 'verified', $holder, null)
-            : $this->unavailable('Nama pemilik tidak dapat ditampilkan otomatis oleh penyedia. Masukkan nama sesuai buku tabungan.');
+        return $this->interpret(
+            $response[0],
+            $response[1],
+            'account_holder_name',
+            'Masukkan nama sesuai buku tabungan.',
+        );
     }
 
     /**
@@ -165,79 +153,46 @@ class BankAccountVerifier
      */
     private function checkEwallet(string $providerCode, string $accountNumber): array
     {
+        $ewalletType = self::EWALLET_CODES[$providerCode] ?? null;
+
+        if ($ewalletType === null) {
+            return $this->unavailable('Pengecekan nama otomatis belum tersedia untuk e-wallet ini. Masukkan nama sesuai aplikasi e-wallet.');
+        }
+
         $response = $this->send(self::EWALLET_PATH, [
-            'customerNumber' => $accountNumber,
-            // "1" mematikan validasi nominal: kita hanya meminta nama pemilik.
-            'amount' => ['value' => '1', 'currency' => 'IDR'],
-            'partnerReferenceNo' => 'INQ'.now()->format('YmdHis').random_int(1000, 9999),
-            'additionalInfo' => $this->additionalInfo() + ['platformCode' => $providerCode],
+            'ewallet_account_number' => $accountNumber,
+            'ewallet_type' => $ewalletType,
         ]);
 
         if ($response === null) {
             return $this->unavailable('Pengecekan nama rekening otomatis sedang gangguan.');
         }
 
-        [$status, $payload] = $response;
-
-        $error = $this->errorResult($status, $payload);
-
-        if ($error !== null) {
-            return $error;
-        }
-
-        $holder = trim((string) ($payload['customerName'] ?? ''));
-
-        return $holder !== ''
-            ? $this->result(true, 'verified', $holder, null)
-            : $this->unavailable('Nama pemilik tidak dapat ditampilkan otomatis oleh penyedia. Masukkan nama sesuai aplikasi e-wallet.');
-    }
-
-    /** @return array{deviceId: string, channel: string} */
-    private function additionalInfo(): array
-    {
-        return ['deviceId' => bin2hex(random_bytes(6)), 'channel' => 'mobilephone'];
+        return $this->interpret(
+            $response[0],
+            $response[1],
+            'ewallet_account_name',
+            'Masukkan nama sesuai aplikasi e-wallet.',
+        );
     }
 
     /**
-     * Panggil API Durianpay. `null` berarti permintaan tidak mendapat jawaban HTTP
-     * (DNS gagal, koneksi putus, timeout) atau token tidak bisa dibuat.
+     * Panggil API Xendit. `null` berarti permintaan tidak mendapat jawaban HTTP
+     * (DNS gagal, koneksi putus, timeout).
      *
      * @param  array<string, mixed>  $payload
      * @return array{0: int, 1: array<mixed>}|null
      */
     private function send(string $path, array $payload): ?array
     {
-        $token = $this->accessToken();
-
-        if ($token === null) {
-            // Kunci ditolak: laporkan statusnya supaya pesannya "belum aktif".
-            return $this->tokenStatus === null ? null : [$this->tokenStatus, []];
-        }
-
-        $body = json_encode($payload, JSON_UNESCAPED_SLASHES) ?: '{}';
-        $timestamp = $this->timestamp();
-        $signature = base64_encode(hash_hmac(
-            'sha512',
-            'POST:'.$path.':'.$token.':'.strtolower(hash('sha256', $body)).':'.$timestamp,
-            $this->clientSecret(),
-            true,
-        ));
-
         try {
-            $response = Http::withToken($token)
-                ->withHeaders([
-                    'X-TIMESTAMP' => $timestamp,
-                    'X-SIGNATURE' => $signature,
-                    'X-PARTNER-ID' => $this->clientKey(),
-                    'X-EXTERNAL-ID' => bin2hex(random_bytes(8)),
-                    'CHANNEL-ID' => (string) config('services.durianpay.channel_id', '95221'),
-                ])
-                ->withBody($body, 'application/json')
+            $response = Http::withBasicAuth($this->secretKey(), '')
                 ->acceptJson()
+                ->asJson()
                 ->timeout($this->timeout())
-                ->post($this->url($path));
+                ->post($this->url($path), $payload);
         } catch (\Throwable $error) {
-            Log::warning('Cek rekening Durianpay tidak terhubung', ['path' => $path, 'error' => $error->getMessage()]);
+            Log::warning('Cek rekening Xendit tidak terhubung', ['path' => $path, 'error' => $error->getMessage()]);
 
             return null;
         }
@@ -248,94 +203,43 @@ class BankAccountVerifier
     }
 
     /**
-     * Token B2B berlaku 900 detik; disimpan di cache sampai 60 detik sebelum
-     * kedaluwarsa supaya tidak minta token di setiap pengecekan.
-     */
-    private function accessToken(): ?string
-    {
-        $cached = Cache::get('durianpay:token');
-
-        if (is_string($cached) && $cached !== '') {
-            return $cached;
-        }
-
-        $timestamp = $this->timestamp();
-        $signature = $this->rsaSignature($this->clientKey().'|'.$timestamp);
-
-        if ($signature === null) {
-            Log::warning('Private key Durianpay tidak bisa dipakai menandatangani permintaan token');
-            $this->tokenStatus = 401;
-
-            return null;
-        }
-
-        try {
-            $response = Http::withHeaders([
-                'X-TIMESTAMP' => $timestamp,
-                'X-SIGNATURE' => $signature,
-                'X-CLIENT-KEY' => $this->clientKey(),
-            ])
-                ->acceptJson()
-                ->asJson()
-                ->timeout($this->timeout())
-                ->post($this->url(self::TOKEN_PATH), ['grantType' => 'AUTHORIZATION_CODE']);
-        } catch (\Throwable $error) {
-            Log::warning('Token Durianpay gagal diminta', ['error' => $error->getMessage()]);
-            $this->tokenStatus = null;
-
-            return null;
-        }
-
-        $this->tokenStatus = $response->status();
-        $payload = $response->json();
-        $token = is_array($payload) ? (string) ($payload['accessToken'] ?? '') : '';
-
-        if (! $response->successful() || $token === '') {
-            Log::warning('Token Durianpay ditolak', [
-                'status' => $response->status(),
-                'body' => mb_substr((string) json_encode($payload), 0, 300),
-            ]);
-
-            return null;
-        }
-
-        $expiresIn = (int) ($payload['expiresIn'] ?? 900);
-        Cache::put('durianpay:token', $token, now()->addSeconds(max(60, $expiresIn - 60)));
-
-        return $token;
-    }
-
-    private function rsaSignature(string $data): ?string
-    {
-        $signature = '';
-
-        if (! openssl_sign($data, $signature, $this->privateKey(), OPENSSL_ALGO_SHA256)) {
-            return null;
-        }
-
-        return base64_encode($signature);
-    }
-
-    /**
-     * 401/403 (kunci salah), 5xx, atau balasan bukan JSON: penyedia tidak
-     * menjawab pertanyaan kita, jadi jangan memblokir pengajuan. 404/409 =
-     * penyedia memastikan rekening tidak ada/tertutup → blokir pengajuan.
+     * Terjemahkan jawaban Xendit. Jawaban 2xx memuat `is_found` dan nama di
+     * `result.{holderKey}`; 401/403 (produk belum diaktifkan atau kunci salah),
+     * 404, dan 5xx berarti penyedia tidak menjawab pertanyaan kita.
      *
      * @param  array<mixed>  $payload
-     * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}|null
+     * @return array{configured: bool, verified: bool, status: string, accountHolder: ?string, message: ?string}
      */
-    private function errorResult(int $status, array $payload): ?array
+    private function interpret(int $status, array $payload, string $holderKey, string $manualHint): array
     {
-        if ($status >= 200 && $status < 300 && $payload !== []) {
-            return null;
+        if ($status >= 200 && $status < 300) {
+            $holder = trim((string) ($payload['result'][$holderKey] ?? $payload[$holderKey] ?? ''));
+
+            if ($holder !== '') {
+                return $this->result(true, 'verified', $holder, null);
+            }
+
+            if (($payload['is_found'] ?? null) === false) {
+                return $this->result(
+                    false,
+                    'rejected',
+                    null,
+                    'Nomor rekening tidak ditemukan atau sudah tidak aktif. Periksa kembali nomor rekening Anda.',
+                );
+            }
+
+            return $this->unavailable('Nama pemilik tidak dapat ditampilkan otomatis oleh penyedia. '.$manualHint);
         }
 
-        Log::warning('Cek rekening Durianpay tidak tersedia', [
+        Log::warning('Cek rekening Xendit tidak tersedia', [
             'status' => $status,
             'body' => mb_substr((string) json_encode($payload), 0, 300),
         ]);
 
-        if ($status === 404 || $status === 409) {
+        $reason = strtoupper((string) ($payload['error_code'] ?? '').' '.(string) ($payload['message'] ?? ''));
+
+        if (in_array($status, [400, 422], true)
+            && (str_contains($reason, 'NOT_FOUND') || str_contains($reason, 'INVALID_ACCOUNT') || str_contains($reason, 'NOT FOUND'))) {
             return $this->result(
                 false,
                 'rejected',
@@ -344,8 +248,10 @@ class BankAccountVerifier
             );
         }
 
+        // 401/403/404 = produk belum diaktifkan atau kunci salah; Xendit
+        // menyembunyikan endpoint Data Services yang belum aktif di balik 404.
         return $this->unavailable(
-            $status === 401 || $status === 403
+            in_array($status, [401, 403, 404], true)
                 ? 'Pengecekan nama rekening otomatis belum aktif.'
                 : 'Pengecekan nama rekening otomatis sedang gangguan.',
         );
@@ -353,45 +259,17 @@ class BankAccountVerifier
 
     private function url(string $path): string
     {
-        return rtrim((string) config('services.durianpay.base_url'), '/').$path;
-    }
-
-    private function timestamp(): string
-    {
-        return now()->format('Y-m-d\TH:i:s.vP');
+        return rtrim((string) config('services.xendit.base_url'), '/').$path;
     }
 
     private function timeout(): int
     {
-        return (int) config('services.durianpay.timeout', 20);
+        return (int) config('services.xendit.timeout', 20);
     }
 
-    private function clientKey(): string
+    private function secretKey(): string
     {
-        return trim((string) config('services.durianpay.client_key'));
-    }
-
-    private function clientSecret(): string
-    {
-        return trim((string) config('services.durianpay.client_secret'));
-    }
-
-    /** Private key RSA merchant, boleh PEM mentah atau base64 dari file .pem. */
-    private function privateKey(): string
-    {
-        $value = trim((string) config('services.durianpay.private_key'));
-
-        if ($value === '') {
-            return '';
-        }
-
-        if (str_contains($value, 'BEGIN')) {
-            return str_replace('\n', "\n", $value);
-        }
-
-        $decoded = base64_decode($value, true);
-
-        return $decoded === false ? '' : trim($decoded);
+        return trim((string) config('services.xendit.secret_key'));
     }
 
     /**

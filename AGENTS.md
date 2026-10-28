@@ -200,38 +200,31 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
 - Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
   masih diproses menahan perubahan tipe akun ke pribadi.
-- Cek nama pemilik rekening/e-wallet otomatis memakai **Durianpay SNAP API**
-  lewat `app/Services/BankAccountVerifier.php`. Kredensial dikirim platform lewat
-  `/run/base44/app.env`; **jangan** ditaruh di compose `environment:`:
-  `DURIANPAY_CLIENT_KEY`, `DURIANPAY_CLIENT_SECRET`, `DURIANPAY_PRIVATE_KEY`
-  (private key RSA merchant, PEM mentah atau base64 dari file `.pem`).
-  - Token B2B: `POST {DURIANPAY_BASE_URL|https://api.durianpay.id}/v1.0/access-token/b2b`
-    body `{"grantType":"AUTHORIZATION_CODE"}`; `X-SIGNATURE` = SHA256withRSA dari
-    `{clientKey}|{timestamp}` dengan private key merchant (public key diunggah di
-    Dashboard Durianpay → Settings → API Keys). Token disimpan di cache sampai
-    60 detik sebelum `expiresIn` (default 900 detik).
-  - Bank: `POST /v1.0/account-inquiry-external`
-    `{beneficiaryAccountNo, beneficiaryBankCode, additionalInfo}` →
-    `beneficiaryAccountName`. `beneficiaryBankCode` memakai kode bank SNAP
-    (`014` BCA, `009` BNI, `002` BRI, `008` Mandiri, `013` Permata, `022` CIMB,
-    `011` Danamon, `200` BTN, `451` BSI, `542` Jago, `535` SeaBank, `501` Blu) —
-    pemetaannya ada di `BankAccountVerifier::BANK_CODES`.
-  - E-wallet: `POST /v1.0/emoney/account-inquiry`
-    `{customerNumber, amount:{value:"1",currency:"IDR"}, partnerReferenceNo,
-    additionalInfo.platformCode}` → `customerName`. `platformCode` = `gopay`,
-    `ovo`, `dana`, `shopeepay`, `linkaja`; `amount.value="1"` mematikan validasi
-    nominal karena kita hanya meminta nama.
-  - Signature transaksi (header `X-SIGNATURE`) = base64 HMAC-SHA512 dengan client
-    secret dari `POST:{path}:{accessToken}:{sha256hex(body tanpa spasi)}:{timestamp}`;
-    header lain: `X-TIMESTAMP`, `X-PARTNER-ID` (= client key), `X-EXTERNAL-ID`,
-    `CHANNEL-ID` (default `95221`).
+- Cek nama pemilik rekening/e-wallet otomatis memakai **Xendit Data Services
+  (Name Validator)** lewat `app/Services/BankAccountVerifier.php`. Kredensial
+  dikirim platform lewat `/run/base44/app.env`; **jangan** ditaruh di compose
+  `environment:`: `XENDIT_SECRET_KEY` (Dashboard Xendit → Settings → API Keys).
+  Produk Data Services harus diaktifkan dulu oleh Xendit (minta aktivasi ke
+  help@xendit.co, ada biaya bulanan); sebelum aktif, permintaan dijawab 401/403
+  dan form otomatis memakai input nama manual.
+  - Autentikasi HTTP Basic: secret key sebagai username, password kosong.
+  - Bank: `POST {XENDIT_BASE_URL|https://api.xendit.co}/bank_account_data_requests`
+    `{bank_account_number, bank_code}` → `is_found` + `result.account_holder_name`.
+    `bank_code` = `BCA`, `BNI`, `BRI`, `MANDIRI`, `PERMATA`, `CIMB`, `DANAMON`,
+    `BTN`, `BSI`, `JAGO` (pemetaan di `BankAccountVerifier::BANK_CODES`; SeaBank
+    dan blu belum dipetakan sehingga jatuh ke input nama manual).
+  - E-wallet: `POST /ewallet_account_data_requests`
+    `{ewallet_account_number, ewallet_type}` → `result.ewallet_account_name`.
+    `ewallet_type` = `GOPAY`, `OVO`, `DANA`, `SHOPEEPAY`, `LINKAJA`
+    (`BankAccountVerifier::EWALLET_CODES`).
   - Jawaban pasti di-cache 10 menit, gangguan 1 menit.
-- Bila penyedia tidak menjawab (kunci kosong/ditolak 401/403, 5xx, timeout, DNS
-  gagal), hasilnya `configured: false` (`verificationAvailable: false`): frontend
-  menampilkan input nama manual dan pengajuan tetap jalan dengan tanda
-  `unverified`. Penolakan rekening dari penyedia (HTTP 404/409) memblokir
-  pengajuan — jangan mengubahnya menjadi "blokir saat penyedia error", satu kunci
-  salah akan mematikan seluruh penarikan.
+- Bila penyedia tidak menjawab (kunci kosong/ditolak 401/403, 404, 5xx, timeout,
+  DNS gagal), hasilnya `configured: false` (`verificationAvailable: false`):
+  frontend menampilkan input nama manual dan pengajuan tetap jalan dengan tanda
+  `unverified`. Penolakan rekening dari penyedia (`is_found: false`, atau
+  `error_code`/pesan invalid/not found pada 400/422) memblokir pengajuan — jangan
+  mengubahnya menjadi "blokir saat penyedia error", satu kunci salah akan
+  mematikan seluruh penarikan.
 - Penyedia menjawab 2xx tetapi nama kosong (mis. e-wallet belum KYC): itu bukan
   penolakan, jadi hasilnya `configured: false` dan pengguna mengisi nama manual.
 

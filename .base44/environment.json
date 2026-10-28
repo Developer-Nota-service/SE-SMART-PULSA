@@ -14,18 +14,8 @@
       "requiredAtBoot": false
     },
     {
-      "name": "DURIANPAY_CLIENT_KEY",
-      "description": "Client Key Durianpay (Dashboard Durianpay > Settings > API Keys). Dipakai sebagai header X-CLIENT-KEY dan X-PARTNER-ID untuk cek nama pemilik rekening bank & e-wallet. Tanpa nilai, form penarikan jatuh ke input nama manual.",
-      "requiredAtBoot": false
-    },
-    {
-      "name": "DURIANPAY_CLIENT_SECRET",
-      "description": "Client Secret Durianpay (Dashboard Durianpay > Settings > API Keys) untuk HMAC-SHA512 signature transaksi SNAP.",
-      "requiredAtBoot": false
-    },
-    {
-      "name": "DURIANPAY_PRIVATE_KEY",
-      "description": "Private key RSA merchant (hasil `openssl genrsa -out rsa_private_key.pem 2048`, unggah public key-nya di Dashboard Durianpay > Settings > API Keys). Isi file .pem apa adanya atau base64 dari file itu. Dipakai menandatangani permintaan token B2B (SHA256withRSA).",
+      "name": "XENDIT_SECRET_KEY",
+      "description": "Secret key Xendit (Dashboard Xendit > Settings > API Keys) untuk cek nama pemilik rekening bank & e-wallet lewat Data Services / Name Validator. Produk Data Services harus diaktifkan dulu oleh Xendit (minta aktivasi ke help@xendit.co, ada biaya bulanan). Tanpa nilai atau sebelum aktif, form penarikan jatuh ke input nama manual.",
       "requiredAtBoot": false
     },
     {
