@@ -14,11 +14,6 @@
       "requiredAtBoot": false
     },
     {
-      "name": "XENDIT_SECRET_KEY",
-      "description": "Secret key Xendit (Dashboard Xendit > Settings > API Keys) untuk cek nama pemilik rekening bank & e-wallet lewat Data Services / Name Validator. Produk Data Services harus diaktifkan dulu oleh Xendit (minta aktivasi ke help@xendit.co, ada biaya bulanan). Tanpa nilai atau sebelum aktif, form penarikan jatuh ke input nama manual.",
-      "requiredAtBoot": false
-    },
-    {
       "name": "FONNTE_TOKEN",
       "description": "Token device Fonnte (fonnte.com > Device > Token) untuk mengirim kode OTP WhatsApp saat pendaftaran dan verifikasi akun. Tanpa token, kode OTP tidak terkirim dan akun baru tidak bisa menyelesaikan verifikasi.",
       "requiredAtBoot": false

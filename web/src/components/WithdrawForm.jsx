@@ -11,8 +11,7 @@ const isAccountNumber = (value) => /^\d{6,20}$/.test(value)
 
 /**
  * Form tarik saldo untuk akun reseller. Nominal wajib kelipatan Rp100.000 dan
- * nama pemilik rekening dicek otomatis ke penyedia pengecekan sebelum
- * pengajuan dikirim.
+ * nama pemilik rekening diisi pengguna; admin memeriksanya sebelum dana dikirim.
  */
 export default function WithdrawForm({ balance = 0, onCreated }) {
   const [channels, setChannels] = useState({ bank: [], ewallet: [], minAmount: MIN, stepAmount: STEP, processingDays: '1-7 hari kerja' })
@@ -21,7 +20,6 @@ export default function WithdrawForm({ balance = 0, onCreated }) {
   const [providerCode, setProviderCode] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
   const [manualHolder, setManualHolder] = useState('')
-  const [inquiry, setInquiry] = useState({ state: 'idle', holder: '', message: '' })
   const [fieldError, setFieldError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -41,37 +39,6 @@ export default function WithdrawForm({ balance = 0, onCreated }) {
         // Daftar tujuan gagal dimuat: form tetap tampil dengan pesan kosong.
       })
   }, [])
-
-  // Cek nama pemilik rekening otomatis begitu nomor rekening lengkap.
-  useEffect(() => {
-    setInquiry({ state: 'idle', holder: '', message: '' })
-
-    if (!providerCode || !isAccountNumber(accountNumber)) return undefined
-
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      setInquiry({ state: 'checking', holder: '', message: '' })
-      try {
-        const data = await api.inquiryRecipient({ channelType, providerCode, accountNumber })
-        if (cancelled) return
-        if (data.verified) {
-          setInquiry({ state: 'verified', holder: data.accountHolder || '', message: '' })
-        } else if (data.verificationAvailable === false) {
-          setInquiry({ state: 'unavailable', holder: '', message: data.message || '' })
-        } else {
-          setInquiry({ state: 'failed', holder: '', message: data.message || '' })
-        }
-      } catch (requestError) {
-        if (cancelled) return
-        setInquiry({ state: 'unavailable', holder: '', message: requestError.message })
-      }
-    }, 700)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [channelType, providerCode, accountNumber])
 
   function resetResult() {
     setCreated(null)
@@ -105,12 +72,7 @@ export default function WithdrawForm({ balance = 0, onCreated }) {
       return
     }
 
-    if (inquiry.state === 'failed') {
-      setFieldError(inquiry.message || 'Rekening tujuan belum terverifikasi.')
-      return
-    }
-
-    const accountHolder = inquiry.state === 'verified' ? inquiry.holder : manualHolder.trim()
+    const accountHolder = manualHolder.trim()
 
     if (!accountHolder) {
       setFieldError('Masukkan nama pemilik rekening sesuai buku tabungan/aplikasi.')
@@ -233,46 +195,22 @@ export default function WithdrawForm({ balance = 0, onCreated }) {
             }}
             placeholder={channelType === 'bank' ? 'Contoh: 1234567890' : 'Contoh: 081234567890'}
           />
-          <span className="field__hint">Nama pemilik rekening dicek otomatis ke bank/e-wallet.</span>
+          <span className="field__hint">Periksa kembali nomor rekening/e-wallet sebelum mengajukan.</span>
         </label>
 
-        {inquiry.state === 'checking' ? (
-          <p className="inquiry inquiry--checking">Memeriksa nama pemilik rekening…</p>
-        ) : null}
-
-        {inquiry.state === 'verified' ? (
-          <p className="inquiry inquiry--ok">
-            <span className="inquiry__label">Nama terverifikasi</span>
-            <strong className="inquiry__name">{inquiry.holder}</strong>
-            <span className="inquiry__hint">Pastikan nama ini benar sebelum dana dikirim.</span>
-          </p>
-        ) : null}
-
-        {inquiry.state === 'failed' ? (
-          <p className="inquiry inquiry--failed" role="alert">
-            {inquiry.message}
-          </p>
-        ) : null}
-
-        {inquiry.state === 'unavailable' ? (
-          <>
-            <p className="inquiry inquiry--warn">
-              {inquiry.message} Masukkan nama pemilik rekening dan periksa ulang nomornya.
-            </p>
-            <label className="field">
-              <span className="field__label">Nama pemilik rekening</span>
-              <input
-                className="input"
-                value={manualHolder}
-                onChange={(event) => {
-                  setManualHolder(event.target.value)
-                  resetResult()
-                }}
-                placeholder="Nama sesuai buku tabungan"
-              />
-            </label>
-          </>
-        ) : null}
+        <label className="field">
+          <span className="field__label">Nama pemilik rekening</span>
+          <input
+            className="input"
+            value={manualHolder}
+            onChange={(event) => {
+              setManualHolder(event.target.value)
+              resetResult()
+            }}
+            placeholder="Nama sesuai buku tabungan"
+          />
+          <span className="field__hint">Admin mencocokkan nama dan nomor rekening sebelum dana dikirim.</span>
+        </label>
 
         <ul className="terms-list">
           <li>Minimal {rupiah(MIN)}, hanya kelipatan {rupiah(STEP)}.</li>

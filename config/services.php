@@ -42,13 +42,4 @@ return [
         'finish_url' => env('MIDTRANS_FINISH_URL'),
     ],
 
-    // Pengecekan nama pemilik rekening/e-wallet tujuan penarikan (Xendit Data
-    // Services / Name Validator). Butuh secret key Xendit yang produk Data
-    // Services-nya sudah diaktifkan; lihat App\Services\BankAccountVerifier.
-    'xendit' => [
-        'secret_key' => env('XENDIT_SECRET_KEY'),
-        'base_url' => env('XENDIT_BASE_URL', 'https://api.xendit.co'),
-        'timeout' => (int) env('XENDIT_TIMEOUT', 20),
-    ],
-
 ];

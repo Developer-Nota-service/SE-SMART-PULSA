@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\BankAccountVerifier;
 use App\Support\OrderNumber;
 use App\Support\TransferChannels;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +16,9 @@ use Illuminate\Support\Facades\Validator;
  * Aturan: kelipatan Rp100.000, minimal Rp100.000, dana diproses 1-7 hari kerja.
  * Saldo dipotong saat pengajuan (atomik, satu transaksi DB dengan
  * balance_entries) supaya saldo yang sama tidak bisa dipakai dua kali.
+ *
+ * Nama pemilik rekening diisi pengguna dan diperiksa admin saat dana dikirim;
+ * tidak ada penyedia pengecekan nama rekening otomatis yang dipakai.
  */
 class WithdrawalController extends Controller
 {
@@ -25,10 +27,6 @@ class WithdrawalController extends Controller
     public const STEP_AMOUNT = 100000;
 
     public const PROCESSING_DAYS = '1-7 hari kerja';
-
-    public function __construct(private readonly BankAccountVerifier $verifier)
-    {
-    }
 
     public function channels(): JsonResponse
     {
@@ -54,36 +52,6 @@ class WithdrawalController extends Controller
             ->get();
 
         return response()->json(['data' => $rows->map([self::class, 'serialize'])->all()]);
-    }
-
-    /**
-     * Cek nama pemilik rekening sebelum pengajuan. Hanya informasi untuk
-     * pengguna — validasi akhir tetap dijalankan lagi di store().
-     */
-    public function inquiry(Request $request): JsonResponse
-    {
-        $input = $this->channelInput($request);
-        $error = $this->validateChannel($input);
-
-        if ($error !== null) {
-            return $error;
-        }
-
-        $result = $this->verifier->verify($input['channelType'], $input['providerCode'], $input['accountNumber']);
-
-        return response()->json([
-            'data' => [
-                'channelType' => $input['channelType'],
-                'providerCode' => $input['providerCode'],
-                'providerName' => TransferChannels::find($input['channelType'], $input['providerCode'])['name'],
-                'accountNumber' => $input['accountNumber'],
-                'accountHolder' => $result['accountHolder'],
-                'verified' => $result['verified'],
-                'verificationAvailable' => $result['configured'],
-                'status' => $result['status'],
-                'message' => $result['message'],
-            ],
-        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -130,31 +98,14 @@ class WithdrawalController extends Controller
 
         $channel = TransferChannels::find($input['channelType'], $input['providerCode']);
 
-        // Nama pemilik rekening ditentukan server (hasil cek penyedia), bukan
-        // dari body request, kecuali pengecekan otomatis belum dikonfigurasi.
-        $verification = $this->verifier->verify($input['channelType'], $input['providerCode'], $input['accountNumber']);
-
-        if ($input['accountHolder'] === '' && ! $verification['verified']) {
+        // Nama pemilik rekening diisi pengguna dan dicocokkan admin saat dana
+        // dikirim — tidak ada penyedia pengecekan otomatis yang dipakai.
+        if ($input['accountHolder'] === '') {
             return $this->unprocessable('Masukkan nama pemilik rekening.', 'accountHolder');
-        }
-        $verifiedHolder = $verification['verified'] ? $verification['accountHolder'] : null;
-
-        if ($verification['configured'] && ! $verification['verified']) {
-            return $this->unprocessable(
-                $verification['message'] ?? 'Rekening tujuan tidak dapat diverifikasi.',
-                'accountNumber',
-            );
-        }
-
-        if ($verification['configured'] && ! BankAccountVerifier::namesMatch($input['accountHolder'], (string) $verifiedHolder)) {
-            return $this->unprocessable(
-                'Nama pemilik rekening terdaftar "'.$verifiedHolder.'", tidak cocok dengan nama yang Anda masukkan.',
-                'accountHolder',
-            );
         }
 
         try {
-            $result = DB::transaction(function () use ($user, $fresh, $amount, $channel, $input, $verification, $verifiedHolder) {
+            $result = DB::transaction(function () use ($user, $fresh, $amount, $channel, $input) {
                 $debited = DB::update(
                     'UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?',
                     [$amount, $user->id, $amount],
@@ -166,7 +117,7 @@ class WithdrawalController extends Controller
 
                 $balance = (int) DB::table('users')->where('id', $user->id)->value('balance');
 
-                $withdrawal = OrderNumber::withUnique('WD', function (string $reference) use ($user, $amount, $channel, $input, $verification, $verifiedHolder) {
+                $withdrawal = OrderNumber::withUnique('WD', function (string $reference) use ($user, $amount, $channel, $input) {
                     $id = DB::table('withdrawals')->insertGetId([
                         'user_id' => $user->id,
                         'reference' => $reference,
@@ -176,8 +127,8 @@ class WithdrawalController extends Controller
                         'provider_name' => $channel['name'],
                         'account_number' => $input['accountNumber'],
                         'account_holder' => $input['accountHolder'],
-                        'verified_holder' => $verifiedHolder,
-                        'verification_status' => $verification['verified'] ? 'matched' : 'unverified',
+                        'verified_holder' => null,
+                        'verification_status' => 'unverified',
                         'status' => 'pending',
                         'created_at' => now(),
                     ]);
@@ -202,7 +153,7 @@ class WithdrawalController extends Controller
                         'reference' => $withdrawal->reference,
                         'amount' => $amount,
                         'provider' => $channel['code'],
-                        'verification' => $verification['verified'] ? 'matched' : 'unverified',
+                        'verification' => 'unverified',
                     ]),
                     'created_at' => now(),
                 ]);
@@ -260,10 +211,11 @@ class WithdrawalController extends Controller
             );
         }
 
-        // Nama pemilik bisa kosong saat pengecekan otomatis aktif: server memakai
-        // nama hasil pengecekan. Bila kosong dan pengecekan tidak tersedia,
-        // store() menolak pengajuan.
-        if ($input['accountHolder'] !== '' && ! preg_match("/^[A-Za-z .'’-]{3,80}$/", $input['accountHolder'])) {
+        if ($input['accountHolder'] === '') {
+            return $this->unprocessable('Masukkan nama pemilik rekening.', 'accountHolder');
+        }
+
+        if (! preg_match("/^[A-Za-z .'’-]{3,80}$/", $input['accountHolder'])) {
             return $this->unprocessable('Nama pemilik rekening 3-80 huruf.', 'accountHolder');
         }
 

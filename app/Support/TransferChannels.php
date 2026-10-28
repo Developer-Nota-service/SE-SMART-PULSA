@@ -3,8 +3,7 @@
 namespace App\Support;
 
 /**
- * Daftar tujuan penarikan saldo: rekening bank dan e-wallet. Kode mengikuti
- * kode tujuan yang dipakai layanan pengecekan rekening (Xendit).
+ * Daftar tujuan penarikan saldo: rekening bank dan e-wallet.
  */
 class TransferChannels
 {

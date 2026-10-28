@@ -177,9 +177,8 @@ export const api = {
   deposits: () => request('/deposits'),
   createDeposit: (amount) => request('/deposits', { method: 'POST', body: { amount } }),
 
-  // Penarikan saldo: daftar bank/e-wallet, cek nama pemilik rekening, pengajuan.
+  // Penarikan saldo: daftar bank/e-wallet dan pengajuan.
   withdrawalChannels: () => request('/withdrawals/channels'),
-  inquiryRecipient: (payload) => request('/withdrawals/inquiry', { method: 'POST', body: payload }),
   withdrawals: () => request('/withdrawals'),
   createWithdrawal: (payload) => request('/withdrawals', { method: 'POST', body: payload }),
 

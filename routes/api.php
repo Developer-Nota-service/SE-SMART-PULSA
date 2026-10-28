@@ -47,9 +47,8 @@ Route::prefix('v1')->group(function () {
         Route::get('deposits', [WalletController::class, 'deposits']);
         Route::post('deposits', [WalletController::class, 'storeDeposit']);
 
-        // Penarikan saldo: daftar bank/e-wallet, cek nama rekening, pengajuan.
+        // Penarikan saldo: daftar bank/e-wallet dan pengajuan.
         Route::get('withdrawals/channels', [WithdrawalController::class, 'channels']);
-        Route::post('withdrawals/inquiry', [WithdrawalController::class, 'inquiry']);
         Route::get('withdrawals', [WithdrawalController::class, 'index']);
         Route::post('withdrawals', [WithdrawalController::class, 'store']);
 
