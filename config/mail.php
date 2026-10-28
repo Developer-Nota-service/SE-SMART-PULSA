@@ -65,6 +65,12 @@ return [
             'transport' => 'resend',
         ],
 
+        // Kirisan Send API — dipakai bila MAIL_MAILER=kirisan
+        // (app/Mail/Transport/KirisanTransport.php).
+        'kirisan' => [
+            'transport' => 'kirisan',
+        ],
+
         'sendmail' => [
             'transport' => 'sendmail',
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),

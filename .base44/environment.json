@@ -54,6 +54,16 @@
       "requiredAtBoot": false
     },
     {
+      "name": "KIRISAN_API_TOKEN",
+      "description": "Token akun Kirisan (dash.kirisan.com > Account > Settings) untuk Send API. Dipakai bila MAIL_MAILER=kirisan sebagai pengganti SMTP.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "KIRISAN_EMAIL_TOKEN",
+      "description": "Token sender email Kirisan (Channel > Email > Emails; muncul sekali saat sender dibuat). Butuh domain terverifikasi dan paket berbayar.",
+      "requiredAtBoot": false
+    },
+    {
       "name": "FONNTE_TOKEN",
       "description": "Token device Fonnte (fonnte.com > Device > Token) untuk mengirim kode OTP WhatsApp saat pendaftaran dan verifikasi akun. Tanpa token, kode OTP tidak terkirim dan akun baru tidak bisa menyelesaikan verifikasi.",
       "requiredAtBoot": false

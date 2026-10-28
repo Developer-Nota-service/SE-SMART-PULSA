@@ -159,8 +159,18 @@ Akun baru tidak bisa dipakai sebelum nomor WhatsApp-nya terbukti aktif. Alurnya:
 - Email OTP memakai `Mail` Laravel (config `mail`). Kanal dianggap siap hanya bila
   `MAIL_MAILER` bukan `log`/`array`; kalau belum diisi, perubahan email ditolak
   dengan pesan jelas (di preview mode kode dikembalikan sebagai `devCode`).
-  Setel `MAIL_HOST`/`MAIL_PORT`/`MAIL_SCHEME`/`MAIL_USERNAME`/`MAIL_PASSWORD`/
-  `MAIL_FROM_ADDRESS` di dashboard (bukan di compose `environment:`).
+  Ada dua jalur pengiriman yang didukung, keduanya lewat dashboard (bukan compose
+  `environment:`):
+  - **SMTP** — `MAIL_MAILER=smtp` + `MAIL_HOST`/`MAIL_PORT`/`MAIL_SCHEME`/
+    `MAIL_USERNAME`/`MAIL_PASSWORD`/`MAIL_FROM_ADDRESS`. Gmail menolak sandi akun
+    (`535-5.7.8`); wajib App Password 16 karakter (2FA aktif).
+  - **Kirisan Send API** — `MAIL_MAILER=kirisan` + `KIRISAN_API_TOKEN` (akun,
+    `dash.kirisan.com > Account > Settings`) dan `KIRISAN_EMAIL_TOKEN` (sender,
+    `Channel > Email > Emails`; butuh domain terverifikasi + berbayar).
+    `app/Mail/Transport/KirisanTransport.php` memanggil
+    `POST https://api.kirisan.com/v1/send` satu penerima per permintaan; `From`
+    ditentukan token sender. Endpoint SMTP Kirisan (`smtp.kirisan.com`) belum ada
+    di DNS, jadi jangan pakai jalur SMTP Kirisan.
 - `app/Services/FonnteClient.php` — `POST https://api.fonnte.com/send` dengan header
   `Authorization: <FONNTE_TOKEN>`, form `target` (format `62...`) + `message`.
 - `config/fonnte.php` → `FONNTE_TOKEN`, `FONNTE_API_URL`. Token berasal dari
