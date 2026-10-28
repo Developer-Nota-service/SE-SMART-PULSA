@@ -55,6 +55,20 @@ export default function OrderDetailSheet({ order, onClose }) {
             <span className="row__label">Nomor tujuan</span>
             <span className="row__value">{order.customerNumber}</span>
           </div>
+          {order.serialNumber ? (
+            <div className="row">
+              <span className="row__label">Nomor seri</span>
+              <span className="row__value">
+                {order.serialNumber} <CopyButton value={order.serialNumber} />
+              </span>
+            </div>
+          ) : null}
+          {order.supplierMessage && order.status !== 'success' ? (
+            <div className="row">
+              <span className="row__label">Keterangan</span>
+              <span className="row__value">{order.supplierMessage}</span>
+            </div>
+          ) : null}
           <div className="row">
             <span className="row__label">Waktu</span>
             <span className="row__value">{dateTime(order.createdAt)}</span>
@@ -71,9 +85,15 @@ export default function OrderDetailSheet({ order, onClose }) {
           </div>
         </div>
 
-        <p className="note note--muted">
-          Pesanan ini memakai produk DEMO. Tidak ada pengiriman pulsa/token nyata.
-        </p>
+        {order.product?.isDemo ? (
+          <p className="note note--muted">
+            Pesanan ini memakai produk DEMO. Tidak ada pengiriman pulsa/token nyata.
+          </p>
+        ) : order.status === 'pending' ? (
+          <p className="note note--muted">
+            Pesanan sedang diproses penyedia. Nomor seri muncul di sini setelah selesai.
+          </p>
+        ) : null}
       </div>
     </div>
   )

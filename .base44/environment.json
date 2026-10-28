@@ -54,6 +54,21 @@
       "requiredAtBoot": false
     },
     {
+      "name": "DIGIFLAZZ_USERNAME",
+      "description": "Username buyer API Digiflazz (Dashboard Digiflazz > Atur Koneksi > API). Dipakai untuk sinkron produk & topup.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "DIGIFLAZZ_API_KEY",
+      "description": "API key buyer Digiflazz (Atur Koneksi > API). Tanpa ini transaksi nyata tidak dikirim ke supplier.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "DIGIFLAZZ_WEBHOOK_SECRET",
+      "description": "Secret webhook Digiflazz (Atur Koneksi > API > Webhook). Wajib agar /api/v1/digiflazz/webhook menerima update status.",
+      "requiredAtBoot": false
+    },
+    {
       "name": "KIRISAN_API_TOKEN",
       "description": "Token akun Kirisan (dash.kirisan.com > Account > Settings) untuk Send API. Dipakai bila MAIL_MAILER=kirisan sebagai pengganti SMTP.",
       "requiredAtBoot": false

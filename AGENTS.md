@@ -94,7 +94,9 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
 - `POST /transactions` `{productId,customerNumber}` + header opsional `Idempotency-Key`
-  — **reseller saja**: bayar pakai saldo, harga reseller (akun pribadi ditolak 422)
+  — **reseller saja**: bayar pakai saldo, harga reseller (akun pribadi ditolak 422).
+  Produk supplier (`is_demo = false`) dibuat `pending` lalu diselesaikan Digiflazz
+  (lihat "Pemenuhan transaksi (Digiflazz)"); produk demo langsung `success`
 - `POST /transactions/direct` `{productId,customerNumber}` → transaksi `pending` +
   `{transaction, payment:{token,redirectUrl}}` — **akun pribadi saja**: bayar langsung
   Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo)
@@ -280,6 +282,38 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
   `docs/MIDTRANS-IRIS.md`. Belum diintegrasikan: menunggu akun Iris aktif dan
   secret `MIDTRANS_IRIS_API_KEY`.
 
+## Pemenuhan transaksi (Digiflazz)
+
+Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
+
+- `config/digiflazz.php` → `DIGIFLAZZ_USERNAME`, `DIGIFLAZZ_API_KEY`,
+  `DIGIFLAZZ_WEBHOOK_SECRET` (dashboard Secrets), `DIGIFLAZZ_TESTING` (default
+  `true` = mode development Digiflazz; set `false` saat go-live),
+  `DIGIFLAZZ_MARGIN_PERCENT` (default 5).
+- `app/Services/DigiflazzClient.php` — `POST /v1/price-list` (sign
+  `md5(username+apiKey+"pricelist")`) dan `POST /v1/transaction` (sign
+  `md5(username+apiKey+ref_id)`). `ref_id` = `transactions.order_number`, jadi
+  memanggil topup ulang dengan ref_id yang sama berarti **cek status** (perilaku
+  resmi Digiflazz).
+- `php artisan digiflazz:sync-products` — impor produk `is_demo = false` untuk
+  kategori Pulsa, Data, PLN token, E-Money, Games, Voucher. Pascabayar, masa aktif,
+  TV, dan eSIM dilewati. Harga reseller = harga supplier + margin, harga publik
+  +5%, keduanya dibulatkan ke atas per Rp100. SKU yang hilang dari daftar
+  dinonaktifkan (tidak dihapus) agar riwayat transaksi tetap utuh.
+- `app/Services/TransactionFulfillment.php` — `pending` → `success` / `failed`
+  dengan `supplier_status`, `supplier_sn`, `supplier_message`, `fulfilled_at`.
+  Transaksi saldo yang gagal di supplier dikembalikan **sekali** lewat
+  `balance_entries` (credit); `supplier_status` final membuat webhook/cek berulang
+  tidak mengubah apa pun.
+- `POST /api/v1/digiflazz/webhook` — publik, wajib `X-Hub-Signature:
+  sha1=<hmac>` dari `DIGIFLAZZ_WEBHOOK_SECRET`; menjawab 503 bila secret belum
+  diisi. Event `ping` dijawab `pong`, ref_id tak dikenal dijawab 200 agar
+  Digiflazz tidak mengulang terus.
+- `POST /api/v1/admin/transactions/{id}/check` — admin mengirim ulang/cek status ke
+  supplier untuk transaksi `pending`.
+- Respons transaksi memuat `serialNumber`, `supplierStatus`, `supplierMessage`;
+  detail pesanan menampilkan nomor seri (token PLN/pulsa) beserta tombol salin.
+
 ## Invariant keamanan (jangan dilanggar)
 
 - Harga dan saldo ditentukan server. Charge berjalan atomik di SQL
@@ -355,8 +389,10 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
 
 ## Catatan
 
-- Produk disimpan dengan `is_demo = true` dan selalu ditampilkan dengan label DEMO.
-  Tidak ada provider PPOB nyata; jangan mengarang harga real-time.
+- Produk demo (`is_demo = true`, label DEMO) tidak pernah dikirim ke supplier.
+  Produk hasil `digiflazz:sync-products` ber-`is_demo = false` dan benar-benar
+  dikirim ke Digiflazz saat dibayar; harganya datang dari daftar harga supplier,
+  jangan dikarang manual.
 - Halaman: `/login`, `/` (beranda), `/transaksi`, `/saldo`, `/profil`, `/beli/:id`,
   `/bantuan`, `/legal/:doc`, `/admin`. Semua selain `/login` butuh sesi; `/admin`
   hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\MidtransService;
+use App\Services\TransactionFulfillment;
 use App\Support\OrderNumber;
 use App\Support\Pricing;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,9 @@ class TransactionController extends Controller
         'transactions.payment_method',
         'transactions.paid_at',
         'transactions.created_at',
+        'transactions.supplier_status',
+        'transactions.supplier_sn',
+        'transactions.supplier_message',
         'products.id as product_id',
         'products.name as product_name',
         'products.category',
@@ -30,8 +34,10 @@ class TransactionController extends Controller
         'products.is_demo',
     ];
 
-    public function __construct(private readonly MidtransService $midtrans)
-    {
+    public function __construct(
+        private readonly MidtransService $midtrans,
+        private readonly TransactionFulfillment $fulfillment,
+    ) {
     }
 
     public function index(Request $request): JsonResponse
@@ -135,7 +141,7 @@ class TransactionController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($user, $productId, $customerNumber, $idempotencyKey) {
+            $result = DB::transaction(function () use ($user, $productId, $customerNumber, $idempotencyKey) {
                 $locked = DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
                 abort_if($locked === null, 404, 'Pengguna tidak ditemukan.');
 
@@ -176,7 +182,9 @@ class TransactionController extends Controller
                         'order_number' => $orderNumber,
                         'customer_number' => $customerNumber,
                         'amount' => $amount,
-                        'status' => 'success',
+                        // Produk nyata (supplier) selesai setelah Digiflazz menjawab;
+                        // produk demo langsung sukses seperti sebelumnya.
+                        'status' => $product->is_demo ? 'success' : 'pending',
                         'idempotency_key' => $idempotencyKey,
                         'created_at' => now(),
                     ]);
@@ -194,26 +202,11 @@ class TransactionController extends Controller
                     'created_at' => now(),
                 ]);
 
-                return response()->json([
-                    'data' => [
-                        'transaction' => self::serialize((object) [
-                            'id' => $transaction->id,
-                            'order_number' => $transaction->order_number,
-                            'customer_number' => $transaction->customer_number,
-                            'amount' => $transaction->amount,
-                            'status' => $transaction->status,
-                            'payment_method' => 'balance',
-                            'paid_at' => null,
-                            'created_at' => $transaction->created_at,
-                            'product_id' => $product->id,
-                            'product_name' => $product->name,
-                            'category' => $product->category,
-                            'operator' => $product->operator,
-                            'is_demo' => $product->is_demo,
-                        ]),
-                        'balance' => $balance,
-                    ],
-                ], 201);
+                return [
+                    'transaction' => $transaction,
+                    'product' => $product,
+                    'balance' => $balance,
+                ];
             });
         } catch (\Illuminate\Database\UniqueConstraintViolationException $error) {
             if (str_contains($error->getMessage(), 'idempotency')) {
@@ -222,6 +215,48 @@ class TransactionController extends Controller
 
             throw $error;
         }
+
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        // Dikirim ke supplier setelah transaksi DB commit, supaya panggilan HTTP
+        // tidak menahan lock saldo.
+        $this->fulfillment->fulfill((int) $result['transaction']->id);
+
+        $fresh = DB::table('transactions')->where('id', $result['transaction']->id)->first([
+            'status',
+            'supplier_status',
+            'supplier_sn',
+            'supplier_message',
+        ]);
+
+        $transaction = $result['transaction'];
+        $product = $result['product'];
+
+        return response()->json([
+            'data' => [
+                'transaction' => self::serialize((object) [
+                    'id' => $transaction->id,
+                    'order_number' => $transaction->order_number,
+                    'customer_number' => $transaction->customer_number,
+                    'amount' => $transaction->amount,
+                    'status' => $fresh->status ?? $transaction->status,
+                    'payment_method' => 'balance',
+                    'paid_at' => null,
+                    'created_at' => $transaction->created_at,
+                    'supplier_status' => $fresh->supplier_status ?? null,
+                    'supplier_sn' => $fresh->supplier_sn ?? null,
+                    'supplier_message' => $fresh->supplier_message ?? null,
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'category' => $product->category,
+                    'operator' => $product->operator,
+                    'is_demo' => $product->is_demo,
+                ]),
+                'balance' => $result['balance'],
+            ],
+        ], 201);
     }
 
     /**
@@ -376,6 +411,9 @@ class TransactionController extends Controller
             'status' => $row->status,
             'paymentMethod' => $row->payment_method ?? 'balance',
             'paidAt' => $row->paid_at ?? null,
+            'serialNumber' => $row->supplier_sn ?? null,
+            'supplierStatus' => $row->supplier_status ?? null,
+            'supplierMessage' => $row->supplier_message ?? null,
             'createdAt' => $row->created_at,
             'product' => [
                 'id' => (int) $row->product_id,

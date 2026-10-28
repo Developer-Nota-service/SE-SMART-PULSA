@@ -73,6 +73,21 @@ Alur: deposit dibuat `pending` + tautan Snap; saldo bertambah hanya setelah webh
 memotong saldo. Tanpa Server Key asli, pembayaran menampilkan "Pembayaran Midtrans
 belum dikonfigurasi".
 
+### Digiflazz (pemenuhan transaksi)
+
+1. Isi `DIGIFLAZZ_USERNAME`, `DIGIFLAZZ_API_KEY`, `DIGIFLAZZ_WEBHOOK_SECRET` dari
+   Dashboard Digiflazz > **Atur Koneksi > API** (secret ada di tab **Webhook**).
+   Set `DIGIFLAZZ_TESTING=false` untuk transaksi nyata.
+2. Impor daftar produk: `php artisan digiflazz:sync-products`. Harga reseller =
+   harga supplier + `DIGIFLAZZ_MARGIN_PERCENT` (default 5), harga publik +5%.
+3. Daftarkan URL webhook di dashboard Digiflazz:
+   `https://domainmu.com/api/v1/digiflazz/webhook`.
+4. Transaksi `pending` yang webhook-nya tidak sampai bisa dikirim ulang dari
+   konsol admin (`POST /api/v1/admin/transactions/{id}/check`).
+
+Tanpa kredensial ini, produk demo tetap berjalan seperti biasa dan transaksi
+produk nyata berhenti di status `pending` (tidak ada panggilan ke supplier).
+
 ### Kalau preset Laravel tidak jalan
 
 Ganti **build type** ke **Dockerfile** — `Dockerfile` di root sudah menyiapkan

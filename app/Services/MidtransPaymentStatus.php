@@ -17,6 +17,10 @@ class MidtransPaymentStatus
 
     public const AMOUNT_MISMATCH = 'amount_mismatch';
 
+    public function __construct(private readonly TransactionFulfillment $fulfillment)
+    {
+    }
+
     public function apply(string $orderId, string $transactionStatus, string $fraudStatus, string $grossAmount): string
     {
         $paid = $transactionStatus === 'settlement'
@@ -98,28 +102,38 @@ class MidtransPaymentStatus
 
     private function applyTransactionStatus(object $transaction, string $transactionStatus, bool $paid): void
     {
-        DB::transaction(function () use ($transaction, $transactionStatus, $paid): void {
+        $needsFulfillment = DB::transaction(function () use ($transaction, $transactionStatus, $paid): bool {
             $current = DB::table('transactions')->where('id', $transaction->id)->lockForUpdate()->first();
 
             if ($current === null || $current->payment_method !== 'midtrans'
                 || in_array($current->status, ['success', 'failed'], true)) {
-                return;
+                return false;
             }
 
             if ($paid) {
+                // Produk supplier dikirim ke Digiflazz setelah lunas; produk demo
+                // langsung sukses seperti sebelumnya.
+                $isDemo = (bool) DB::table('products')->where('id', $current->product_id)->value('is_demo');
+
                 DB::table('transactions')->where('id', $current->id)->update([
-                    'status' => 'success',
+                    'status' => $isDemo ? 'success' : 'pending',
                     'paid_at' => now(),
                 ]);
 
-                return;
+                return ! $isDemo;
             }
 
             if ($transactionStatus === 'pending') {
-                return;
+                return false;
             }
 
             DB::table('transactions')->where('id', $current->id)->update(['status' => 'failed']);
+
+            return false;
         });
+
+        if ($needsFulfillment) {
+            $this->fulfillment->fulfill((int) $transaction->id);
+        }
     }
 }

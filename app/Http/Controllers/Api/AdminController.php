@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\MidtransPaymentStatus;
 use App\Services\MidtransService;
+use App\Services\TransactionFulfillment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -38,6 +39,7 @@ class AdminController extends Controller
     public function __construct(
         private readonly MidtransService $midtrans,
         private readonly MidtransPaymentStatus $status,
+        private readonly TransactionFulfillment $fulfillment,
     ) {
     }
 
@@ -390,6 +392,9 @@ class AdminController extends Controller
                 'transactions.payment_method',
                 'transactions.created_at',
                 'transactions.paid_at',
+                'transactions.supplier_status',
+                'transactions.supplier_sn',
+                'transactions.supplier_message',
                 'users.id as user_id',
                 'users.name as user_name',
                 'users.email as user_email',
@@ -398,6 +403,43 @@ class AdminController extends Controller
             ]);
 
         return response()->json(['data' => $rows->map([self::class, 'serializeTransaction'])->all()]);
+    }
+
+    /**
+     * Kirim ulang / cek status transaksi ke supplier (Digiflazz). Dipakai untuk
+     * transaksi `pending` yang webhook-nya belum sampai.
+     */
+    public function checkTransaction(string $id): JsonResponse
+    {
+        if (! ctype_digit($id)) {
+            return response()->json(['message' => 'Transaksi tidak valid.'], 422);
+        }
+
+        if (! DB::table('transactions')->where('id', (int) $id)->exists()) {
+            return response()->json(['message' => 'Transaksi tidak ditemukan.'], 404);
+        }
+
+        if (! $this->fulfillment->isConfigured()) {
+            return response()->json(['message' => 'Digiflazz belum dikonfigurasi.'], 503);
+        }
+
+        $this->fulfillment->fulfill((int) $id);
+
+        $row = DB::table('transactions')->where('id', (int) $id)->first([
+            'id',
+            'status',
+            'supplier_status',
+            'supplier_sn',
+            'supplier_message',
+        ]);
+
+        return response()->json(['data' => [
+            'id' => (int) $row->id,
+            'status' => $row->status,
+            'supplierStatus' => $row->supplier_status,
+            'serialNumber' => $row->supplier_sn,
+            'supplierMessage' => $row->supplier_message,
+        ]]);
     }
 
     public function users(Request $request): JsonResponse
@@ -541,6 +583,9 @@ class AdminController extends Controller
             'paidAt' => $row->paid_at,
             'productName' => $row->product_name,
             'productCategory' => $row->product_category,
+            'supplierStatus' => $row->supplier_status ?? null,
+            'serialNumber' => $row->supplier_sn ?? null,
+            'supplierMessage' => $row->supplier_message ?? null,
             'user' => [
                 'id' => (int) $row->user_id,
                 'name' => $row->user_name,

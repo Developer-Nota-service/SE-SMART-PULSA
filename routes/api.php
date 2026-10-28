@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CatalogController;
+use App\Http\Controllers\Api\DigiflazzWebhookController;
 use App\Http\Controllers\Api\MidtransController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TransactionController;
@@ -28,6 +29,9 @@ Route::prefix('v1')->group(function () {
     // Webhook pembayaran Midtrans: publik, diverifikasi lewat signature_key.
     Route::post('midtrans/notification', [MidtransController::class, 'notification']);
 
+    // Webhook status transaksi Digiflazz: publik, diverifikasi lewat HMAC SHA1.
+    Route::post('digiflazz/webhook', [DigiflazzWebhookController::class, 'handle']);
+
     // Foto profil: nama file acak, dipakai langsung oleh <img>.
     Route::get('avatar/{file}', [ProfileController::class, 'avatar']);
 
@@ -40,6 +44,7 @@ Route::prefix('v1')->group(function () {
         Route::post('deposits/{id}/sync', [AdminController::class, 'syncDeposit']);
         Route::post('deposits/{id}/cancel', [AdminController::class, 'cancelDeposit']);
         Route::get('transactions', [AdminController::class, 'transactions']);
+        Route::post('transactions/{id}/check', [AdminController::class, 'checkTransaction']);
         Route::get('users', [AdminController::class, 'users']);
     });
 
