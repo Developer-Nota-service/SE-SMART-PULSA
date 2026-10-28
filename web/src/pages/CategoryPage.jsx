@@ -7,9 +7,29 @@ import { CATEGORIES, categoryLabel } from '../lib/format.js'
 
 const CATEGORY_KEYS = CATEGORIES.map((item) => item.key)
 
+// Urutan provider yang diinginkan di menu pulsa; sisanya menyusul (terbesar dulu).
+const PROVIDER_ORDER = ['Telkomsel', 'Indosat/IM3', 'XL', 'Axis', 'by.U', 'Smartfren']
+
+// Nama tampil resmi per operator (kunci huruf kecil).
+const PROVIDER_NAMES = {
+  telkomsel: 'Telkomsel',
+  indosat: 'Indosat/IM3',
+  im3: 'Indosat/IM3',
+  xl: 'XL',
+  axis: 'Axis',
+  'by.u': 'by.U',
+  smartfren: 'Smartfren',
+  tri: 'Tri',
+}
+
+const rankOf = (label) => {
+  const index = PROVIDER_ORDER.indexOf(label)
+  return index === -1 ? PROVIDER_ORDER.length : index
+}
+
 // Nama operator datang dari supplier dengan penulisan berbeda (TELKOMSEL vs
-// Telkomsel), jadi pengelompokan memakai kunci huruf kecil dan label diambil
-// dari penulisan yang paling banyak dipakai.
+// Telkomsel), jadi pengelompokan memakai kunci huruf kecil dan label memakai
+// nama resmi di atas (atau penulisan yang paling banyak dipakai).
 function groupByProvider(products) {
   const groups = new Map()
 
@@ -22,13 +42,23 @@ function groupByProvider(products) {
     group.variants.set(label, (group.variants.get(label) || 0) + 1)
   }
 
+  const labelOf = (key, group) =>
+    PROVIDER_NAMES[key] ||
+    [...group.variants.entries()].sort((a, b) => b[1] - a[1])[0][0]
+
   return [...groups.entries()]
     .map(([key, group]) => ({
       key,
-      label: [...group.variants.entries()].sort((a, b) => b[1] - a[1])[0][0],
+      label: labelOf(key, group),
       items: group.items,
     }))
-    .sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label))
+    .sort((a, b) => {
+      const byRank = rankOf(a.label) - rankOf(b.label)
+      if (byRank !== 0) return byRank
+      // Provider yang diurutkan eksplisit tetap di posisinya; sisanya terbesar dulu.
+      if (rankOf(a.label) < PROVIDER_ORDER.length) return 0
+      return b.items.length - a.items.length || a.label.localeCompare(b.label)
+    })
 }
 
 // Produk tampil setelah kategori dipilih: provider dipilih dulu pada deret

@@ -398,7 +398,10 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   menampilkan kartu kategori (`web/src/components/CategoryGrid.jsx` → tautan);
   daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`)
   tanpa kartu kategori lagi (hanya judul kategori):
-  provider tampil sebagai deret chip menyamping (bisa di-scroll, terbesar dulu),
+  provider tampil sebagai deret chip menyamping (bisa di-scroll; urutan mengikuti
+  `PROVIDER_ORDER` di `CategoryPage.jsx`: Telkomsel, Indosat/IM3, XL, Axis, by.U,
+  Smartfren, lalu sisanya terbesar dulu; nama operator dipetakan lewat
+  `PROVIDER_NAMES`),
   produk provider terpilih muncul menurun di bawahnya. Nama operator supplier yang
   beda huruf besar/kecil digabung (TELKOMSEL = Telkomsel).
   Semua selain `/login` butuh sesi; `/admin`
