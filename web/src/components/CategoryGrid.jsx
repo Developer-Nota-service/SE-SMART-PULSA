@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { CATEGORIES } from '../lib/format.js'
 import {
   BillIcon,
@@ -19,26 +20,26 @@ const icons = {
   ticket: TicketIcon,
 }
 
-export default function CategoryGrid({ value, onChange }) {
+// Setiap kategori adalah tautan ke halamannya sendiri, jadi produk baru
+// ditampilkan setelah kategori dipilih.
+export default function CategoryGrid({ value }) {
   return (
-    <div className="category-grid" role="tablist" aria-label="Kategori produk">
+    <div className="category-grid" aria-label="Kategori produk">
       {CATEGORIES.map((category) => {
         const Icon = icons[category.icon]
         const active = value === category.key
         return (
-          <button
+          <Link
             key={category.key}
-            type="button"
-            role="tab"
-            aria-selected={active}
+            to={`/kategori/${category.key}`}
             className={`category${active ? ' is-active' : ''}`}
-            onClick={() => onChange(category.key)}
+            aria-current={active ? 'page' : undefined}
           >
             <span className="category__icon">
               <Icon />
             </span>
             <span className="category__label">{category.label}</span>
-          </button>
+          </Link>
         )
       })}
     </div>

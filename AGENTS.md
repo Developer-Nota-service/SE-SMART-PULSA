@@ -393,7 +393,10 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   Produk hasil `digiflazz:sync-products` ber-`is_demo = false` dan benar-benar
   dikirim ke Digiflazz saat dibayar; harganya datang dari daftar harga supplier,
   jangan dikarang manual.
-- Halaman: `/login`, `/` (beranda), `/transaksi`, `/saldo`, `/profil`, `/beli/:id`,
-  `/bantuan`, `/legal/:doc`, `/admin`. Semua selain `/login` butuh sesi; `/admin`
+- Halaman: `/login`, `/` (beranda), `/kategori/:category`, `/transaksi`, `/saldo`,
+  `/profil`, `/beli/:id`, `/bantuan`, `/legal/:doc`, `/admin`. Beranda hanya
+  menampilkan kartu kategori (`web/src/components/CategoryGrid.jsx` → tautan);
+  daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`).
+  Semua selain `/login` butuh sesi; `/admin`
   hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
   menu Admin tidak muncul di navigasi bawah).

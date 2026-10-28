@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage.jsx'
 // mengunduh seluruh aplikasi (admin, pembelian, legal) sebelum bisa dipakai.
 const AdminPage = lazy(() => import('./pages/AdminPage.jsx'))
 const BalancePage = lazy(() => import('./pages/BalancePage.jsx'))
+const CategoryPage = lazy(() => import('./pages/CategoryPage.jsx'))
 const HelpPage = lazy(() => import('./pages/HelpPage.jsx'))
 const HomePage = lazy(() => import('./pages/HomePage.jsx'))
 const LegalPage = lazy(() => import('./pages/LegalPage.jsx'))
@@ -41,6 +42,7 @@ export default function App() {
 
         <Route element={<Protected />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/kategori/:category" element={<CategoryPage />} />
           <Route path="/transaksi" element={<TransactionsPage />} />
           <Route path="/saldo" element={<BalancePage />} />
           <Route path="/admin" element={<AdminPage />} />

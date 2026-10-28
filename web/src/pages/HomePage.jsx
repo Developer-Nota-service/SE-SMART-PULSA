@@ -3,16 +3,13 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import BalanceCard from '../components/BalanceCard.jsx'
 import CategoryGrid from '../components/CategoryGrid.jsx'
-import ProductCard from '../components/ProductCard.jsx'
 import TransactionItem from '../components/TransactionItem.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
-import { categoryLabel } from '../lib/format.js'
 
+// Beranda hanya menampilkan kategori; daftar produk muncul di halaman kategori.
 export default function HomePage() {
   const { user } = useAuth()
-  const [category, setCategory] = useState('pulsa')
-  const [products, setProducts] = useState([])
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -21,18 +18,14 @@ export default function HomePage() {
     setLoading(true)
     setError('')
     try {
-      const [productList, txList] = await Promise.all([
-        api.products({ category }),
-        api.transactions(),
-      ])
-      setProducts(productList)
+      const txList = await api.transactions()
       setTransactions(txList.slice(0, 3))
     } catch (requestError) {
       setError(requestError.message)
     } finally {
       setLoading(false)
     }
-  }, [category])
+  }, [])
 
   useEffect(() => {
     load()
@@ -47,31 +40,7 @@ export default function HomePage() {
           <h2 className="section-title">Kategori</h2>
           <span className="section-hint">7 layanan</span>
         </div>
-        <CategoryGrid value={category} onChange={setCategory} />
-      </section>
-
-      <section>
-        <div className="section-head">
-          <h2 className="section-title">Produk populer</h2>
-          <span className="section-hint">{categoryLabel(category)}</span>
-        </div>
-
-        {loading ? (
-          <LoadingState label="Memuat produk…" />
-        ) : error ? (
-          <ErrorState message={error} onRetry={load} />
-        ) : products.length === 0 ? (
-          <EmptyState
-            title="Belum ada produk"
-            description="Produk untuk kategori ini belum tersedia."
-          />
-        ) : (
-          <div className="product-grid">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        )}
+        <CategoryGrid />
       </section>
 
       <section>
@@ -82,7 +51,11 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {loading ? null : transactions.length === 0 ? (
+        {loading ? (
+          <LoadingState label="Memuat transaksi…" />
+        ) : error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : transactions.length === 0 ? (
           <EmptyState
             title="Belum ada transaksi"
             description="Transaksi yang Anda lakukan akan muncul di sini."
