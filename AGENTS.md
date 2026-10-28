@@ -396,7 +396,9 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
 - Halaman: `/login`, `/` (beranda), `/kategori/:category`, `/transaksi`, `/saldo`,
   `/profil`, `/beli/:id`, `/bantuan`, `/legal/:doc`, `/admin`. Beranda hanya
   menampilkan kartu kategori (`web/src/components/CategoryGrid.jsx` → tautan);
-  daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`).
+  daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`),
+  dikelompokkan per operator/provider (nama operator supplier beda huruf besar/kecil
+  digabung, grup terbesar di atas).
   Semua selain `/login` butuh sesi; `/admin`
   hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
   menu Admin tidak muncul di navigasi bawah).
