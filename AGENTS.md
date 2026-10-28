@@ -111,9 +111,33 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   pesanan pending milik pengguna (cadangan bila webhook tidak sampai), signature
   respons diverifikasi sebelum status diubah
 
-Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Admin: `admin@sesmartpulsa.id` /
-`admin12345`. Data demo: saldo Rp186.900, 4 transaksi (success/pending/failed),
-4 deposit (paid/pending/expired), 95 produk DEMO di 7 kategori.
+Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Data demo: saldo Rp186.900,
+4 transaksi (success/pending/failed), 4 deposit (paid/pending/expired), 95 produk
+DEMO di 7 kategori.
+
+**Akun admin adalah akun pribadi pemilik** — `muhammadyusufrifaldi@gmail.com` /
+`081346043318` (role `admin`, sudah terverifikasi). Tidak ada sandi default: akun
+dibuat `DatabaseSeeder::seedOwnerAdmin()` tanpa sandi yang diketahui, lalu pemilik
+mengatur sandinya lewat tautan email (lihat "Sandi admin" di bawah). Akun admin demo
+lama `admin@sesmartpulsa.id` diturunkan menjadi `user` oleh seeder karena sandinya
+tertulis di dokumentasi publik.
+
+## Sandi admin (tautan email)
+
+```bash
+docker compose -f docker-compose.base44.yml exec -T laravel \
+  php artisan admin:password-link muhammadyusufrifaldi@gmail.com --url=<alamat publik>
+```
+
+`app/Console/Commands/SendAdminPasswordLink.php` membuat token sekali pakai (hash di
+`password_reset_tokens`, jalur yang sama dengan `POST /api/v1/password/reset`) lalu
+mengirim email berisi `<url>/login?resetToken=...`. Halaman login mengenali parameter
+itu dan menampilkan mode **Atur sandi** (`web/src/components/PasswordReset.jsx`), jadi
+admin mengetik sandinya sendiri — tidak ada sandi yang dikirim lewat email.
+
+Butuh SMTP nyata (`MAIL_MAILER=smtp` + kredensial dari dashboard). Selama
+`MAIL_MAILER=log` (default sandbox), email hanya ditulis ke log dan perintah mencetak
+tautannya ke console supaya alurnya tetap bisa dicoba.
 
 ## Verifikasi akun (OTP WhatsApp via Fonnte)
 
@@ -215,7 +239,8 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
   pending belum pernah menambah saldo. Tidak ada tombol "tandai lunas" manual.
 - **Deposit menggantung** — deposit `pending` lebih tua dari 30 menit ditandai
   `stale` (+ `ageMinutes`) supaya gampang ditindak.
-- Akun admin demo: `admin@sesmartpulsa.id` / `admin12345` (di-seed).
+- Akun admin: akun pribadi pemilik (`muhammadyusufrifaldi@gmail.com`, role `admin`).
+  Tidak ada akun admin kedua; jangan menyeed ulang akun dengan sandi publik.
 
 ## Penarikan saldo (withdraw)
 

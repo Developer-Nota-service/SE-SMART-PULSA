@@ -24,10 +24,13 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   // Terisi setelah pendaftaran / login akun belum verifikasi: tampilkan langkah OTP.
   const [verification, setVerification] = useState(null)
+  // Tautan "atur sandi" dari email admin: /login?resetToken=...
+  const resetToken = new URLSearchParams(location.search).get('resetToken') || ''
   // Alur lupa sandi: verifikasi nomor WhatsApp lalu atur sandi baru.
-  const [resetting, setResetting] = useState(false)
+  const [resetting, setResetting] = useState(Boolean(resetToken))
 
-  if (user) return <Navigate to={location.state?.from || '/'} replace />
+  // Tautan "atur sandi" harus tetap terbuka walau browser ini masih punya sesi.
+  if (user && !resetToken) return <Navigate to={location.state?.from || '/'} replace />
 
   const update = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -97,6 +100,7 @@ export default function LoginPage() {
           />
         ) : resetting ? (
           <PasswordReset
+            initialToken={resetToken}
             onCancel={() => {
               setResetting(false)
               setMessage('')

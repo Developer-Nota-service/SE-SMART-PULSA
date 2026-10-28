@@ -25,13 +25,13 @@ function describe(verification) {
   return `Kode 6 angka dikirim ke WhatsApp ${verification.targetMasked}. Berlaku ${minutes} menit.`
 }
 
-export default function PasswordReset({ onCancel }) {
+export default function PasswordReset({ onCancel, initialToken = '' }) {
   const { refresh } = useAuth()
-  const [step, setStep] = useState('phone')
+  const [step, setStep] = useState(initialToken ? 'password' : 'phone')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [verification, setVerification] = useState(null)
-  const [reset, setReset] = useState(null)
+  const [reset, setReset] = useState(initialToken ? { resetToken: initialToken, email: null } : null)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [notice, setNotice] = useState('')
@@ -109,7 +109,7 @@ export default function PasswordReset({ onCancel }) {
       <span className="otp__icon">
         <ShieldIcon />
       </span>
-      <h2 className="otp__title">Lupa sandi</h2>
+      <h2 className="otp__title">{initialToken ? 'Atur sandi' : 'Lupa sandi'}</h2>
 
       {step === 'phone' ? (
         <>
@@ -203,8 +203,16 @@ export default function PasswordReset({ onCancel }) {
 
       {step === 'password' && reset ? (
         <>
-          <p className="otp__text">Nomor WhatsApp terverifikasi. Berikut email akun Anda:</p>
-          <p className="reset__email">{reset.email}</p>
+          {reset.email ? (
+            <>
+              <p className="otp__text">Nomor WhatsApp terverifikasi. Berikut email akun Anda:</p>
+              <p className="reset__email">{reset.email}</p>
+            </>
+          ) : (
+            <p className="otp__text">
+              Tautan email terverifikasi. Buat sandi baru untuk akun Anda.
+            </p>
+          )}
           <form onSubmit={savePassword} noValidate>
             <label className="field">
               <span className="field__label">Password baru</span>

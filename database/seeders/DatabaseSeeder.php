@@ -45,6 +45,16 @@ class DatabaseSeeder extends Seeder
         ['Spotify', 'Voucher Spotify Premium 1 Bulan', 55000],
     ];
 
+    /** Akun admin pemilik aplikasi (satu-satunya akun ber-role admin). */
+    private const OWNER = [
+        'name' => 'Muhammad Yusuf Rifaldi',
+        'email' => 'muhammadyusufrifaldi@gmail.com',
+        'phone' => '081346043318',
+    ];
+
+    /** Akun admin demo lama yang sandinya tertulis di dokumentasi publik. */
+    private const LEGACY_ADMIN_EMAIL = 'admin@sesmartpulsa.id';
+
     public function run(): void
     {
         $demoId = $this->seedUsers();
@@ -56,7 +66,6 @@ class DatabaseSeeder extends Seeder
     {
         $accounts = [
             ['name' => 'Budi Santoso', 'email' => 'demo@sesmartpulsa.id', 'phone' => '081234567890', 'password' => 'demo12345', 'role' => 'user'],
-            ['name' => 'Admin SE SMART', 'email' => 'admin@sesmartpulsa.id', 'phone' => '081200000000', 'password' => 'admin12345', 'role' => 'admin'],
         ];
 
         foreach ($accounts as $account) {
@@ -77,14 +86,47 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        // Akun demo & admin dianggap sudah terverifikasi supaya tetap bisa masuk
-        // tanpa OTP setelah verifikasi diaktifkan.
+        // Akun demo dianggap sudah terverifikasi supaya tetap bisa masuk tanpa OTP.
         DB::table('users')
             ->whereIn('email', array_column($accounts, 'email'))
             ->whereNull('email_verified_at')
             ->update(['email_verified_at' => now(), 'phone_verified_at' => now()]);
 
+        $this->seedOwnerAdmin();
+
         return (int) DB::table('users')->where('email', 'demo@sesmartpulsa.id')->value('id');
+    }
+
+    /**
+     * Akun admin milik pemilik aplikasi. Dibuat sekali saja dan tanpa sandi
+     * default: sandinya diatur pemilik lewat tautan email
+     * `php artisan admin:password-link <email>`. Seed berikutnya tidak
+     * menyentuh akun ini supaya sandi yang sudah dibuat tidak pernah ditimpa.
+     */
+    private function seedOwnerAdmin(): void
+    {
+        $exists = DB::table('users')->where('email', self::OWNER['email'])->exists();
+
+        if (! $exists) {
+            DB::table('users')->insert([
+                'name' => self::OWNER['name'],
+                'email' => self::OWNER['email'],
+                'phone' => self::OWNER['phone'],
+                'password_hash' => Hash::make(bin2hex(random_bytes(32))),
+                'role' => 'admin',
+                'balance' => 0,
+                'email_verified_at' => now(),
+                'phone_verified_at' => now(),
+                'created_at' => now(),
+            ]);
+        }
+
+        // Admin demo lama punya sandi yang tertulis di dokumentasi publik, jadi
+        // tidak boleh lagi memegang akses admin.
+        DB::table('users')
+            ->where('email', self::LEGACY_ADMIN_EMAIL)
+            ->where('role', 'admin')
+            ->update(['role' => 'user']);
     }
 
     private function seedProducts(): void
