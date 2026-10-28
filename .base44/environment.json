@@ -69,6 +69,11 @@
       "requiredAtBoot": false
     },
     {
+      "name": "DIGIFLAZZ_TESTING",
+      "description": "Mode development Digiflazz. Isi `true` selama masih memakai Development Key (`dev-...`), `false` saat sudah memakai Production Key agar transaksi benar-benar dikirim ke supplier.",
+      "requiredAtBoot": false
+    },
+    {
       "name": "KIRISAN_API_TOKEN",
       "description": "Token akun Kirisan (dash.kirisan.com > Account > Settings) untuk Send API. Dipakai bila MAIL_MAILER=kirisan sebagai pengganti SMTP.",
       "requiredAtBoot": false
