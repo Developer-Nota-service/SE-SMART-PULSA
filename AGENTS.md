@@ -210,6 +210,10 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 - Bila kelak ada penyedia yang bisa dipakai (mis. Xendit Data Services setelah
   akun badan usaha disetujui), tambahkan sebagai service baru yang mengembalikan
   nama pemilik rekening dan pasang di `store()`; frontend tidak perlu diubah.
+- Jalur pendaftaran **Midtrans Iris/Payouts** (validasi rekening lewat
+  `GET /iris/api/v1/account_validation` + pencairan dana) dirinci di
+  `docs/MIDTRANS-IRIS.md`. Belum diintegrasikan: menunggu akun Iris aktif dan
+  secret `MIDTRANS_IRIS_API_KEY`.
 
 ## Invariant keamanan (jangan dilanggar)
 
