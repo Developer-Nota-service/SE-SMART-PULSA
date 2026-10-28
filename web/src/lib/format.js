@@ -63,6 +63,8 @@ export const refundLabel = (order) => {
       return 'Dana dikembalikan ke metode pembayaran'
     case 'balance':
       return 'Dana dikembalikan ke saldo aplikasi'
+    case 'manual':
+      return 'Dana dikirim manual ke rekening pengguna'
     case 'failed':
       return 'Belum berhasil — hubungi admin'
     default:

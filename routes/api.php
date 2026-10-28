@@ -45,6 +45,7 @@ Route::prefix('v1')->group(function () {
         Route::post('deposits/{id}/cancel', [AdminController::class, 'cancelDeposit']);
         Route::get('transactions', [AdminController::class, 'transactions']);
         Route::post('transactions/{id}/check', [AdminController::class, 'checkTransaction']);
+        Route::post('transactions/{id}/refund', [AdminController::class, 'markRefundPaid']);
         Route::get('users', [AdminController::class, 'users']);
     });
 

@@ -191,6 +191,8 @@ export const api = {
   adminDepositSync: (id) => request(`/admin/deposits/${id}/sync`, { method: 'POST', body: {} }),
   adminDepositCancel: (id) => request(`/admin/deposits/${id}/cancel`, { method: 'POST', body: {} }),
   adminTransactions: (params) => request(`/admin/transactions${query(params)}`),
+  adminMarkRefundPaid: (id, note) =>
+    request(`/admin/transactions/${id}/refund`, { method: 'POST', body: { note } }),
   adminUsers: (params) => request(`/admin/users${query(params)}`),
 
   // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).

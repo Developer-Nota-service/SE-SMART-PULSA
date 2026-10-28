@@ -111,6 +111,8 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/withdrawals/{id}` `{action: process|paid|reject, note?}` (tolak =
   saldo kembali), `GET /admin/deposits?status=`, `POST /admin/deposits/{id}/sync`,
   `POST /admin/deposits/{id}/cancel`, `GET /admin/transactions?status=&q=`,
+  `POST /admin/transactions/{id}/check`, `POST /admin/transactions/{id}/refund`
+  (tandai refund manual sudah dikirim),
   `GET /admin/users?q=`. Semua butuh `role = admin` (middleware `admin.only`).
 - `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
 - `POST /midtrans/sync` `{orderNumber?}` — cek status resmi ke API Midtrans untuk
@@ -336,10 +338,17 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   `POST /v2/{order_id}/refund` Midtrans (dana kembali ke metode pembayaran asal).
   Midtrans hanya mendukung refund untuk kartu, GoPay, ShopeePay, DANA, OVO, QRIS,
   Kredivo, Akulaku; bila ditolak (mis. VA/transfer bank), nominal transaksi
-  dikreditkan ke saldo pengguna lewat `balance_entries` supaya tetap bisa ditarik.
-  Hasilnya di `transactions.refund_status` — `processing` → `midtrans` (refund ke
-  metode asal) atau `balance` (dikreditkan ke saldo), `failed` bila keduanya gagal
-  — plus `refund_message`/`refunded_at`. Klaim `refund_status` membuat pengembalian
+  dikreditkan ke saldo lewat `balance_entries` **hanya bila akun pembeli reseller**
+  (`users.account_type = reseller`), supaya uangnya tetap bisa ditarik.
+  Akun **pribadi** tidak memakai saldo dan tidak bisa menariknya, jadi refund yang
+  ditolak Midtrans ditandai `failed` dengan pesan "Perlu pengembalian manual ke
+  rekening pengguna" — admin melihatnya di `GET /admin/overview`
+  (`counts.refundsManual`, kartu "Refund manual"), mengirim dana ke rekening
+  pembeli, lalu menandainya lewat `POST /admin/transactions/{id}/refund`
+  (`refund_status = manual`) supaya antrean kembali kosong. Hasilnya di `transactions.refund_status` — `processing` → `midtrans`
+  (refund ke metode asal) atau `balance` (dikreditkan ke saldo reseller), `failed`
+  bila Midtrans menolak dan saldo tidak boleh dipakai — plus
+  `refund_message`/`refunded_at`. Klaim `refund_status` membuat pengembalian
   hanya terjadi **sekali** (webhook/cek berulang aman). Panggilan refund Midtrans
   dilakukan setelah transaksi DB selesai, bukan di dalamnya. Admin bisa memicu
   ulang pengembalian lewat `POST /admin/transactions/{id}/check`.

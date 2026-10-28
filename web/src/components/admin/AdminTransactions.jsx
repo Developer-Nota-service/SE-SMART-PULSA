@@ -22,6 +22,8 @@ export default function AdminTransactions() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [marking, setMarking] = useState(null)
+  const [actionError, setActionError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -38,6 +40,19 @@ export default function AdminTransactions() {
   useEffect(() => {
     load()
   }, [load])
+
+  const markRefundPaid = async (id) => {
+    setMarking(id)
+    setActionError('')
+    try {
+      await api.adminMarkRefundPaid(id)
+      await load()
+    } catch (requestError) {
+      setActionError(requestError.message)
+    } finally {
+      setMarking(null)
+    }
+  }
 
   return (
     <>
@@ -63,6 +78,12 @@ export default function AdminTransactions() {
           onChange={(event) => setSearch(event.target.value)}
         />
       </label>
+
+      {actionError ? (
+        <p className="field__error" role="alert">
+          {actionError}
+        </p>
+      ) : null}
 
       {loading ? (
         <LoadingState label="Memuat transaksi…" />
@@ -117,6 +138,17 @@ export default function AdminTransactions() {
                   </div>
                 ) : null}
               </div>
+
+              {row.refundStatus === 'failed' ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={marking === row.id}
+                  onClick={() => markRefundPaid(row.id)}
+                >
+                  {marking === row.id ? 'Menyimpan…' : 'Tandai refund sudah dikirim'}
+                </button>
+              ) : null}
             </article>
           ))}
         </div>

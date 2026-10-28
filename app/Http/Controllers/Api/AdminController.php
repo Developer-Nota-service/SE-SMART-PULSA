@@ -73,6 +73,12 @@ class AdminController extends Controller
                     'transactionsFailed' => (int) DB::table('transactions')->where('status', 'failed')->count(),
                     'transactionsPending' => (int) DB::table('transactions')->where('status', 'pending')->count(),
                     'transactionsToday' => (int) DB::table('transactions')->where('created_at', '>=', $today)->count(),
+                    // Refund yang ditolak Midtrans pada akun pribadi: tidak bisa
+                    // masuk saldo, admin harus mengirim dananya manual.
+                    'refundsManual' => (int) DB::table('transactions')
+                        ->where('status', 'failed')
+                        ->where('refund_status', 'failed')
+                        ->count(),
                     'users' => (int) DB::table('users')->count(),
                     'balanceTotal' => (int) DB::table('users')->sum('balance'),
                 ],
@@ -363,6 +369,73 @@ class AdminController extends Controller
                 now()->subMinutes(self::STALE_DEPOSIT_MINUTES),
             ),
         ]);
+    }
+
+    /**
+     * Menandai refund yang harus dibayar manual (Midtrans menolak, akun pribadi)
+     * sudah dikirim ke rekening pengguna. Tanpa ini antrean "Refund manual" tidak
+     * pernah kosong walau uangnya sudah dikirim.
+     */
+    public function markRefundPaid(Request $request, string $id): JsonResponse
+    {
+        if (! ctype_digit($id)) {
+            return response()->json(['message' => 'Transaksi tidak valid.'], 422);
+        }
+
+        $note = trim((string) $request->input('note', ''));
+
+        if (mb_strlen($note) > 200) {
+            return response()->json([
+                'message' => 'Catatan maksimal 200 karakter.',
+                'errors' => ['note' => ['Terlalu panjang.']],
+            ], 422);
+        }
+
+        $admin = $request->attributes->get('authUser');
+
+        $outcome = DB::transaction(function () use ($id, $note, $admin) {
+            $row = DB::table('transactions')->where('id', (int) $id)->lockForUpdate()->first();
+
+            if (! $row) {
+                return ['code' => 404, 'message' => 'Transaksi tidak ditemukan.'];
+            }
+
+            if ((string) $row->refund_status !== 'failed') {
+                return ['code' => 409, 'message' => 'Tidak ada refund manual yang menunggu untuk transaksi ini.'];
+            }
+
+            DB::table('transactions')->where('id', $row->id)->update([
+                'refund_status' => 'manual',
+                'refund_message' => $note !== '' ? $note : 'Dana dikirim manual oleh admin',
+                'refunded_at' => now(),
+            ]);
+
+            DB::table('audit_logs')->insert([
+                'user_id' => $admin->id,
+                'action' => 'admin.transaction.refund_manual',
+                'detail' => json_encode([
+                    'order_number' => $row->order_number,
+                    'target_user' => (int) $row->user_id,
+                    'amount' => (int) $row->amount,
+                ]),
+                'created_at' => now(),
+            ]);
+
+            return ['code' => 200];
+        });
+
+        if ($outcome['code'] !== 200) {
+            return response()->json(['message' => $outcome['message']], $outcome['code']);
+        }
+
+        $row = DB::table('transactions')->where('id', (int) $id)->first();
+
+        return response()->json(['data' => [
+            'id' => (int) $row->id,
+            'refundStatus' => $row->refund_status,
+            'refundMessage' => $row->refund_message,
+            'refundedAt' => $row->refunded_at,
+        ]]);
     }
 
     public function transactions(Request $request): JsonResponse

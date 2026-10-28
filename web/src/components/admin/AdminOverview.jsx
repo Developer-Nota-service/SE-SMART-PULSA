@@ -82,6 +82,11 @@ export default function AdminOverview({ onOpenTab }) {
           value={rupiah(counts.balanceTotal)}
           hint={`${counts.users} akun terdaftar`}
         />
+        <Stat
+          label="Refund manual"
+          value={counts.refundsManual ?? 0}
+          hint="kirim dana ke rekening pengguna"
+        />
         <Stat label="Deposit masuk hari ini" value={rupiah(counts.depositsPaidToday)} />
         <Stat label="Transaksi hari ini" value={counts.transactionsToday} />
       </div>
