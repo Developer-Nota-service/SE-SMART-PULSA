@@ -8,6 +8,7 @@ use App\Services\TransactionFulfillment;
 use App\Support\OrderNumber;
 use App\Support\PaymentFee;
 use App\Support\Pricing;
+use App\Support\ProductAvailability;
 use App\Support\PromoCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -268,10 +269,18 @@ class TransactionController extends Controller
                 $product = DB::table('products')
                     ->where('id', (int) $productId)
                     ->where('active', true)
-                    ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo']);
+                    ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo', 'cost_price', 'max_cost_price']);
 
                 if (! $product) {
                     return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+                }
+
+                // Harga seller melewati harga max admin → jangan potong saldo.
+                if (ProductAvailability::isDisturbed($product)) {
+                    return response()->json([
+                        'message' => ProductAvailability::DISTURBED_MESSAGE,
+                        'errors' => ['productId' => [ProductAvailability::DISTURBED_MESSAGE]],
+                    ], 422);
                 }
 
                 // Harga mengikuti tipe akun (reseller/pribadi) dan selalu
@@ -427,10 +436,18 @@ class TransactionController extends Controller
         $product = DB::table('products')
             ->where('id', (int) $productId)
             ->where('active', true)
-            ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo']);
+            ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo', 'cost_price', 'max_cost_price']);
 
         if (! $product) {
             return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        // Harga seller melewati harga max admin → jangan buat tagihan Midtrans.
+        if (ProductAvailability::isDisturbed($product)) {
+            return response()->json([
+                'message' => ProductAvailability::DISTURBED_MESSAGE,
+                'errors' => ['productId' => [ProductAvailability::DISTURBED_MESSAGE]],
+            ], 422);
         }
 
         $destinationError = $this->destinationError($product->category, $customerNumber);

@@ -163,9 +163,12 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
   (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk),
   `POST /admin/products/sync-digiflazz` → `{products,providers,active,skipped,
-  deactivated,created,renamed,lastSyncedAt}`: tarik harga modal terbaru dari
-  Digiflazz (harga jual admin tidak ditimpa), produk baru langsung ditambahkan,
-  dan kode produk mengikuti Digiflazz. 422 bila kredensial kosong, 429 dengan
+  deactivated,created,renamed,priceIncreases,alertSent,lastSyncedAt}`: tarik harga
+  modal terbaru dari Digiflazz (harga jual admin tidak ditimpa), semua produk
+  Digiflazz otomatis tayang di kategorinya, produk baru langsung ditambahkan, kode
+  produk mengikuti Digiflazz, dan kenaikan harga dikirim ke WhatsApp admin
+  (`priceIncreases` = jumlah produk naik, `alertSent` = pesan terkirim). 422 bila
+  kredensial kosong, 429 dengan
   `{retryAfterSeconds}` selama jeda 5 menit (batas pricelist Digiflazz), 502 bila
   Digiflazz menolak beserta pesan aslinya.
   Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
@@ -173,8 +176,9 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}` (promo kini punya
   `discountPercent` 0-90; > 0 mewajibkan `code`),
   `PATCH /admin/dashboard-settings`
-  `{leaderboardEnabled?,leaderboardLimit?,leaderboardPeriodDays?,leaderboardAccountType?}`
-  (`leaderboardAccountType`: `all|reseller|personal`).
+  `{leaderboardEnabled?,leaderboardLimit?,leaderboardPeriodDays?,leaderboardAccountType?,priceAlertWhatsapp?}`
+  (`leaderboardAccountType`: `all|reseller|personal`; `priceAlertWhatsapp` = nomor
+  WhatsApp notifikasi kenaikan harga, `08xx`/`62xx`, dikosongkan untuk mematikan).
   Kredensial integrasi (API key): `GET /admin/integrations` →
   `{groups: [{key,label,description,fields:[{key,label,type,hint,options,
   configured,source,value}]}]}` (`source`: `dashboard`|`env`|`unset`; nilai
@@ -395,8 +399,10 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   (`POST /admin/products/sync-digiflazz`) yang memperbarui modal + provider seluruh
   seller sekaligus tanpa menyentuh harga jual yang sudah diatur admin. Sheet "Ubah
   harga" juga mengisi **Harga max modal** (`max_cost_price`) — batas harga modal
-  yang mau dibayar; dikirim ke Digiflazz sebagai `max_price` sehingga transaksi
-  ditolak (dan saldo pembeli dikembalikan) bila harga supplier menembus batas itu.
+  yang mau dibayar. Produk yang harga sellernya melewati batas itu ditandai
+  **Gangguan** di konsol dan katalog, lalu tidak bisa dibeli
+  (`App\Support\ProductAvailability`); `max_price` tetap dikirim ke Digiflazz
+  sebagai lapis kedua.
   Satu produk diubah
   lewat sheet "Ubah harga"; satu kategori — atau satu operator di dalamnya bila
   chip operator sedang aktif — bisa digeser massal (persen atau rupiah) di kartu
@@ -489,8 +495,11 @@ sumber data: `app/Support/DashboardContent.php`, dipakai `DashboardController`
   lengkap.
 - Pengaturan ada di `dashboard_settings` (key/value): `leaderboardEnabled`,
   `leaderboardLimit` (3/5/10), `leaderboardPeriodDays` (7/30/90),
-  `leaderboardAccountType` (`all|reseller|personal`). Nilai bawaan diisi
-  `DashboardContent::settings()`, jadi tabel boleh kosong.
+  `leaderboardAccountType` (`all|reseller|personal`), dan `priceAlertWhatsapp`
+  (nomor notifikasi kenaikan harga Digiflazz, default nomor pemilik; disimpan
+  sebagai `62…` lewat `DashboardContent::normalizePhone()`). Nilai bawaan diisi
+  `DashboardContent::settings()`, jadi tabel boleh kosong. Nomor diubah di tab
+  **Beranda** konsol admin (`AdminDashboard.jsx`, bagian "Notifikasi WhatsApp").
 - Beranda (`web/src/pages/HomePage.jsx`) memuat `GET /dashboard` bersama
   transaksi terbaru; tampilannya `HomeBanners`, `HomePromos`, dan
   `HomeLeaderboard` (menyembunyikan diri bila kosong atau peringkat nonaktif).
@@ -559,7 +568,9 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   Harga reseller = harga supplier + margin, harga publik +5%, keduanya dibulatkan
   ke atas per Rp100 — **hanya untuk produk baru**: harga jual produk yang sudah ada
   dipertahankan supaya sinkron tidak menghapus harga yang diatur admin di konsol.
-  Produk baru langsung dibuat `is_demo = false` dan aktif sesuai status supplier.
+  Semua produk yang ada di daftar harga Digiflazz langsung dibuat/diaktifkan
+  (`active = true`) beserta kategorinya — status seller/buyer dari supplier tidak
+  dipakai untuk menyembunyikan produk. Operator kosong diisi `Lainnya`.
   Bila seller mengganti SKU sebuah produk (SKU lama hilang, `seller_name` + nama
   sama), baris produk lama **ikut berganti kode** mengikuti `buyer_sku_code` —
   id, harga jual, dan riwayat transaksinya tetap utuh. Kalau kandidatnya ambigu
@@ -576,13 +587,18 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   yang berubah) masuk katalog tanpa menekan tombol. Di sandbox dijalankan service
   compose `scheduler` (`php artisan schedule:work`); di produksi tambahkan cron
   `* * * * * php artisan schedule:run`.
-- `products.max_cost_price` (diisi admin) dikirim sebagai `max_price` saat topup
-  (`TransactionFulfillment`), jadi harga supplier yang melonjak melewati batas itu
-  membuat transaksi ditolak dan dana pembeli dikembalikan lewat jalur refund biasa.
+- `products.max_cost_price` (diisi admin) adalah batas harga modal. Saat sinkron,
+  kenaikan harga modal (`cost_price` baru > lama) dicatat per SKU dan dikirim ke
+  WhatsApp admin lewat `App\Services\DigiflazzPriceAlert` (Fonnte; penerima dari
+  `dashboard_settings.priceAlertWhatsapp`). Pesan hanya dikirim bila ada kenaikan,
+  maksimal 15 produk dirinci per pesan. Bila `cost_price > max_cost_price`,
+  `App\Support\ProductAvailability` menandai produk **gangguan**: tetap tayang di
+  katalog (`disturbed: true`) tetapi `POST /transactions` dan
+  `POST /transactions/direct` menolak 422 sebelum saldo dipotong/tagihan dibuat.
+  `max_price` tetap dikirim saat topup sebagai lapis kedua.
   **Harga max hanya diatur di aplikasi** — daftar harga Digiflazz tidak mengirim
   nilai "harga maksimal" yang diisi di dashboard mereka (field respons hanya
-  `price` + `seller_name`), jadi jangan mencari field itu di API; `max_price` per
-  transaksi inilah yang menegakkan batasnya.
+  `price` + `seller_name`), jadi jangan mencari field itu di API.
 - **Isi `customer_no` mengikuti produk Digiflazz** (satu kolom teks; formatnya
   ditentukan seller lewat `desc` daftar harga): pulsa/data/e-wallet = nomor HP;
   token PLN = ID pelanggan/nomor meter; game = ID game/User ID, sebagian produk

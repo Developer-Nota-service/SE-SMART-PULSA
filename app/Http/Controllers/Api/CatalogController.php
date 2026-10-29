@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Support\Pricing;
+use App\Support\ProductAvailability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,7 @@ class CatalogController extends Controller
         }
 
         $rows = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'cost_price', 'max_cost_price', 'is_demo')
             ->where('active', true)
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->orderBy('category')
@@ -47,7 +48,7 @@ class CatalogController extends Controller
         }
 
         $product = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'cost_price', 'max_cost_price', 'is_demo')
             ->where('id', (int) $id)
             ->where('active', true)
             ->first();
@@ -79,6 +80,9 @@ class CatalogController extends Controller
             'price' => Pricing::unitPrice((int) $row->price, (int) $row->retail_price, $accountType),
             'retailPrice' => (int) ($row->retail_price ?: $row->price),
             'isDemo' => (bool) $row->is_demo,
+            // Harga modal supplier melewati batas admin → tampil "sedang
+            // gangguan" dan tidak bisa dibeli sampai harganya turun.
+            'disturbed' => ProductAvailability::isDisturbed($row),
         ];
     }
 }

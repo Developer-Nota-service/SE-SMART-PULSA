@@ -16,13 +16,15 @@ use Illuminate\Support\Facades\DB;
  * reseller = modal + margin (`DIGIFLAZZ_MARGIN_PERCENT`), publik = reseller + 5%,
  * keduanya dibulatkan ke atas per Rp100 seperti produk demo.
  *
- * Produk yang baru muncul di daftar Digiflazz langsung ditambahkan, dan kode
- * produk mengikuti `buyer_sku_code` supplier. Bila seller mengganti SKU sebuah
- * produk (SKU lama hilang, nama + seller sama), baris produk yang sudah ada
- * ikut diganti kodenya — id, harga jual, dan riwayat transaksinya tetap utuh.
+ * Semua produk yang ada di daftar harga Digiflazz **otomatis tayang** setelah
+ * sinkron (admin tidak perlu mengaktifkannya satu per satu). Produk yang tidak
+ * lagi dikirim Digiflazz dinonaktifkan (tidak dihapus) supaya riwayat transaksi
+ * lama tetap utuh.
  *
- * Produk yang tidak lagi dikirim Digiflazz dinonaktifkan (tidak dihapus) supaya
- * riwayat transaksi lama tetap utuh.
+ * Kenaikan harga modal dicatat dan dikirim ke WhatsApp admin lewat
+ * `DigiflazzPriceAlert`. Produk yang harga sellernya melewati
+ * `products.max_cost_price` tetap tayang tetapi tidak bisa dibeli
+ * (`App\Support\ProductAvailability`) sampai harganya turun lagi.
  *
  * Digiflazz membatasi pengecekan pricelist **maksimal 1x per 5 menit**
  * (`rc 83` "limitasi pengecekan pricelist"). Karena itu setiap tarikan menyalakan
@@ -36,8 +38,10 @@ class DigiflazzProductSync
 
     private const COOLDOWN_KEY = 'digiflazz:pricelist-cooldown';
 
-    public function __construct(private readonly DigiflazzClient $client)
-    {
+    public function __construct(
+        private readonly DigiflazzClient $client,
+        private readonly DigiflazzPriceAlert $alerts,
+    ) {
     }
 
     public function isConfigured(): bool
@@ -54,7 +58,7 @@ class DigiflazzProductSync
     }
 
     /**
-     * @return array{products: int, providers: int, active: int, skipped: int, deactivated: int, created: int, renamed: int}
+     * @return array{products: int, providers: int, active: int, skipped: int, deactivated: int, created: int, renamed: int, priceIncreases: int, alertSent: bool}
      */
     public function sync(): array
     {
@@ -69,6 +73,9 @@ class DigiflazzProductSync
         $created = 0;
         $renamed = 0;
 
+        /** @var array<string, array{name: string, sku: string, old: int, new: int, max: int}> $increases */
+        $increases = [];
+
         // Semua SKU yang dikirim Digiflazz kali ini — dipakai untuk memastikan
         // produk yang kodenya diganti memang sudah tidak ada lagi di supplier.
         $incoming = [];
@@ -81,7 +88,7 @@ class DigiflazzProductSync
             }
         }
 
-        DB::transaction(function () use ($rows, $incoming, $margin, $now, &$skus, &$providers, &$active, &$skipped, &$created, &$renamed): void {
+        DB::transaction(function () use ($rows, $incoming, $margin, $now, &$skus, &$providers, &$active, &$skipped, &$created, &$renamed, &$increases): void {
             [$bySku, $bySellerName] = $this->existingProducts();
 
             foreach ($rows as $row) {
@@ -95,8 +102,6 @@ class DigiflazzProductSync
                     continue;
                 }
 
-                $enabled = (bool) ($row['buyer_product_status'] ?? false)
-                    && (bool) ($row['seller_product_status'] ?? false);
                 $seller = $this->seller((string) ($row['seller_name'] ?? ''));
                 $name = trim((string) ($row['product_name'] ?? $sku));
 
@@ -106,14 +111,18 @@ class DigiflazzProductSync
 
                 $supplier = [
                     'category' => $category,
-                    'operator' => trim((string) ($row['brand'] ?? '')),
+                    'operator' => $this->operator((string) ($row['brand'] ?? '')),
                     'name' => $name,
                     // Petunjuk input dari seller (mis. "gabungan user_id dan
                     // zone_id") — ditampilkan di halaman beli.
                     'instruction' => $this->instruction((string) ($row['desc'] ?? '')),
                     'cost_price' => $cost,
                     'seller_name' => $seller,
-                    'active' => $enabled,
+                    // Produk yang ada di daftar harga Digiflazz langsung tayang;
+                    // status seller/buyer dari supplier tidak lagi dipakai untuk
+                    // menyembunyikan produk (permintaan pemilik toko). Produk yang
+                    // tidak sanggup dipenuhi supplier ditangani pengembalian dana.
+                    'active' => true,
                     'is_demo' => false,
                     'cost_synced_at' => $now,
                 ];
@@ -128,6 +137,8 @@ class DigiflazzProductSync
                     $renamedFrom = $this->renameCandidate($bySellerName, $seller, $name, $incoming);
 
                     if ($renamedFrom !== null) {
+                        $this->recordIncrease($increases, $renamedFrom, $sku, $name, $cost);
+
                         DB::table('products')->where('id', $renamedFrom->id)->update($supplier + ['sku' => $sku]);
 
                         unset($bySku[$renamedFrom->sku]);
@@ -139,14 +150,13 @@ class DigiflazzProductSync
                         $created++;
                     }
                 } else {
+                    $this->recordIncrease($increases, $existing, $sku, $name, $cost);
+
                     DB::table('products')->where('id', $existing->id)->update($supplier);
                 }
 
                 $skus[] = $sku;
-
-                if ($enabled) {
-                    $active++;
-                }
+                $active++;
             }
         });
 
@@ -160,6 +170,12 @@ class DigiflazzProductSync
                 ->update(['active' => false]);
         }
 
+        $alertSent = false;
+
+        if ($increases !== []) {
+            $alertSent = $this->alerts->send(array_values($increases));
+        }
+
         return [
             'products' => count($skus),
             'providers' => count($providers),
@@ -168,6 +184,30 @@ class DigiflazzProductSync
             'deactivated' => $deactivated,
             'created' => $created,
             'renamed' => $renamed,
+            'priceIncreases' => count($increases),
+            'alertSent' => $alertSent,
+        ];
+    }
+
+    /**
+     * Catat kenaikan harga modal sebuah produk (sekali per SKU per sinkron).
+     *
+     * @param  array<string, array{name: string, sku: string, old: int, new: int, max: int}>  $increases
+     */
+    private function recordIncrease(array &$increases, object $product, string $sku, string $name, int $cost): void
+    {
+        $previous = (int) ($product->cost_price ?? 0);
+
+        if ($previous <= 0 || $cost <= $previous || isset($increases[$sku])) {
+            return;
+        }
+
+        $increases[$sku] = [
+            'name' => $name,
+            'sku' => $sku,
+            'old' => $previous,
+            'new' => $cost,
+            'max' => (int) ($product->max_cost_price ?? 0),
         ];
     }
 
@@ -215,7 +255,7 @@ class DigiflazzProductSync
 
         $products = DB::table('products')
             ->where('is_demo', false)
-            ->get(['id', 'sku', 'name', 'seller_name']);
+            ->get(['id', 'sku', 'name', 'seller_name', 'cost_price', 'max_cost_price']);
 
         foreach ($products as $product) {
             $bySku[$product->sku] = $product;
@@ -275,6 +315,13 @@ class DigiflazzProductSync
         $name = trim($name);
 
         return $name === '' ? null : $name;
+    }
+
+    private function operator(string $brand): string
+    {
+        $brand = trim($brand);
+
+        return $brand === '' ? 'Lainnya' : $brand;
     }
 
     private function instruction(string $desc): ?string

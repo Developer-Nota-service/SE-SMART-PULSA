@@ -28,6 +28,8 @@ class DashboardContent
         'leaderboardLimit' => '5',
         'leaderboardPeriodDays' => '30',
         'leaderboardAccountType' => 'all',
+        // Nomor WhatsApp pemilik untuk notifikasi kenaikan harga Digiflazz.
+        'priceAlertWhatsapp' => '6281346043318',
     ];
 
     /** Pengaturan beranda yang tersimpan, sudah memakai nilai bawaan bila kosong. */
@@ -47,6 +49,7 @@ class DashboardContent
             'leaderboardAccountType' => in_array($accountType, self::ACCOUNT_TYPES, true)
                 ? $accountType
                 : 'all',
+            'priceAlertWhatsapp' => self::normalizePhone((string) $merged['priceAlertWhatsapp']),
         ];
     }
 
@@ -58,10 +61,17 @@ class DashboardContent
                 continue;
             }
 
+            $stored = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+
+            // Nomor notifikasi disimpan dalam format internasional (62...).
+            if ($key === 'priceAlertWhatsapp') {
+                $stored = self::normalizePhone($stored);
+            }
+
             DB::table('dashboard_settings')->upsert(
                 [[
                     'key' => $key,
-                    'value' => is_bool($value) ? ($value ? '1' : '0') : (string) $value,
+                    'value' => $stored,
                     'updated_at' => now(),
                 ]],
                 ['key'],
@@ -70,6 +80,27 @@ class DashboardContent
         }
 
         return self::settings();
+    }
+
+    /**
+     * Nomor WhatsApp Indonesia → format Fonnte (`62…`). Mengembalikan string
+     * kosong bila nomornya tidak valid (7-15 digit setelah awalan 62).
+     */
+    public static function normalizePhone(string $value): string
+    {
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        if ($digits === '') {
+            return '';
+        }
+
+        if (str_starts_with($digits, '0')) {
+            $digits = '62'.substr($digits, 1);
+        } elseif (str_starts_with($digits, '8')) {
+            $digits = '62'.$digits;
+        }
+
+        return preg_match('/^62\d{7,13}$/', $digits) === 1 ? $digits : '';
     }
 
     public static function banners(bool $onlyActive): array

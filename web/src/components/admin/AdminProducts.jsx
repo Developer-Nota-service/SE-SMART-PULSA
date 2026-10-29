@@ -136,6 +136,9 @@ export default function AdminProducts() {
       const extras = [
         result.created > 0 ? `${result.created} produk baru` : '',
         result.renamed > 0 ? `${result.renamed} kode produk mengikuti Digiflazz` : '',
+        result.priceIncreases > 0
+          ? `${result.priceIncreases} produk naik${result.alertSent ? ', notif WhatsApp terkirim' : ''}`
+          : '',
       ].filter(Boolean)
       setNotice(
         `Harga modal ${result.products} produk dari ${result.providers} provider diperbarui dari Digiflazz (${result.active} aktif${extras.length ? `, ${extras.join(', ')}` : ''}).`,
@@ -229,11 +232,12 @@ export default function AdminProducts() {
       <div className="card admin-card">
         <p className="admin-card__title">Harga modal Digiflazz</p>
         <p className="admin-card__sub">
-          Tarik harga modal dan provider terbaru dari seluruh seller Digiflazz. Produk baru
-          langsung ditambahkan dan kode produk mengikuti kode Digiflazz; harga jual yang sudah
-          Anda atur tidak berubah — hanya produk baru yang dihitung otomatis dari margin. Sinkron
-          juga berjalan otomatis tiap 30 menit. Harga max tiap produk dikirim ke Digiflazz sebagai
-          max_price saat transaksi, jadi tidak perlu mengaturnya lagi di dashboard Digiflazz.
+          Tarik harga modal dan provider terbaru dari seluruh seller Digiflazz. Semua produk di
+          daftar Digiflazz otomatis tayang di kategorinya, kode produk mengikuti kode Digiflazz, dan
+          harga jual yang sudah Anda atur tidak berubah — hanya produk baru yang dihitung otomatis
+          dari margin. Sinkron juga berjalan otomatis tiap 30 menit; kenaikan harga dikirim ke
+          WhatsApp admin. Bila harga supplier melewati harga max, produk ditandai gangguan dan
+          otomatis tidak bisa dibeli.
         </p>
         <button
           type="button"
@@ -317,6 +321,9 @@ export default function AdminProducts() {
                   </p>
                 </div>
                 <div className="admin-card__tags">
+                  {row.maxCostPrice && row.costPrice > row.maxCostPrice ? (
+                    <span className="badge badge--xs badge--muted">Gangguan</span>
+                  ) : null}
                   {!row.active ? (
                     <span className="badge badge--xs badge--muted">Nonaktif</span>
                   ) : row.isDemo ? (
@@ -353,7 +360,7 @@ export default function AdminProducts() {
                   Provider {row.sellerName || '—'} · margin modal {marginOverCost(row)}% · selisih{' '}
                   {marginPercent(row)}%
                   {row.maxCostPrice && row.maxCostPrice < row.costPrice
-                    ? ' · harga max di bawah modal, transaksi akan ditolak Digiflazz'
+                    ? ' · harga max di bawah modal, produk otomatis tidak bisa dibeli'
                     : ''}
                   {row.costSyncedAt ? ` · modal diperbarui ${dateTime(row.costSyncedAt)}` : ''}
                 </p>
@@ -486,7 +493,8 @@ function PriceSheet({ product, onClose, onSaved }) {
             <span className="field__hint">
               Modal Digiflazz sekarang {rupiah(product.costPrice)}
               {product.sellerName ? ` dari ${product.sellerName}` : ''}. Bila harga modal naik
-              melewati angka ini, transaksi ditolak Digiflazz dan saldo pembeli dikembalikan.
+              melewati angka ini, produk otomatis ditandai gangguan dan tidak bisa dibeli sampai
+              harganya turun lagi.
             </span>
           </label>
         ) : null}

@@ -156,6 +156,7 @@ export default function PurchasePage() {
 
   async function purchase() {
     setConfirming(false)
+    if (product.disturbed) return
 
     const payload = { productId: product.id, customerNumber, promoCode: promo?.code || undefined }
     if (isPersonal) payload.method = channel
@@ -276,6 +277,9 @@ export default function PurchasePage() {
   const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'
   const method = isPersonal ? 'midtrans' : 'balance'
   const insufficient = !isPersonal && user ? user.balance < payable : false
+  // Harga supplier melewati harga max admin: server menolak pembelian, jadi
+  // tombol bayar dimatikan dan pembeli melihat keterangan gangguan.
+  const disturbed = Boolean(product.disturbed)
 
   return (
     <div className="stack">
@@ -289,6 +293,13 @@ export default function PurchasePage() {
         <p className="section-hint">
           {product.operator} · {categoryLabel(product.category)}
         </p>
+
+        {disturbed ? (
+          <p className="form-message" role="alert">
+            Produk sedang gangguan: harga supplier melebihi harga max yang ditetapkan. Produk ini
+            tidak bisa dibeli sekarang — silakan pilih produk lain atau coba lagi nanti.
+          </p>
+        ) : null}
 
         <div className="price-row">
           <span className="price-row__label">Harga</span>
@@ -456,15 +467,17 @@ export default function PurchasePage() {
             <button
               type="submit"
               className="btn btn--primary"
-              disabled={submitting || insufficient}
+              disabled={submitting || insufficient || disturbed}
             >
               {submitting
                 ? 'Memproses…'
-                : insufficient
-                  ? 'Saldo tidak cukup'
-                  : method === 'midtrans'
-                    ? `Bayar ${rupiah(total)}`
-                    : `Konfirmasi ${rupiah(payable)}`}
+                : disturbed
+                  ? 'Produk sedang gangguan'
+                  : insufficient
+                    ? 'Saldo tidak cukup'
+                    : method === 'midtrans'
+                      ? `Bayar ${rupiah(total)}`
+                      : `Konfirmasi ${rupiah(payable)}`}
             </button>
           </div>
         </form>

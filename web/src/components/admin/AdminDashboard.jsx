@@ -34,6 +34,8 @@ export default function AdminDashboard() {
   const [editing, setEditing] = useState(null)
   const [confirming, setConfirming] = useState('')
   const [busy, setBusy] = useState(false)
+  // Nomor WhatsApp penerima notifikasi kenaikan harga Digiflazz.
+  const [alertPhone, setAlertPhone] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -50,6 +52,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Server menyimpan nomor dalam format 62…, jadi input disamakan setelah muat.
+  useEffect(() => {
+    setAlertPhone(data?.settings?.priceAlertWhatsapp || '')
+  }, [data?.settings?.priceAlertWhatsapp])
 
   const toggleActive = async (kind, row) => {
     setBusy(true)
@@ -98,7 +105,7 @@ export default function AdminDashboard() {
         settings: result.settings,
         leaderboard: result.leaderboard,
       }))
-      setNotice('Pengaturan peringkat disimpan.')
+      setNotice('Pengaturan disimpan.')
     } catch (requestError) {
       setNotice(requestError.message)
     } finally {
@@ -278,6 +285,40 @@ export default function AdminDashboard() {
             </article>
           ))
         )}
+      </section>
+
+      <section>
+        <div className="section-head">
+          <h3 className="section-title">Notifikasi WhatsApp</h3>
+          <span className="section-hint">kenaikan harga Digiflazz</span>
+        </div>
+
+        <div className="card admin-card">
+          <label className="field">
+            <span className="field__label">Nomor WhatsApp admin</span>
+            <input
+              className="input"
+              inputMode="tel"
+              placeholder="081346043318"
+              value={alertPhone}
+              disabled={busy}
+              onChange={(event) => setAlertPhone(event.target.value.replace(/[^\d+\s-]/g, ''))}
+            />
+            <span className="field__hint">
+              Setiap sinkron harga (tiap 30 menit), kenaikan harga modal produk dikirim ke nomor
+              ini lengkap dengan nama produk dan nominal lama → baru. Kosongkan untuk mematikan
+              notifikasi.
+            </span>
+          </label>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            disabled={busy}
+            onClick={() => saveSettings({ priceAlertWhatsapp: alertPhone })}
+          >
+            {busy ? 'Menyimpan…' : 'Simpan nomor'}
+          </button>
+        </div>
       </section>
 
       <section>

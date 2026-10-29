@@ -169,7 +169,19 @@ class AdminDashboardController extends Controller
             'leaderboardLimit' => ['sometimes', 'integer', 'in:'.implode(',', DashboardContent::LIMITS)],
             'leaderboardPeriodDays' => ['sometimes', 'integer', 'in:'.implode(',', DashboardContent::PERIODS)],
             'leaderboardAccountType' => ['sometimes', 'string', 'in:'.implode(',', DashboardContent::ACCOUNT_TYPES)],
+            // Nomor WhatsApp untuk notifikasi kenaikan harga Digiflazz.
+            'priceAlertWhatsapp' => ['sometimes', 'nullable', 'string', 'max:20'],
         ]);
+
+        if (array_key_exists('priceAlertWhatsapp', $data)) {
+            $raw = trim((string) ($data['priceAlertWhatsapp'] ?? ''));
+
+            if ($raw !== '' && DashboardContent::normalizePhone($raw) === '') {
+                throw ValidationException::withMessages([
+                    'priceAlertWhatsapp' => 'Nomor WhatsApp tidak valid. Gunakan format 08xx atau 62xx.',
+                ]);
+            }
+        }
 
         $settings = DashboardContent::saveSettings($data);
 
