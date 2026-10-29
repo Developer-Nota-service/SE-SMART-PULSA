@@ -42,7 +42,6 @@ export default function HomePage() {
       <BalanceCard account={user} />
 
       <HomeBanners banners={dashboard?.banners} />
-      <HomePromos promos={dashboard?.promos} />
 
       <section>
         <div className="section-head">
@@ -79,6 +78,8 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <HomePromos promos={dashboard?.promos} />
     </div>
   )
 }
