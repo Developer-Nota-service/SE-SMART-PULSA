@@ -13,6 +13,13 @@ const marginPercent = (row) =>
 const marginOverCost = (row) =>
   row.costPrice > 0 ? Math.round(((row.price - row.costPrice) / row.costPrice) * 100) : null
 
+/** Sisa jeda tarik harga Digiflazz: "4:32" atau "45 dtk". */
+const formatWait = (seconds) => {
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return minutes > 0 ? `${minutes}:${String(rest).padStart(2, '0')}` : `${rest} dtk`
+}
+
 /**
  * Halaman "Harga" konsol admin: harga reseller (`price`) dan harga publik
  * (`retailPrice`) tiap produk, bisa diubah satu per satu atau digeser massal
@@ -37,6 +44,14 @@ export default function AdminProducts() {
 
   const [syncBusy, setSyncBusy] = useState(false)
   const [syncError, setSyncError] = useState('')
+  // Digiflazz membatasi pricelist 1x per 5 menit; server mengirim sisa jeda.
+  const [syncCooldown, setSyncCooldown] = useState(0)
+
+  useEffect(() => {
+    if (syncCooldown <= 0) return undefined
+    const timer = setTimeout(() => setSyncCooldown((left) => left - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [syncCooldown])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -87,11 +102,17 @@ export default function AdminProducts() {
     setNotice('')
     try {
       const result = await api.adminSyncDigiflazz()
+      const extras = [
+        result.created > 0 ? `${result.created} produk baru` : '',
+        result.renamed > 0 ? `${result.renamed} kode produk mengikuti Digiflazz` : '',
+      ].filter(Boolean)
       setNotice(
-        `Harga modal ${result.products} produk dari ${result.providers} provider diperbarui dari Digiflazz (${result.active} aktif).`,
+        `Harga modal ${result.products} produk dari ${result.providers} provider diperbarui dari Digiflazz (${result.active} aktif${extras.length ? `, ${extras.join(', ')}` : ''}).`,
       )
       await load()
     } catch (requestError) {
+      const wait = Number(requestError.data?.retryAfterSeconds) || 0
+      if (wait > 0) setSyncCooldown(wait)
       setSyncError(requestError.message)
     } finally {
       setSyncBusy(false)
@@ -149,18 +170,23 @@ export default function AdminProducts() {
       <div className="card admin-card">
         <p className="admin-card__title">Harga modal Digiflazz</p>
         <p className="admin-card__sub">
-          Tarik harga modal dan provider terbaru dari seluruh seller Digiflazz. Harga jual yang
-          sudah Anda atur tidak berubah — hanya produk baru yang dihitung otomatis dari margin.
-          Harga max tiap produk dikirim ke Digiflazz sebagai max_price saat transaksi, jadi tidak
-          perlu mengaturnya lagi di dashboard Digiflazz.
+          Tarik harga modal dan provider terbaru dari seluruh seller Digiflazz. Produk baru
+          langsung ditambahkan dan kode produk mengikuti kode Digiflazz; harga jual yang sudah
+          Anda atur tidak berubah — hanya produk baru yang dihitung otomatis dari margin. Sinkron
+          juga berjalan otomatis tiap 30 menit. Harga max tiap produk dikirim ke Digiflazz sebagai
+          max_price saat transaksi, jadi tidak perlu mengaturnya lagi di dashboard Digiflazz.
         </p>
         <button
           type="button"
           className="btn btn--primary btn--sm"
-          disabled={syncBusy}
+          disabled={syncBusy || syncCooldown > 0}
           onClick={syncPrices}
         >
-          {syncBusy ? 'Menarik harga…' : 'Ambil harga terbaru'}
+          {syncBusy
+            ? 'Menarik harga…'
+            : syncCooldown > 0
+              ? `Coba lagi ${formatWait(syncCooldown)}`
+              : 'Ambil harga terbaru'}
         </button>
         {syncError ? (
           <p className="field__error" role="alert">

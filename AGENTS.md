@@ -12,6 +12,9 @@ di `web/`. Satu domain: Laravel melayani API `/api/v1` dan React hasil build di 
 - `db` — Postgres 16, volume `pgdata`. Data backend Node lama tetap ada di database
   `pulsa`; Laravel memakai database sendiri `pulsa_laravel` (dibuat `dbsetup`).
 - `dbsetup` — one-shot: `CREATE DATABASE pulsa_laravel` bila belum ada.
+- `scheduler` — image dev Laravel yang sama, `php artisan schedule:work` (sinkron
+  produk Digiflazz tiap 30 menit). Tidak melayani port; healthcheck-nya
+  `php artisan schedule:list`.
 
 Browser hanya bicara ke port 3000; Vite mem-proxy `/api` → `http://laravel:8000`
 (single origin, cookie sesi terkirim).
@@ -131,9 +134,12 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `0`/`null` = tanpa batas),
   `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
   (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk),
-  `POST /admin/products/sync-digiflazz` → `{products,providers,active,skipped,deactivated}`:
-  tarik harga modal terbaru dari Digiflazz (harga jual admin tidak ditimpa). 422
-  bila kredensial kosong, 502 bila Digiflazz menolak (mis. limit pricelist).
+  `POST /admin/products/sync-digiflazz` → `{products,providers,active,skipped,
+  deactivated,created,renamed,lastSyncedAt}`: tarik harga modal terbaru dari
+  Digiflazz (harga jual admin tidak ditimpa), produk baru langsung ditambahkan,
+  dan kode produk mengikuti Digiflazz. 422 bila kredensial kosong, 429 dengan
+  `{retryAfterSeconds}` selama jeda 5 menit (batas pricelist Digiflazz), 502 bila
+  Digiflazz menolak beserta pesan aslinya.
   Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
   pratinjau peringkat), `POST /admin/banners`, `PATCH|DELETE /admin/banners/{id}`,
   `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}`,
@@ -421,8 +427,23 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   Harga reseller = harga supplier + margin, harga publik +5%, keduanya dibulatkan
   ke atas per Rp100 — **hanya untuk produk baru**: harga jual produk yang sudah ada
   dipertahankan supaya sinkron tidak menghapus harga yang diatur admin di konsol.
+  Produk baru langsung dibuat `is_demo = false` dan aktif sesuai status supplier.
+  Bila seller mengganti SKU sebuah produk (SKU lama hilang, `seller_name` + nama
+  sama), baris produk lama **ikut berganti kode** mengikuti `buyer_sku_code` —
+  id, harga jual, dan riwayat transaksinya tetap utuh. Kalau kandidatnya ambigu
+  (lebih dari satu produk cocok), produk baru dibuat alih-alih mengganti kode.
   SKU yang hilang dari daftar dinonaktifkan (tidak dihapus) agar riwayat transaksi
   tetap utuh.
+- **Batas pricelist**: Digiflazz hanya mengizinkan pengecekan pricelist 1x per 5
+  menit (`rc 83`, pesan "limitasi pengecekan pricelist"). `DigiflazzProductSync`
+  menyimpan jeda 5 menit di cache (`cooldownRemaining()`); endpoint admin menjawab
+  429 `{retryAfterSeconds}` dan tombol "Ambil harga terbaru" menampilkan hitungan
+  mundur. Command `digiflazz:sync-products` melewati tarikan bila jeda masih aktif.
+- **Sinkron otomatis**: `routes/console.php` menjadwalkan
+  `digiflazz:sync-products` tiap 30 menit, jadi produk baru di Digiflazz (dan kode
+  yang berubah) masuk katalog tanpa menekan tombol. Di sandbox dijalankan service
+  compose `scheduler` (`php artisan schedule:work`); di produksi tambahkan cron
+  `* * * * * php artisan schedule:run`.
 - `products.max_cost_price` (diisi admin) dikirim sebagai `max_price` saat topup
   (`TransactionFulfillment`), jadi harga supplier yang melonjak melewati batas itu
   membuat transaksi ditolak dan dana pembeli dikembalikan lewat jalur refund biasa.

@@ -796,6 +796,20 @@ class AdminController extends Controller
         return max(0, (int) round($next));
     }
 
+    /** "4 menit 20 detik" / "45 detik" untuk pesan jeda tarik harga. */
+    private static function humanDuration(int $seconds): string
+    {
+        $seconds = max(1, $seconds);
+        $minutes = intdiv($seconds, 60);
+        $rest = $seconds % 60;
+
+        if ($minutes === 0) {
+            return $rest.' detik';
+        }
+
+        return $rest === 0 ? $minutes.' menit' : $minutes.' menit '.$rest.' detik';
+    }
+
     /**
      * Tarik daftar harga terbaru dari Digiflazz: memperbarui harga modal
      * (`cost_price`) dan provider tiap produk. Harga jual yang sudah diatur admin
@@ -809,6 +823,18 @@ class AdminController extends Controller
             ], 422);
         }
 
+        // Digiflazz membatasi pricelist 1x per 5 menit. Tanpa penjagaan ini,
+        // menekan tombol berulang hanya menghasilkan error dari supplier.
+        $wait = $sync->cooldownRemaining();
+
+        if ($wait > 0) {
+            return response()->json([
+                'message' => 'Harga Digiflazz baru saja ditarik. Coba lagi dalam '
+                    .self::humanDuration($wait).'.',
+                'data' => ['retryAfterSeconds' => $wait],
+            ], 429);
+        }
+
         // Daftar harga bisa besar; jangan biarkan batas waktu PHP memutusnya.
         @set_time_limit(120);
 
@@ -819,8 +845,12 @@ class AdminController extends Controller
 
             return response()->json([
                 'message' => 'Gagal menarik harga dari Digiflazz: '.$exception->getMessage(),
+                // Sisa jeda bila kegagalannya karena limit pricelist Digiflazz.
+                'data' => ['retryAfterSeconds' => $sync->cooldownRemaining()],
             ], 502);
         }
+
+        $result['lastSyncedAt'] = DB::table('products')->where('is_demo', false)->max('cost_synced_at');
 
         $admin = $request->attributes->get('authUser');
 
