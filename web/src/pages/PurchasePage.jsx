@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import CopyButton from '../components/CopyButton.jsx'
 import PaymentOptions from '../components/PaymentOptions.jsx'
+import ProductDetails from '../components/ProductDetails.jsx'
 import PurchaseConfirmSheet from '../components/PurchaseConfirmSheet.jsx'
 import { ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { CheckIcon } from '../components/Icons.jsx'
@@ -214,7 +215,7 @@ export default function PurchasePage() {
       </button>
 
       <section className="card">
-        <span className="badge badge--demo badge--xs">DEMO</span>
+        {product.isDemo ? <span className="badge badge--demo badge--xs">DEMO</span> : null}
         <h2 className="section-title">{product.name}</h2>
         <p className="section-hint">
           {product.operator} · {categoryLabel(product.category)}
@@ -225,12 +226,10 @@ export default function PurchasePage() {
           <span className="price-row__value">{rupiah(product.price)}</span>
         </div>
 
+        <ProductDetails product={product} />
+
         <form onSubmit={submit} noValidate>
           {voucherInject ? <p className="category-note">{VOUCHER_INJECT_NOTE}</p> : null}
-
-          {product.instruction ? (
-            <p className="category-note">Petunjuk produk: {product.instruction}</p>
-          ) : null}
 
           <label className="field">
             <span className="field__label">{fieldLabel}</span>

@@ -463,6 +463,77 @@ p {
   margin-top: 0;
 }
 
+/* Keterangan produk di halaman beli (dari `desc` seller Digiflazz). */
+.product-notes {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7f9fc;
+  padding: 11px 13px;
+  margin: 10px 0 14px;
+}
+
+.product-notes__title {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.product-notes__specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 9px;
+  padding: 0;
+  list-style: none;
+}
+
+.product-notes__spec {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px 9px;
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  font-size: 10.5px;
+}
+
+.product-notes__label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.product-notes__value {
+  color: #0f2744;
+  font-weight: 800;
+}
+
+.product-notes__desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #334155;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.product-notes__warn {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.65;
+  color: #8a4b08;
+}
+
+.product-notes__source {
+  margin: 9px 0 0;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
 .chip__count {
   margin-left: 5px;
   font-weight: 600;

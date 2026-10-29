@@ -483,8 +483,12 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   aplikasi sendiri dari `sn`); voucher inject = nomor voucher kosong. Validasi per
   kategori ada di `destinationError()` — produk game menerima huruf dan pemisah
   (`|`, titik, `#`), bukan hanya angka. `desc` seller disimpan di
-  `products.instruction` saat sync dan tampil sebagai "Petunjuk produk" di halaman
-  beli.
+  `products.instruction` dan **ditulis ulang setiap sinkron** (termasuk saat seller
+  produk berganti), lalu tampil di halaman beli sebagai blok **Keterangan produk**
+  (`web/src/components/ProductDetails.jsx`). Untuk kategori `data` blok itu juga
+  merangkum kuota / masa aktif / jaringan dari nama + keterangan supplier dan
+  menambahkan peringatan soal kuota lokal/zona serta jam pemakaian; keterangan
+  asli supplier tetap ditampilkan utuh di bawahnya (`white-space: pre-line`).
 - `allow_dot: true` dikirim otomatis bila `customer_no` berisi titik (aturan resmi
   Digiflazz supaya seller non-Jabber tidak menolak).
 - Daftar harga dibatasi frekuensinya; balasan limit berupa `data: {rc, message}`,
