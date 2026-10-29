@@ -7,11 +7,13 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Notifikasi WhatsApp ke admin saat sinkron Digiflazz menemukan kenaikan
- * harga modal. Nomor tujuan diatur di konsol admin (`dashboard_settings`
- * key `priceAlertWhatsapp`, default nomor pemilik).
+ * harga modal atau produk yang baru berstatus gangguan (harga modal seller
+ * melewati `products.max_cost_price`, jadi produk tidak bisa dibeli). Nomor
+ * tujuan diatur di konsol admin (`dashboard_settings` key
+ * `priceAlertWhatsapp`, default nomor pemilik).
  *
- * Pesan hanya dikirim bila memang ada produk yang naik, supaya kuota Fonnte
- * tidak terpakai setiap 30 menit.
+ * Pesan hanya dikirim bila memang ada perubahan, supaya kuota Fonnte tidak
+ * terpakai setiap 30 menit.
  */
 class DigiflazzPriceAlert
 {
@@ -31,24 +33,52 @@ class DigiflazzPriceAlert
             return false;
         }
 
+        return $this->deliver(
+            $this->message($increases),
+            'Notifikasi kenaikan harga Digiflazz',
+            count($increases),
+        );
+    }
+
+    /**
+     * Produk yang baru berstatus gangguan: harga modal seller melewati harga max
+     * modal, sehingga produk tetap tayang tetapi tidak bisa dibeli.
+     *
+     * @param  list<array{name: string, sku: string, cost: int, max: int}>  $products
+     */
+    public function sendDisturbed(array $products): bool
+    {
+        if ($products === []) {
+            return false;
+        }
+
+        return $this->deliver(
+            $this->disturbedMessage($products),
+            'Notifikasi produk gangguan Digiflazz',
+            count($products),
+        );
+    }
+
+    private function deliver(string $message, string $context, int $count): bool
+    {
         $phone = (string) DashboardContent::settings()['priceAlertWhatsapp'];
 
         if ($phone === '') {
-            Log::info('Notifikasi kenaikan harga Digiflazz tidak dikirim: nomor WhatsApp admin kosong.');
+            Log::info($context.' tidak dikirim: nomor WhatsApp admin kosong.');
 
             return false;
         }
 
         try {
-            $sent = $this->fonnte->send($phone, $this->message($increases));
+            $sent = $this->fonnte->send($phone, $message);
         } catch (\Throwable $exception) {
-            Log::warning('Notifikasi kenaikan harga Digiflazz gagal: '.$exception->getMessage());
+            Log::warning($context.' gagal: '.$exception->getMessage());
 
             return false;
         }
 
-        Log::info('Notifikasi kenaikan harga Digiflazz', [
-            'products' => count($increases),
+        Log::info($context, [
+            'products' => $count,
             'sent' => $sent,
         ]);
 
@@ -91,6 +121,41 @@ class DigiflazzPriceAlert
 
         $lines[] = '';
         $lines[] = 'Total '.count($increases).' produk naik. Harga dicek otomatis tiap 30 menit.';
+
+        return implode(PHP_EOL, $lines);
+    }
+
+    /**
+     * @param  list<array{name: string, sku: string, cost: int, max: int}>  $products
+     */
+    private function disturbedMessage(array $products): string
+    {
+        $lines = [
+            '🚫 *Produk gangguan — tidak bisa dibeli*',
+            now()->timezone('Asia/Makassar')->format('d/m/Y H:i').' WITA',
+            '',
+        ];
+
+        foreach (array_slice($products, 0, self::MAX_ITEMS) as $index => $row) {
+            $lines[] = sprintf(
+                '%d. %s (%s)%s   modal Rp%s > max Rp%s (+Rp%s)',
+                $index + 1,
+                $row['name'],
+                $row['sku'],
+                PHP_EOL,
+                $this->rupiah($row['cost']),
+                $this->rupiah($row['max']),
+                $this->rupiah($row['cost'] - $row['max']),
+            );
+        }
+
+        if (count($products) > self::MAX_ITEMS) {
+            $lines[] = '…dan '.(count($products) - self::MAX_ITEMS).' produk lainnya.';
+        }
+
+        $lines[] = '';
+        $lines[] = 'Total '.count($products)
+            .' produk berstatus gangguan. Naikkan harga max modal atau turunkan harga agar bisa dibeli lagi.';
 
         return implode(PHP_EOL, $lines);
     }

@@ -305,9 +305,9 @@ export default function AdminDashboard() {
               onChange={(event) => setAlertPhone(event.target.value.replace(/[^\d+\s-]/g, ''))}
             />
             <span className="field__hint">
-              Setiap sinkron harga (tiap 30 menit), kenaikan harga modal produk dikirim ke nomor
-              ini lengkap dengan nama produk dan nominal lama → baru. Kosongkan untuk mematikan
-              notifikasi.
+              Setiap sinkron harga (tiap 30 menit), kenaikan harga modal produk dan produk yang
+              berstatus gangguan (modal melewati harga max) dikirim ke nomor ini lengkap dengan
+              nama produk dan nominalnya. Kosongkan untuk mematikan notifikasi.
             </span>
           </label>
           <button

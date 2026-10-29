@@ -163,11 +163,14 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
   (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk),
   `POST /admin/products/sync-digiflazz` → `{products,providers,active,skipped,
-  deactivated,created,renamed,priceIncreases,alertSent,lastSyncedAt}`: tarik harga
+  deactivated,created,renamed,priceIncreases,alertSent,disturbed,
+  disturbanceAlertSent,lastSyncedAt}`: tarik harga
   modal terbaru dari Digiflazz (harga jual admin tidak ditimpa), semua produk
   Digiflazz otomatis tayang di kategorinya, produk baru langsung ditambahkan, kode
   produk mengikuti Digiflazz, dan kenaikan harga dikirim ke WhatsApp admin
-  (`priceIncreases` = jumlah produk naik, `alertSent` = pesan terkirim). 422 bila
+  (`priceIncreases` = jumlah produk naik, `alertSent` = pesan terkirim;
+  `disturbed` = jumlah produk baru berstatus gangguan,
+  `disturbanceAlertSent` = pesan gangguan terkirim). 422 bila
   kredensial kosong, 429 dengan
   `{retryAfterSeconds}` selama jeda 5 menit (batas pricelist Digiflazz), 502 bila
   Digiflazz menolak beserta pesan aslinya.
@@ -178,7 +181,8 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `PATCH /admin/dashboard-settings`
   `{leaderboardEnabled?,leaderboardLimit?,leaderboardPeriodDays?,leaderboardAccountType?,priceAlertWhatsapp?}`
   (`leaderboardAccountType`: `all|reseller|personal`; `priceAlertWhatsapp` = nomor
-  WhatsApp notifikasi kenaikan harga, `08xx`/`62xx`, dikosongkan untuk mematikan).
+  WhatsApp notifikasi kenaikan harga dan produk gangguan, `08xx`/`62xx`,
+  dikosongkan untuk mematikan).
   Kredensial integrasi (API key): `GET /admin/integrations` →
   `{groups: [{key,label,description,fields:[{key,label,type,hint,options,
   configured,source,value}]}]}` (`source`: `dashboard`|`env`|`unset`; nilai
@@ -595,8 +599,13 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   kenaikan lebih dari Rp100 menandai produk gangguan. Saat sinkron,
   kenaikan harga modal (`cost_price` baru > lama) dicatat per SKU dan dikirim ke
   WhatsApp admin lewat `App\Services\DigiflazzPriceAlert` (Fonnte; penerima dari
-  `dashboard_settings.priceAlertWhatsapp`). Pesan hanya dikirim bila ada kenaikan,
-  maksimal 15 produk dirinci per pesan. Bila `cost_price > max_cost_price`,
+  `dashboard_settings.priceAlertWhatsapp`). Produk yang **baru** berstatus gangguan
+  (sebelumnya bisa dibeli, sekarang `cost_price > max_cost_price`) juga dicatat dan
+  dikirim lewat `sendDisturbed()` sebagai pesan terpisah — produk yang sudah
+  gangguan sejak sinkron sebelumnya tidak dikirimi ulang. Pesan hanya dikirim bila
+  ada perubahan, maksimal 15 produk dirinci per pesan; hasil sync memuat
+  `disturbed` (jumlah produk baru gangguan) dan `disturbanceAlertSent`. Bila
+  `cost_price > max_cost_price`,
   `App\Support\ProductAvailability` menandai produk **gangguan**: tetap tayang di
   katalog (`disturbed: true`) tetapi `POST /transactions` dan
   `POST /transactions/direct` menolak 422 sebelum saldo dipotong/tagihan dibuat.

@@ -139,6 +139,9 @@ export default function AdminProducts() {
         result.priceIncreases > 0
           ? `${result.priceIncreases} produk naik${result.alertSent ? ', notif WhatsApp terkirim' : ''}`
           : '',
+        result.disturbed > 0
+          ? `${result.disturbed} produk gangguan${result.disturbanceAlertSent ? ', notif WhatsApp terkirim' : ''}`
+          : '',
       ].filter(Boolean)
       setNotice(
         `Harga modal ${result.products} produk dari ${result.providers} provider diperbarui dari Digiflazz (${result.active} aktif${extras.length ? `, ${extras.join(', ')}` : ''}).`,

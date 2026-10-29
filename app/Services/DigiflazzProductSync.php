@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\ProductAvailability;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -26,9 +27,10 @@ use Illuminate\Support\Facades\DB;
  * seller-nya berganti. Batas yang sudah ada tidak ikut naik saat harga modal
  * naik/turun, jadi kenaikan lebih dari Rp100 membuat produk berstatus gangguan.
  * Kenaikan harga modal dicatat dan dikirim ke WhatsApp admin lewat
- * `DigiflazzPriceAlert`. Produk yang harga sellernya melewati
- * `products.max_cost_price` tetap tayang tetapi tidak bisa dibeli
- * (`App\Support\ProductAvailability`) sampai harganya turun lagi.
+ * `DigiflazzPriceAlert`, begitu pula produk yang baru masuk status gangguan.
+ * Produk yang harga sellernya melewati `products.max_cost_price` tetap tayang
+ * tetapi tidak bisa dibeli (`App\Support\ProductAvailability`) sampai harganya
+ * turun lagi.
  *
  * Digiflazz membatasi pengecekan pricelist **maksimal 1x per 5 menit**
  * (`rc 83` "limitasi pengecekan pricelist"). Karena itu setiap tarikan menyalakan
@@ -69,7 +71,7 @@ class DigiflazzProductSync
     }
 
     /**
-     * @return array{products: int, providers: int, active: int, skipped: int, deactivated: int, created: int, renamed: int, priceIncreases: int, alertSent: bool}
+     * @return array{products: int, providers: int, active: int, skipped: int, deactivated: int, created: int, renamed: int, priceIncreases: int, alertSent: bool, disturbed: int, disturbanceAlertSent: bool}
      */
     public function sync(): array
     {
@@ -87,6 +89,9 @@ class DigiflazzProductSync
         /** @var array<string, array{name: string, sku: string, old: int, new: int, max: int}> $increases */
         $increases = [];
 
+        /** @var array<string, array{name: string, sku: string, cost: int, max: int}> $disturbed */
+        $disturbed = [];
+
         // Semua SKU yang dikirim Digiflazz kali ini — dipakai untuk memastikan
         // produk yang kodenya diganti memang sudah tidak ada lagi di supplier.
         $incoming = [];
@@ -99,7 +104,7 @@ class DigiflazzProductSync
             }
         }
 
-        DB::transaction(function () use ($rows, $incoming, $margin, $now, &$skus, &$providers, &$active, &$skipped, &$created, &$renamed, &$increases): void {
+        DB::transaction(function () use ($rows, $incoming, $margin, $now, &$skus, &$providers, &$active, &$skipped, &$created, &$renamed, &$increases, &$disturbed): void {
             [$bySku, $bySellerName] = $this->existingProducts();
 
             foreach ($rows as $row) {
@@ -148,11 +153,14 @@ class DigiflazzProductSync
                     $renamedFrom = $this->renameCandidate($bySellerName, $seller, $name, $incoming);
 
                     if ($renamedFrom !== null) {
+                        $max = $this->maxCostPrice($renamedFrom, $seller, $cost);
+
                         $this->recordIncrease($increases, $renamedFrom, $sku, $name, $cost);
+                        $this->recordDisturbance($disturbed, $renamedFrom, $sku, $name, $cost, $max);
 
                         DB::table('products')->where('id', $renamedFrom->id)->update($supplier + [
                             'sku' => $sku,
-                            'max_cost_price' => $this->maxCostPrice($renamedFrom, $seller, $cost),
+                            'max_cost_price' => $max,
                         ]);
 
                         unset($bySku[$renamedFrom->sku]);
@@ -167,10 +175,13 @@ class DigiflazzProductSync
                         $created++;
                     }
                 } else {
+                    $max = $this->maxCostPrice($existing, $seller, $cost);
+
                     $this->recordIncrease($increases, $existing, $sku, $name, $cost);
+                    $this->recordDisturbance($disturbed, $existing, $sku, $name, $cost, $max);
 
                     DB::table('products')->where('id', $existing->id)->update($supplier + [
-                        'max_cost_price' => $this->maxCostPrice($existing, $seller, $cost),
+                        'max_cost_price' => $max,
                     ]);
                 }
 
@@ -195,6 +206,14 @@ class DigiflazzProductSync
             $alertSent = $this->alerts->send(array_values($increases));
         }
 
+        // Produk yang baru kehilangan batas harga max-nya diberitahukan terpisah
+        // supaya admin langsung tahu produk mana yang berhenti bisa dibeli.
+        $disturbanceAlertSent = false;
+
+        if ($disturbed !== []) {
+            $disturbanceAlertSent = $this->alerts->sendDisturbed(array_values($disturbed));
+        }
+
         return [
             'products' => count($skus),
             'providers' => count($providers),
@@ -205,6 +224,8 @@ class DigiflazzProductSync
             'renamed' => $renamed,
             'priceIncreases' => count($increases),
             'alertSent' => $alertSent,
+            'disturbed' => count($disturbed),
+            'disturbanceAlertSent' => $disturbanceAlertSent,
         ];
     }
 
@@ -227,6 +248,30 @@ class DigiflazzProductSync
             'old' => $previous,
             'new' => $cost,
             'max' => (int) ($product->max_cost_price ?? 0),
+        ];
+    }
+
+    /**
+     * Catat produk yang **baru** berstatus gangguan, yaitu yang sebelumnya masih
+     * bisa dibeli lalu harga modal seller melewati harga max modal.
+     *
+     * @param  array<string, array{name: string, sku: string, cost: int, max: int}>  $disturbed
+     */
+    private function recordDisturbance(array &$disturbed, object $product, string $sku, string $name, int $cost, int $max): void
+    {
+        if (ProductAvailability::isDisturbed($product) || isset($disturbed[$sku])) {
+            return;
+        }
+
+        if ($cost <= 0 || $max <= 0 || $cost <= $max) {
+            return;
+        }
+
+        $disturbed[$sku] = [
+            'name' => $name,
+            'sku' => $sku,
+            'cost' => $cost,
+            'max' => $max,
         ];
     }
 

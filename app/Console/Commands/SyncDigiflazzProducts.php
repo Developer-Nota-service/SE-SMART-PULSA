@@ -52,6 +52,14 @@ class SyncDigiflazzProducts extends Command
             $result['deactivated'],
         ));
 
+        if ($result['disturbed'] > 0) {
+            $this->info(sprintf(
+                '%d produk berstatus gangguan (tidak bisa dibeli)%s.',
+                $result['disturbed'],
+                $result['disturbanceAlertSent'] ? ', notif WhatsApp terkirim' : '',
+            ));
+        }
+
         return self::SUCCESS;
     }
 }
