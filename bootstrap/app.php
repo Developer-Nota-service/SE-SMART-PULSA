@@ -21,7 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Di belakang reverse proxy hosting, IP klien hanya terbaca benar bila
         // proxy-nya dipercaya (rate limit & riwayat login memakai IP). Kosong =
-        // tidak ada proxy yang dipercaya (perilaku default Laravel).
+        // tidak ada proxy yang dipercaya (perilaku default Laravel). Pakai `*`
+        // bila hosting menerminasi TLS di proxy, supaya URL yang dibuat dari
+        // X-Forwarded-Proto (redirect `/` → `/app`) memakai https.
         $trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
 
         if ($trustedProxies !== '') {

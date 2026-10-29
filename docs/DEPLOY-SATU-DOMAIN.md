@@ -96,6 +96,10 @@ DIGIFLAZZ_MARGIN_PERCENT=5
 > ada (seeder tidak menghapusnya). Netralkan sekali sebelum go-live:
 > `UPDATE users SET password_hash = encode(gen_random_bytes(32), 'hex'), balance = 0 WHERE email = 'demo@sesmartpulsa.id';`
 
+Catatan: `APP_URL` harus domain final (dengan `https://`). Redirect `/` → `/app`
+mengikuti skema request berkat `TRUSTED_PROXIES`, jadi jangan hapus baris itu
+selama TLS masih diterminasi di proxy hosting.
+
 Alternatif: isi `DATABASE_URL` saja (format `postgres://USER:PASSWORD@HOST:5432/DB`).
 
 ### Midtrans (deposit & bayar langsung)
@@ -159,6 +163,29 @@ docker run -d -p 80:80 \
 ```
 
 Cek log container: harus muncul `INFO Running migrations.` lalu Apache menyala.
+
+## Pasang domain (DNS)
+
+Repo tidak menyimpan domain — pengikatan domain ada di dashboard hosting + DNS,
+jadi langkah ini butuh akses akun pemilik:
+
+1. DockHosting → project `se-smart-pulsa` → tab **Domains**, tambahkan domain
+   (mis. `sesmartpulsa.id`) dan catat target (IP/hostname) yang ditampilkan.
+2. Di panel DNS registrar:
+
+   | Tipe | Nama | Nilai |
+   | --- | --- | --- |
+   | `A` | `@` | IP target dari hosting |
+   | `CNAME` | `www` | hostname project di hosting |
+
+3. Cek propagasi: `dig +short sesmartpulsa.id` → harus IP hosting. Lalu aktifkan
+   **SSL/HTTPS** di tab Domains (Let's Encrypt) sampai `https://` valid —
+   `COOKIE_SECURE=1` butuh HTTPS atau cookie login tidak terkirim.
+4. Set `APP_URL=https://sesmartpulsa.id` di tab **Environment**, redeploy, lalu
+   jalankan checklist di bawah.
+
+Kalau domain sudah terpasang di hosting, cukup pastikan `APP_URL` sama persis
+dengan domain tersebut (skema + host, tanpa `/` di akhir).
 
 ## Cek setelah deploy
 
