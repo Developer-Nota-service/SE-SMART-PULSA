@@ -91,6 +91,14 @@ export default function OrderDetailSheet({ order, onClose }) {
               <StatusBadge status={order.status} />
             </span>
           </div>
+          {order.discountAmount > 0 ? (
+            <div className="row">
+              <span className="row__label">
+                Potongan promo{order.promoCode ? ` (${order.promoCode})` : ''}
+              </span>
+              <span className="row__value">−{rupiah(order.discountAmount)}</span>
+            </div>
+          ) : null}
           <div className="row row--total">
             <span className="row__label">Total bayar</span>
             <span className="row__value">{rupiah(order.amount)}</span>

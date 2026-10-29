@@ -12,6 +12,7 @@ export default function PurchaseConfirmSheet({
   customerNumber,
   voucherInject,
   amount,
+  promo,
   methodLabel,
   onConfirm,
   onClose,
@@ -56,6 +57,12 @@ export default function PurchaseConfirmSheet({
             </span>
             <span className="row__value">{customerNumber}</span>
           </div>
+          {promo?.discount > 0 ? (
+            <div className="row">
+              <span className="row__label">Potongan promo {promo.code}</span>
+              <span className="row__value">−{rupiah(promo.discount)}</span>
+            </div>
+          ) : null}
           <div className="row row--total">
             <span className="row__label">Total bayar</span>
             <span className="row__value">{rupiah(amount)}</span>

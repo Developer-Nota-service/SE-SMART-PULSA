@@ -39,6 +39,12 @@ export default function PurchasePage() {
   const [submitting, setSubmitting] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState(null)
+  // Kode promo diperiksa server sebelum bayar supaya potongan yang terlihat
+  // sama dengan yang nanti ditagih (server menghitung ulang saat transaksi).
+  const [promoCode, setPromoCode] = useState('')
+  const [promo, setPromo] = useState(null)
+  const [promoError, setPromoError] = useState('')
+  const [checkingPromo, setCheckingPromo] = useState(false)
   const idempotencyKey = useRef(newIdempotencyKey())
 
   // Voucher inject tidak dikirim ke email: nomor voucher kosong pembeli itulah
@@ -48,6 +54,11 @@ export default function PurchasePage() {
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError('')
+    // Produk berganti: buang hasil/promo produk sebelumnya.
+    setResult(null)
+    setPromo(null)
+    setPromoCode('')
+    setPromoError('')
     try {
       setProduct(await api.product(productId))
     } catch (requestError) {
@@ -92,10 +103,34 @@ export default function PurchasePage() {
     setConfirming(true)
   }
 
+  async function applyPromo() {
+    const code = promoCode.trim()
+    if (!code || !product) return
+
+    setCheckingPromo(true)
+    setPromoError('')
+    try {
+      const data = await api.validatePromo({ code, productId: product.id })
+      setPromo(data)
+      setPromoCode(data.code)
+    } catch (requestError) {
+      setPromo(null)
+      setPromoError(requestError.errors?.promoCode?.[0] || requestError.message)
+    } finally {
+      setCheckingPromo(false)
+    }
+  }
+
+  function removePromo() {
+    setPromo(null)
+    setPromoCode('')
+    setPromoError('')
+  }
+
   async function purchase() {
     setConfirming(false)
 
-    const payload = { productId: product.id, customerNumber }
+    const payload = { productId: product.id, customerNumber, promoCode: promo?.code || undefined }
 
     setSubmitting(true)
     try {
@@ -204,9 +239,11 @@ export default function PurchasePage() {
       : `Pastikan ${emailTarget ? 'email' : 'nomor'} benar. Transaksi yang sudah diproses tidak dapat dibatalkan.`
   // Server mengirim `price` sesuai tipe akun (reseller atau pribadi).
   const unitPrice = product.price
+  const discount = promo?.discount || 0
+  const payable = promo?.total ?? unitPrice
   const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'
   const method = isPersonal ? 'midtrans' : 'balance'
-  const insufficient = !isPersonal && user ? user.balance < unitPrice : false
+  const insufficient = !isPersonal && user ? user.balance < payable : false
 
   return (
     <div className="stack">
@@ -225,6 +262,19 @@ export default function PurchasePage() {
           <span className="price-row__label">Harga</span>
           <span className="price-row__value">{rupiah(product.price)}</span>
         </div>
+
+        {promo ? (
+          <>
+            <div className="info-row">
+              <span className="info-row__label">Promo {promo.code}</span>
+              <span className="info-row__value">−{rupiah(discount)}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-row__label">Total setelah promo</span>
+              <span className="info-row__value">{rupiah(payable)}</span>
+            </div>
+          </>
+        ) : null}
 
         <ProductDetails product={product} />
 
@@ -263,6 +313,52 @@ export default function PurchasePage() {
             </p>
           ) : null}
 
+          <div className="field">
+            <span className="field__label">Kode promo (opsional)</span>
+            <div className="promo-code-row">
+              <input
+                className="input"
+                value={promoCode}
+                autoComplete="off"
+                onChange={(event) => {
+                  setPromoCode(
+                    event.target.value
+                      .toUpperCase()
+                      .replace(/[^A-Z0-9 ]/g, '')
+                      .slice(0, 24),
+                  )
+                  setPromoError('')
+                }}
+                placeholder="Contoh: HEMAT10"
+              />
+              {promo ? (
+                <button type="button" className="btn btn--ghost btn--sm" onClick={removePromo}>
+                  Hapus
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn--outline btn--sm"
+                  onClick={applyPromo}
+                  disabled={checkingPromo || promoCode.trim() === ''}
+                >
+                  {checkingPromo ? 'Memeriksa…' : 'Terapkan'}
+                </button>
+              )}
+            </div>
+            {promoError ? <span className="field__error">{promoError}</span> : null}
+            {promo ? (
+              <span className="field__hint">
+                {promo.title || promo.code} · potongan {promo.discountPercent}% (
+                {rupiah(promo.discount)})
+              </span>
+            ) : (
+              <span className="field__hint">
+                Punya kode promo? Masukkan di sini sebelum menekan tombol bayar.
+              </span>
+            )}
+          </div>
+
           {isPersonal ? null : (
             <div className="info-row">
               <span className="info-row__label">Saldo Anda</span>
@@ -272,7 +368,7 @@ export default function PurchasePage() {
 
           <PaymentOptions
             method={method}
-            price={unitPrice}
+            price={payable}
             priceLabel={priceLabel}
             balance={user?.balance ?? 0}
           />
@@ -307,8 +403,8 @@ export default function PurchasePage() {
                 : insufficient
                   ? 'Saldo tidak cukup'
                   : method === 'midtrans'
-                    ? `Bayar ${rupiah(unitPrice)}`
-                    : `Konfirmasi ${rupiah(unitPrice)}`}
+                    ? `Bayar ${rupiah(payable)}`
+                    : `Konfirmasi ${rupiah(payable)}`}
             </button>
           </div>
         </form>
@@ -324,7 +420,8 @@ export default function PurchasePage() {
           product={product}
           customerNumber={customerNumber}
           voucherInject={voucherInject}
-          amount={unitPrice}
+          amount={payable}
+          promo={promo}
           methodLabel={isPersonal ? 'Midtrans (bayar langsung)' : 'Saldo'}
           onConfirm={purchase}
           onClose={() => setConfirming(false)}

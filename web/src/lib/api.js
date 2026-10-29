@@ -167,6 +167,8 @@ export const api = {
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     }),
   directPurchase: (payload) => request('/transactions/direct', { method: 'POST', body: payload }),
+  // Cek kode promo di halaman beli; server mengembalikan potongan & total akhir.
+  validatePromo: (payload) => request('/promos/validate', { method: 'POST', body: payload }),
 
   updateName: (name) => request('/profile', { method: 'PATCH', body: { name } }),
   requestContactChange: (payload) => request('/profile/contact', { method: 'POST', body: payload }),

@@ -105,17 +105,24 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /products?category=` · `GET /products/:id` — `price` adalah harga untuk tipe
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
-- `POST /transactions` `{productId,customerNumber,voucherNumber?}` + header opsional
+- `POST /promos/validate` `{code,productId}` → `{price, code, title,
+  discountPercent, discount, total}`: pemeriksaan kode promo sebelum membeli
+  (dipakai halaman beli). 404 produk tidak tersedia, 422 kode kosong/tidak
+  berlaku. Nominal selalu dihitung server dari `promos.discount_percent`.
+- `POST /transactions` `{productId,customerNumber,voucherNumber?,promoCode?}` + header opsional
   `Idempotency-Key` — **reseller saja**: bayar pakai saldo, harga reseller (akun
   pribadi ditolak 422). Untuk produk `voucher_inject`, `customerNumber` **adalah
   nomor voucher kosong** (8-20 digit), bukan email — `customer_no` inilah yang
   dikirim ke Digiflazz. `voucherNumber` masih diterima (opsional) dan diisi dari
-  `customerNumber` bila kosong.
+  `customerNumber` bila kosong. `promoCode` opsional: potongan persen dari harga
+  tipe akun, disimpan di `transactions.promo_code` + `discount_amount`; kode tidak
+  sah menjawab 422 `errors.promoCode` (bukan ditagih harga penuh).
   Produk supplier (`is_demo = false`) dibuat `pending` lalu diselesaikan Digiflazz
   (lihat "Pemenuhan transaksi (Digiflazz)"); produk demo langsung `success`
-- `POST /transactions/direct` `{productId,customerNumber,voucherNumber?}` → transaksi `pending` +
+- `POST /transactions/direct` `{productId,customerNumber,voucherNumber?,promoCode?}` → transaksi `pending` +
   `{transaction, payment:{token,redirectUrl}}` — **akun pribadi saja**: bayar langsung
-  Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo)
+  Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo). `promoCode`
+  memotong tagihan Midtrans dengan aturan yang sama seperti jalur saldo.
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
   (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap; hanya akun
   reseller — akun pribadi ditolak 422, saldonya hanya berasal dari pengembalian dana)
@@ -145,7 +152,8 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   Digiflazz menolak beserta pesan aslinya.
   Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
   pratinjau peringkat), `POST /admin/banners`, `PATCH|DELETE /admin/banners/{id}`,
-  `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}`,
+  `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}` (promo kini punya
+  `discountPercent` 0-90; > 0 mewajibkan `code`),
   `PATCH /admin/dashboard-settings`
   `{leaderboardEnabled?,leaderboardLimit?,leaderboardPeriodDays?,leaderboardAccountType?}`
   (`leaderboardAccountType`: `all|reseller|personal`).
@@ -360,9 +368,20 @@ sumber data: `app/Support/DashboardContent.php`, dipakai `DashboardController`
 
 - Tabel `banners` (judul, keterangan, `image_path`, `tone` `navy|blue|green|amber`,
   `active`, `sort_order`) dan `promos` (judul, keterangan, kode, label,
-  `valid_until`, `active`, `sort_order`). Hanya baris `active` yang dikirim ke
-  beranda; promo juga harus belum lewat `valid_until`. Urutan `sort_order` lalu
-  terbaru.
+  `discount_percent`, `valid_until`, `active`, `sort_order`). Hanya baris `active`
+  yang dikirim ke beranda; promo juga harus belum lewat `valid_until`. Urutan
+  `sort_order` lalu terbaru.
+- **Kode promo memotong harga produk.** Admin mengisi **Potongan harga (%)** di
+  sheet promo (`AdminDashboard.jsx`); `app/Support/PromoCode.php` yang memutuskan
+  kode sah (aktif, ber-kode, potongan > 0, belum lewat `valid_until`, maksimal
+  90%). Pembeli memasukkan kode di kolom **Kode promo (opsional)** pada halaman
+  beli (`PurchasePage.jsx`); tombol **Terapkan** memanggil
+  `POST /promos/validate` untuk menampilkan potongan, dan kode ikut terkirim saat
+  membeli sehingga server menghitung ulang nominalnya (potongan dibulatkan ke
+  bawah per rupiah). Nominal akhir + kode promo disimpan di transaksi dan
+  ditampilkan di detail pesanan. Kode dibandingkan tanpa peduli huruf besar/kecil
+  dan boleh mengandung spasi (mis. `HEMAT 10`); kode dengan potongan 0 hanya
+  tampil sebagai info di beranda.
 - Banner memakai **gambar** (JPG/PNG/WEBP maks 4 MB) yang diunggah admin:
   `POST /admin/banners` dan `POST /admin/banners/{id}` (multipart; PATCH tetap
   untuk ubahan JSON seperti tayang/sembunyi), field file `image`, `removeImage=1`

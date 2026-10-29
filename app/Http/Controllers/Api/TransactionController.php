@@ -7,6 +7,7 @@ use App\Services\MidtransService;
 use App\Services\TransactionFulfillment;
 use App\Support\OrderNumber;
 use App\Support\Pricing;
+use App\Support\PromoCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,8 @@ class TransactionController extends Controller
         'transactions.customer_number',
         'transactions.voucher_number',
         'transactions.amount',
+        'transactions.promo_code',
+        'transactions.discount_amount',
         'transactions.status',
         'transactions.payment_method',
         'transactions.paid_at',
@@ -98,6 +101,49 @@ class TransactionController extends Controller
     }
 
     /**
+     * Cek kode promo dari halaman beli supaya pembeli melihat potongannya
+     * sebelum menekan tombol bayar. Nominal dihitung ulang saat transaksi.
+     */
+    public function validatePromo(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('authUser');
+        $code = $this->promoCode($request->input('code'));
+
+        $product = DB::table('products')
+            ->where('id', (int) $request->input('productId'))
+            ->where('active', true)
+            ->first(['id', 'price', 'retail_price']);
+
+        if (! $product) {
+            return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        if ($code === '') {
+            return response()->json([
+                'message' => 'Masukkan kode promo.',
+                'errors' => ['promoCode' => ['Masukkan kode promo terlebih dahulu.']],
+            ], 422);
+        }
+
+        $promo = PromoCode::find($code);
+
+        if ($promo === null) {
+            return response()->json([
+                'message' => 'Kode promo tidak berlaku.',
+                'errors' => ['promoCode' => ['Kode promo tidak valid, tidak aktif, atau sudah kedaluwarsa.']],
+            ], 422);
+        }
+
+        $price = Pricing::unitPrice(
+            (int) $product->price,
+            (int) $product->retail_price,
+            (string) ($user->account_type ?? 'reseller'),
+        );
+
+        return response()->json(['data' => ['price' => $price] + PromoCode::apply($promo, $price)]);
+    }
+
+    /**
      * Price, balance and status are decided here; the client only names the
      * product and the destination number.
      */
@@ -116,6 +162,7 @@ class TransactionController extends Controller
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
         $voucherNumber = $this->voucherNumber($request->input('voucherNumber'));
+        $promoCode = $this->promoCode($request->input('promoCode'));
         $idempotencyKey = $request->header('Idempotency-Key') ?: null;
 
         if (! is_numeric($productId) || (int) $productId != $productId) {
@@ -161,7 +208,7 @@ class TransactionController extends Controller
         }
 
         try {
-            $result = DB::transaction(function () use ($user, $productId, $customerNumber, $voucherNumber, $idempotencyKey) {
+            $result = DB::transaction(function () use ($user, $productId, $customerNumber, $voucherNumber, $promoCode, $idempotencyKey) {
                 $locked = DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
                 abort_if($locked === null, 404, 'Pengguna tidak ditemukan.');
 
@@ -176,11 +223,26 @@ class TransactionController extends Controller
 
                 // Harga mengikuti tipe akun (reseller/pribadi) dan selalu
                 // ditentukan server.
-                $amount = Pricing::unitPrice(
+                $price = Pricing::unitPrice(
                     (int) $product->price,
                     (int) $product->retail_price,
                     (string) ($locked->account_type ?? 'reseller'),
                 );
+
+                // Kode promo (opsional) memotong persentase dari harga yang
+                // berlaku; kode tidak sah membatalkan transaksi, bukan diabaikan
+                // diam-diam supaya pembeli tidak tertagih harga penuh.
+                $promo = $promoCode === '' ? null : PromoCode::find($promoCode);
+
+                if ($promoCode !== '' && $promo === null) {
+                    return response()->json([
+                        'message' => 'Kode promo tidak berlaku.',
+                        'errors' => ['promoCode' => ['Kode promo tidak valid, tidak aktif, atau sudah kedaluwarsa.']],
+                    ], 422);
+                }
+
+                $applied = $promo ? PromoCode::apply($promo, $price) : null;
+                $amount = $applied['total'] ?? $price;
 
                 // Atomic charge: the balance check runs in SQL so BIGINT never
                 // reaches a floating point comparison.
@@ -195,7 +257,7 @@ class TransactionController extends Controller
 
                 $balance = (int) DB::table('users')->where('id', $user->id)->value('balance');
 
-                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $idempotencyKey, $amount) {
+                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $idempotencyKey, $amount, $applied) {
                     $id = DB::table('transactions')->insertGetId([
                         'user_id' => $user->id,
                         'product_id' => $product->id,
@@ -203,6 +265,8 @@ class TransactionController extends Controller
                         'customer_number' => $customerNumber,
                         'voucher_number' => $voucherNumber ?: null,
                         'amount' => $amount,
+                        'promo_code' => $applied['code'] ?? null,
+                        'discount_amount' => $applied['discount'] ?? 0,
                         // Produk nyata (supplier) selesai setelah Digiflazz menjawab;
                         // produk demo langsung sukses seperti sebelumnya.
                         'status' => $product->is_demo ? 'success' : 'pending',
@@ -210,7 +274,7 @@ class TransactionController extends Controller
                         'created_at' => now(),
                     ]);
 
-                    return DB::table('transactions')->find($id, ['id', 'order_number', 'customer_number', 'voucher_number', 'amount', 'status', 'created_at']);
+                    return DB::table('transactions')->find($id, ['id', 'order_number', 'customer_number', 'voucher_number', 'amount', 'promo_code', 'discount_amount', 'status', 'created_at']);
                 });
 
                 DB::table('balance_entries')->insert([
@@ -263,6 +327,8 @@ class TransactionController extends Controller
                     'customer_number' => $transaction->customer_number,
                     'voucher_number' => $transaction->voucher_number,
                     'amount' => $transaction->amount,
+                    'promo_code' => $transaction->promo_code,
+                    'discount_amount' => $transaction->discount_amount,
                     'status' => $fresh->status ?? $transaction->status,
                     'payment_method' => 'balance',
                     'paid_at' => null,
@@ -299,6 +365,7 @@ class TransactionController extends Controller
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
         $voucherNumber = $this->voucherNumber($request->input('voucherNumber'));
+        $promoCode = $this->promoCode($request->input('promoCode'));
 
         if (! is_numeric($productId) || (int) $productId != $productId) {
             return response()->json(['message' => 'Produk tidak valid.'], 422);
@@ -336,13 +403,27 @@ class TransactionController extends Controller
             ], 422);
         }
 
-        $amount = Pricing::unitPrice(
+        $price = Pricing::unitPrice(
             (int) $product->price,
             (int) $product->retail_price,
             (string) ($user->account_type ?? 'reseller'),
         );
 
-        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $amount) {
+        // Promo memotong harga publik yang ditagih Midtrans; kode tidak sah
+        // ditolak sebelum tagihan dibuat.
+        $promo = $promoCode === '' ? null : PromoCode::find($promoCode);
+
+        if ($promoCode !== '' && $promo === null) {
+            return response()->json([
+                'message' => 'Kode promo tidak berlaku.',
+                'errors' => ['promoCode' => ['Kode promo tidak valid, tidak aktif, atau sudah kedaluwarsa.']],
+            ], 422);
+        }
+
+        $applied = $promo ? PromoCode::apply($promo, $price) : null;
+        $amount = $applied['total'] ?? $price;
+
+        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $amount, $applied) {
             $id = DB::table('transactions')->insertGetId([
                 'user_id' => $user->id,
                 'product_id' => $product->id,
@@ -350,6 +431,8 @@ class TransactionController extends Controller
                 'customer_number' => $customerNumber,
                 'voucher_number' => $voucherNumber ?: null,
                 'amount' => $amount,
+                'promo_code' => $applied['code'] ?? null,
+                'discount_amount' => $applied['discount'] ?? 0,
                 'status' => 'pending',
                 'payment_method' => 'midtrans',
                 'idempotency_key' => null,
@@ -362,6 +445,8 @@ class TransactionController extends Controller
                 'customer_number',
                 'voucher_number',
                 'amount',
+                'promo_code',
+                'discount_amount',
                 'status',
                 'payment_method',
                 'paid_at',
@@ -393,6 +478,8 @@ class TransactionController extends Controller
                     'customer_number' => $transaction->customer_number,
                     'voucher_number' => $transaction->voucher_number,
                     'amount' => $transaction->amount,
+                    'promo_code' => $transaction->promo_code,
+                    'discount_amount' => $transaction->discount_amount,
                     'status' => $transaction->status,
                     'payment_method' => $transaction->payment_method,
                     'paid_at' => $transaction->paid_at,
@@ -455,6 +542,12 @@ class TransactionController extends Controller
         return preg_match('/^\d{6,16}$/', $customerNumber) ? null : 'Nomor tujuan harus 6-16 digit angka.';
     }
 
+    /** Kode promo disimpan/dibandingkan dalam huruf besar, maksimal 24 karakter. */
+    private function promoCode(mixed $value): string
+    {
+        return mb_substr(PromoCode::normalize($value), 0, 24);
+    }
+
     /** Nomor voucher kosong hanya berisi angka; spasi/pemisah dibuang. */
     private function voucherNumber(mixed $value): string
     {
@@ -489,6 +582,8 @@ class TransactionController extends Controller
             'customerNumber' => $row->customer_number,
             'voucherNumber' => $row->voucher_number ?? null,
             'amount' => (int) $row->amount,
+            'promoCode' => $row->promo_code ?? null,
+            'discountAmount' => (int) ($row->discount_amount ?? 0),
             'status' => $row->status,
             'paymentMethod' => $row->payment_method ?? 'balance',
             'paidAt' => $row->paid_at ?? null,

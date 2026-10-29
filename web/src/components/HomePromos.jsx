@@ -17,6 +17,9 @@ export default function HomePromos({ promos = [] }) {
           <article className="card promo-card" key={promo.id}>
             <div className="promo-card__head">
               <p className="promo-card__title">{promo.title}</p>
+              {promo.discountPercent > 0 ? (
+                <span className="badge badge--soft">Diskon {promo.discountPercent}%</span>
+              ) : null}
               {promo.badge ? <span className="badge badge--soft">{promo.badge}</span> : null}
             </div>
 
@@ -30,6 +33,12 @@ export default function HomePromos({ promos = [] }) {
                 <strong>{promo.code}</strong>
                 <CopyButton value={promo.code} label="Salin" />
               </div>
+            ) : null}
+
+            {promo.code && promo.discountPercent > 0 ? (
+              <p className="promo-card__meta">
+                Masukkan kode ini di halaman beli untuk potongan {promo.discountPercent}%.
+              </p>
             ) : null}
 
             {promo.validUntil ? (

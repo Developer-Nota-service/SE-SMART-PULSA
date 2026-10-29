@@ -108,5 +108,7 @@ Route::prefix('v1')->group(function () {
         Route::get('transactions/{id}', [TransactionController::class, 'show']);
         Route::post('transactions', [TransactionController::class, 'store']);
         Route::post('transactions/direct', [TransactionController::class, 'direct']);
+        // Cek kode promo sebelum membeli; nominal tetap dihitung ulang saat transaksi.
+        Route::post('promos/validate', [TransactionController::class, 'validatePromo']);
     });
 });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Support\DashboardContent;
+use App\Support\PromoCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -99,6 +100,7 @@ class AdminDashboardController extends Controller
             'description' => $data['description'] ?? '',
             'code' => $data['code'] ?? '',
             'badge' => $data['badge'] ?? '',
+            'discount_percent' => (int) ($data['discountPercent'] ?? 0),
             'valid_until' => $data['validUntil'] ?? null,
             'active' => $data['active'] ?? true,
             'sort_order' => $data['sortOrder'] ?? 0,
@@ -120,6 +122,7 @@ class AdminDashboardController extends Controller
             'description' => 'description',
             'code' => 'code',
             'badge' => 'badge',
+            'discountPercent' => 'discount_percent',
             'validUntil' => 'valid_until',
             'active' => 'active',
             'sortOrder' => 'sort_order',
@@ -127,6 +130,20 @@ class AdminDashboardController extends Controller
             if (array_key_exists($field, $data)) {
                 $changes[$column] = $data[$field];
             }
+        }
+
+        // Promo berpotongan wajib tetap punya kode setelah perubahan disimpan.
+        $percent = array_key_exists('discount_percent', $changes)
+            ? (int) $changes['discount_percent']
+            : (int) $row->discount_percent;
+        $code = array_key_exists('code', $changes)
+            ? trim((string) $changes['code'])
+            : trim((string) $row->code);
+
+        if ($percent > 0 && $code === '') {
+            throw ValidationException::withMessages([
+                'code' => 'Promo dengan potongan harga wajib punya kode.',
+            ]);
         }
 
         if ($changes !== []) {
@@ -194,15 +211,26 @@ class AdminDashboardController extends Controller
     {
         $required = $partial ? 'sometimes' : 'required';
 
-        return $request->validate([
+        $data = $request->validate([
             'title' => [$required, 'string', 'min:3', 'max:80'],
             'description' => ['sometimes', 'nullable', 'string', 'max:200'],
             'code' => ['sometimes', 'nullable', 'string', 'max:24'],
             'badge' => ['sometimes', 'nullable', 'string', 'max:24'],
+            // 0 = promo hanya tampil sebagai info; > 0 = kode bisa dipakai di halaman beli.
+            'discountPercent' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:'.PromoCode::MAX_PERCENT],
             'validUntil' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'active' => ['sometimes', 'boolean'],
             'sortOrder' => ['sometimes', 'integer', 'min:0', 'max:99'],
         ]);
+
+        // Kode hanya berguna bila promo benar-benar memotong harga.
+        if ((int) ($data['discountPercent'] ?? 0) > 0 && trim((string) ($data['code'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'code' => 'Promo dengan potongan harga wajib punya kode.',
+            ]);
+        }
+
+        return $data;
     }
 
     private function bannerChanges(array $data): array
@@ -274,6 +302,7 @@ class AdminDashboardController extends Controller
             'description' => (string) $row->description,
             'code' => (string) $row->code,
             'badge' => (string) $row->badge,
+            'discountPercent' => (int) $row->discount_percent,
             'validUntil' => $row->valid_until ? (string) $row->valid_until : null,
             'active' => (bool) $row->active,
             'sortOrder' => (int) $row->sort_order,

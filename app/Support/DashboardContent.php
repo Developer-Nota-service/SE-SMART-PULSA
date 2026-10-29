@@ -115,13 +115,14 @@ class DashboardContent
                     ->orWhere('valid_until', '>=', $today)))
             ->orderBy('sort_order')
             ->orderByDesc('id')
-            ->get(['id', 'title', 'description', 'code', 'badge', 'valid_until', 'active', 'sort_order'])
+            ->get(['id', 'title', 'description', 'code', 'badge', 'discount_percent', 'valid_until', 'active', 'sort_order'])
             ->map(fn ($row) => [
                 'id' => (int) $row->id,
                 'title' => $row->title,
                 'description' => (string) $row->description,
                 'code' => (string) $row->code,
                 'badge' => (string) $row->badge,
+                'discountPercent' => (int) $row->discount_percent,
                 'validUntil' => $row->valid_until ? (string) $row->valid_until : null,
                 'active' => (bool) $row->active,
                 'sortOrder' => (int) $row->sort_order,

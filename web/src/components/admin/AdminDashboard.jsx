@@ -230,6 +230,12 @@ export default function AdminDashboard() {
                     <span className="row__value">{row.code}</span>
                   </div>
                 ) : null}
+                {row.discountPercent > 0 ? (
+                  <div className="row">
+                    <span className="row__label">Potongan harga</span>
+                    <span className="row__value">{row.discountPercent}%</span>
+                  </div>
+                ) : null}
                 {row.badge ? (
                   <div className="row">
                     <span className="row__label">Label</span>
@@ -559,6 +565,7 @@ function PromoSheet({ promo, onClose, onSaved }) {
   const [title, setTitle] = useState(promo?.title || '')
   const [description, setDescription] = useState(promo?.description || '')
   const [code, setCode] = useState(promo?.code || '')
+  const [discountPercent, setDiscountPercent] = useState(promo?.discountPercent ?? 0)
   const [badge, setBadge] = useState(promo?.badge || '')
   const [validUntil, setValidUntil] = useState(promo?.validUntil || '')
   const [active, setActive] = useState(promo?.active ?? true)
@@ -576,6 +583,7 @@ function PromoSheet({ promo, onClose, onSaved }) {
         title,
         description,
         code,
+        discountPercent: Number(discountPercent) || 0,
         badge,
         validUntil: validUntil || null,
         active,
@@ -586,6 +594,8 @@ function PromoSheet({ promo, onClose, onSaved }) {
     } catch (requestError) {
       setError(
         requestError.errors?.title?.[0] ||
+          requestError.errors?.code?.[0] ||
+          requestError.errors?.discountPercent?.[0] ||
           requestError.errors?.validUntil?.[0] ||
           requestError.message,
       )
@@ -642,6 +652,23 @@ function PromoSheet({ promo, onClose, onSaved }) {
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="HEMAT10"
           />
+        </label>
+
+        <label className="field">
+          <span className="field__label">Potongan harga (%)</span>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            max={90}
+            inputMode="numeric"
+            value={discountPercent}
+            onChange={(event) => setDiscountPercent(event.target.value)}
+          />
+          <span className="field__hint">
+            Pembeli memasukkan kode di halaman beli dan harga produk dipotong sebesar ini. Isi 0
+            bila promo hanya informasi (tanpa potongan). Maksimal 90%.
+          </span>
         </label>
 
         <label className="field">
