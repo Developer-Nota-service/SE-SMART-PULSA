@@ -181,7 +181,11 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 
 Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Data demo: saldo Rp186.900,
 4 transaksi (success/pending/failed), 4 deposit (paid/pending/expired), 95 produk
-DEMO di 7 kategori.
+DEMO di 7 kategori. **Hanya untuk non-produksi:** `DatabaseSeeder::seedUsers()`
+melewati akun demo + riwayat demo saat `APP_ENV=production` (katalog memuat produk
+supplier asli, jadi saldo demo bisa dipakai membeli SKU nyata), dan kotak
+kredensial demo di `LoginPage.jsx` disembunyikan di build produksi
+(`import.meta.env.PROD`). Jangan menghidupkan kembali keduanya untuk produksi.
 
 **Akun admin adalah akun pribadi pemilik** — `muhammadyusufrifaldi@gmail.com` /
 `081346043318` (role `admin`, sudah terverifikasi). Tidak ada sandi default: akun
@@ -599,7 +603,11 @@ pembeli di konter:
   `MidtransPaymentStatus::apply()` setelah `signature_key` terverifikasi. Jangan
   tambahkan tombol "tandai lunas" atau mempercayai status dari browser.
 - Setiap perubahan saldo menulis `balance_entries` dalam transaksi DB yang sama.
-- Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per email.
+- Password bcrypt (`Hash::make`), login dibatasi 5 percobaan gagal / 15 menit per
+  email. Endpoint publik juga dibatasi `throttle` per IP di `routes/api.php`:
+  login 20/menit, `verify-otp`/`password/verify` 10/menit, `register`/
+  `resend-otp`/`password/forgot`/`password/reset` 5/menit (batas ini yang menahan
+  spam OTP berbiaya Fonnte).
 - Sesi hanya terbit setelah OTP WhatsApp terverifikasi (registrasi maupun
   `/verify-otp`). Jangan menambah jalur yang membuat sesi untuk akun dengan
   `phone_verified_at` NULL, dan jangan pernah mengirim kode OTP di luar

@@ -15,19 +15,33 @@ use App\Http\Controllers\Api\WithdrawalController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::post('register', [AuthController::class, 'register']);
-    Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout']);
 
+    // Batas per IP (per menit) untuk endpoint publik: sandi tidak bisa
+    // di-brute-force lintas akun dan kode OTP tidak bisa dipicu berulang
+    // (tiap kiriman OTP memakai kuota Fonnte). Login tetap punya batas
+    // tambahan 5 percobaan gagal / 15 menit per email di AuthController.
+    Route::middleware('throttle:20,1')->group(function () {
+        Route::post('login', [AuthController::class, 'login']);
+    });
+
     // Verifikasi akun lewat kode OTP WhatsApp (Fonnte).
-    Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
-    Route::post('resend-otp', [AuthController::class, 'resendOtp']);
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
+    });
 
     // Lupa sandi: verifikasi nomor WhatsApp dulu, lalu tampilkan email akun dan
     // atur sandi baru tanpa perlu tahu email lamanya.
-    Route::post('password/forgot', [AuthController::class, 'requestPasswordReset']);
-    Route::post('password/verify', [AuthController::class, 'verifyPasswordReset']);
-    Route::post('password/reset', [AuthController::class, 'resetPassword']);
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('register', [AuthController::class, 'register']);
+        Route::post('resend-otp', [AuthController::class, 'resendOtp']);
+        Route::post('password/forgot', [AuthController::class, 'requestPasswordReset']);
+        Route::post('password/reset', [AuthController::class, 'resetPassword']);
+    });
+
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('password/verify', [AuthController::class, 'verifyPasswordReset']);
+    });
 
     // Webhook pembayaran Midtrans: publik, diverifikasi lewat signature_key.
     Route::post('midtrans/notification', [MidtransController::class, 'notification']);

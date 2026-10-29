@@ -54,7 +54,42 @@ MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx      # Dashboard Midtrans > Settings > Ac
 MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxx
 MIDTRANS_IS_PRODUCTION=1
 MIDTRANS_FINISH_URL=https://domainmu.com/app/transaksi
+
+# WAJIB: tanpa token Fonnte, pendaftaran pengguna baru tidak pernah selesai
+# (kode OTP WhatsApp tidak terkirim). Dashboard Fonnte > Device > Token.
+FONNTE_TOKEN=
+FONNTE_API_URL=https://api.fonnte.com/send
+
+# Email: OTP ganti email + tautan "atur sandi" admin. MAIL_MAILER=log berarti
+# email tidak benar-benar terkirim (hanya ke log).
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.domainmu.com
+MAIL_PORT=587
+MAIL_SCHEME=smtp
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_FROM_ADDRESS=
+MAIL_FROM_NAME="******"
+
+# Digiflazz (buyer API) > Atur Koneksi > API. Tanpa ini transaksi nyata berhenti
+# di status pending; DIGIFLAZZ_TESTING=false saat memakai Production Key.
+DIGIFLAZZ_USERNAME=
+DIGIFLAZZ_API_KEY=
+DIGIFLAZZ_WEBHOOK_SECRET=       # tab Webhook
+DIGIFLAZZ_TESTING=false
+DIGIFLAZZ_MARGIN_PERCENT=5
 ```
+
+> **Akun demo tidak dibuat di produksi.** `DatabaseSeeder` melewati akun
+> `demo@sesmartpulsa.id` dan riwayat demo saat `APP_ENV=production`, karena sandi
+> akun itu tertulis di halaman login build dev dan di dokumentasi — sementara
+> katalog berisi produk supplier asli. Halaman login build produksi
+> (`npm run build`) juga tidak menampilkan kotak kredensial demo. Akun admin
+> pemilik tetap dibuat, tanpa sandi default (lihat "Sandi admin").
+>
+> Bila database lama ikut dipakai di produksi, akun demo yang sudah ada tetap
+> ada (seeder tidak menghapusnya). Netralkan sekali sebelum go-live:
+> `UPDATE users SET password_hash = encode(gen_random_bytes(32), 'hex'), balance = 0 WHERE email = 'demo@sesmartpulsa.id';`
 
 Alternatif: isi `DATABASE_URL` saja (format `postgres://USER:PASSWORD@HOST:5432/DB`).
 
@@ -113,8 +148,11 @@ Cek log container: harus muncul `INFO Running migrations.` lalu Apache menyala.
 1. `https://domainmu.com/up` → 200.
 2. `https://domainmu.com/api/v1/me` → 401 `{"message":"Sesi tidak ditemukan..."}`.
 3. `https://domainmu.com/app` → halaman login; `/app/transaksi` juga tampil (bukan 404).
-4. Login `demo@sesmartpulsa.id` / `demo12345` → saldo Rp186.900, 95 produk demo.
-5. Daftar akun baru → masuk → saldo Rp0 tampil.
+4. Halaman login **tidak** menampilkan kotak akun demo, dan
+   `demo@sesmartpulsa.id` tidak bisa dipakai login (akun demo dilewati di produksi).
+5. Atur sandi admin lewat tautan email: `php artisan admin:password-link <email-owner>`,
+   lalu login sebagai admin → `/admin` terbuka.
+6. Daftar akun baru dengan nomor WhatsApp aktif → kode OTP masuk → masuk → saldo Rp0 tampil.
 
 ## Cek database baru terisi
 

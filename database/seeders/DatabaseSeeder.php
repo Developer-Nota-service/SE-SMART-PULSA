@@ -106,6 +106,15 @@ class DatabaseSeeder extends Seeder
 
     private function seedUsers(): int
     {
+        // Produksi: akun demo bersandi publik tidak boleh dibuat sama sekali —
+        // katalog memuat produk supplier asli, jadi saldo demo bisa dipakai
+        // membeli SKU nyata. Akun admin pemilik tetap dibuat.
+        if (app()->environment('production')) {
+            $this->seedOwnerAdmin();
+
+            return 0;
+        }
+
         $accounts = [
             ['name' => 'Budi Santoso', 'email' => 'demo@sesmartpulsa.id', 'phone' => '081234567890', 'password' => 'demo12345', 'role' => 'user'],
         ];
