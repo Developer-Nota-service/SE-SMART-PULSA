@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\IntegrationCredential;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -224,6 +225,13 @@ class IntegrationSettings
     {
         try {
             return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, function (): array {
+                // Lewati query bila tabel belum dimigrasi (mis. saat
+                // `artisan migrate`/`db:seed` boot) supaya PostgreSQL tidak
+                // mencatat error "relation does not exist" untuk tiap request.
+                if (! Schema::hasTable((new IntegrationCredential)->getTable())) {
+                    return [];
+                }
+
                 return IntegrationCredential::query()
                     ->get()
                     ->mapWithKeys(fn (IntegrationCredential $row) => [$row->key => (string) $row->value])
