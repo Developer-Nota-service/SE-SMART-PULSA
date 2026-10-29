@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api.js'
 import { dateTime, rupiah } from '../../lib/format.js'
 import { ErrorState, LoadingState } from '../StateViews.jsx'
@@ -17,7 +18,8 @@ function Stat({ label, value, hint }) {
  * Ringkasan angka penting + antrean pekerjaan yang perlu ditindak admin:
  * penarikan menunggu, deposit menggantung, dan transaksi gagal.
  */
-export default function AdminOverview({ onOpenTab }) {
+export default function AdminOverview() {
+  const navigate = useNavigate()
   const [counts, setCounts] = useState(null)
   const [queue, setQueue] = useState({ withdrawals: [], deposits: [], transactions: [] })
   const [loading, setLoading] = useState(true)
@@ -114,7 +116,7 @@ export default function AdminOverview({ onOpenTab }) {
                 <button
                   type="button"
                   className="btn btn--ghost btn--sm"
-                  onClick={() => onOpenTab('withdrawals')}
+                  onClick={() => navigate('/admin/keuangan?tab=penarikan')}
                 >
                   Proses
                 </button>
@@ -139,7 +141,7 @@ export default function AdminOverview({ onOpenTab }) {
                 <button
                   type="button"
                   className="btn btn--ghost btn--sm"
-                  onClick={() => onOpenTab('deposits')}
+                  onClick={() => navigate('/admin/keuangan')}
                 >
                   Periksa
                 </button>
@@ -164,7 +166,7 @@ export default function AdminOverview({ onOpenTab }) {
                 <button
                   type="button"
                   className="btn btn--ghost btn--sm"
-                  onClick={() => onOpenTab('transactions')}
+                  onClick={() => navigate('/admin/transaksi?status=failed')}
                 >
                   Lihat
                 </button>

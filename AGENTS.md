@@ -122,7 +122,12 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/deposits/{id}/cancel`, `GET /admin/transactions?status=&q=`,
   `POST /admin/transactions/{id}/check`, `POST /admin/transactions/{id}/refund`
   (tandai refund manual sudah dikirim),
-  `GET /admin/users?q=`. Semua butuh `role = admin` (middleware `admin.only`).
+  `GET /admin/users?q=`, `GET /admin/products?category=&q=`,
+  `PATCH /admin/products/{id}` `{price?,retailPrice?,active?}` (harga publik tidak
+  boleh di bawah harga reseller),
+  `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
+  (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk).
+  Semua butuh `role = admin` (middleware `admin.only`).
 - `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
 - `POST /midtrans/sync` `{orderNumber?}` — cek status resmi ke API Midtrans untuk
   pesanan pending milik pengguna (cadangan bila webhook tidak sampai), signature
@@ -257,9 +262,25 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 
 ## Konsol admin (`/admin`)
 
-`app/Http/Controllers/Api/AdminController.php` + `web/src/pages/AdminPage.jsx`
-(tab: Ringkasan, Penarikan, Deposit, Transaksi, Pengguna). Dijaga
-`app/Http/Middleware/EnsureAdmin.php` (alias `admin.only`).
+`app/Http/Controllers/Api/AdminController.php` + `web/src/pages/AdminPage.jsx`.
+Dijaga `app/Http/Middleware/EnsureAdmin.php` (alias `admin.only`).
+
+**Tata letak terpisah dari akun pengguna.** `/admin` tidak memakai `AppShell`
+(beranda, saldo, dan navigasi belanja tidak tampil) — `AdminGate` di `App.jsx`
+memeriksa `role`, dan `AdminPage.jsx` adalah shell sendiri (header navy, strip
+identitas, nav 5 tab). Rutenya `/admin` (Ringkasan), `/admin/harga`,
+`/admin/transaksi`, `/admin/keuangan?tab=deposit|penarikan`,
+`/admin/pengguna`; tautan dari ringkasan membawa status di query
+(`/admin/transaksi?status=failed`) sehingga antrean langsung terbuka. Admin
+tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
+
+- **Harga** (`web/src/components/admin/AdminProducts.jsx`) — daftar produk per
+  kategori, harga reseller (`products.price`), harga publik
+  (`products.retail_price`), selisih %, dan status tayang. Satu produk diubah
+  lewat sheet "Ubah harga"; satu kategori bisa digeser massal (persen atau
+  rupiah) di kartu "Ubah harga massal". Produk nonaktif (`active = false`)
+  hilang dari katalog pengguna, jadi AdminController menolak harga publik di
+  bawah harga reseller agar akun pribadi tidak membayar lebih murah.
 
 - **Penarikan** — `pending → processing → paid`; `pending|processing → rejected`.
   Status final tidak bisa diubah (409), jadi saldo tidak bisa kembali dua kali.
@@ -485,6 +506,6 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   angka. Nomor itu dikirim sebagai `customerNumber`, disalin ke
   `transactions.voucher_number` (`TransactionController`) dan ditampilkan di detail
   pesanan (`voucherNumber`). Kategori lain tidak memakai kolom ini.
-  Semua selain `/login` butuh sesi; `/admin`
-  hanya untuk akun `role = admin` (tanpa admin, halaman menampilkan penolakan dan
-  menu Admin tidak muncul di navigasi bawah).
+  Semua selain `/login` butuh sesi; `/admin` dan sub-rutenya hanya untuk akun
+  `role = admin` — akun lain dialihkan ke beranda, dan menu Admin tidak muncul di
+  navigasi bawah.

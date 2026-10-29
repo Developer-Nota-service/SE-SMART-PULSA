@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api.js'
 import { dateTime, refundLabel, rupiah } from '../../lib/format.js'
 import { EmptyState, ErrorState, LoadingState } from '../StateViews.jsx'
@@ -17,12 +18,17 @@ const FILTERS = [
  * tujuan.
  */
 export default function AdminTransactions() {
-  const [status, setStatus] = useState('')
+  // Status ikut alamat halaman (/admin/transaksi?status=failed) supaya tautan
+  // dari ringkasan langsung membuka antrean yang dimaksud.
+  const [params, setParams] = useSearchParams()
+  const status = params.get('status') || ''
+  const setStatus = (value) => setParams(value ? { status: value } : {})
   const [search, setSearch] = useState('')
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [marking, setMarking] = useState(null)
+  const [checking, setChecking] = useState(null)
   const [actionError, setActionError] = useState('')
 
   const load = useCallback(async () => {
@@ -40,6 +46,19 @@ export default function AdminTransactions() {
   useEffect(() => {
     load()
   }, [load])
+
+  const checkSupplier = async (id) => {
+    setChecking(id)
+    setActionError('')
+    try {
+      await api.adminCheckTransaction(id)
+      await load()
+    } catch (requestError) {
+      setActionError(requestError.message)
+    } finally {
+      setChecking(null)
+    }
+  }
 
   const markRefundPaid = async (id) => {
     setMarking(id)
@@ -131,6 +150,12 @@ export default function AdminTransactions() {
                     {row.paymentMethod === 'midtrans' ? 'Midtrans' : 'Saldo'}
                   </span>
                 </div>
+                {row.supplierMessage && row.status !== 'success' ? (
+                  <div className="row">
+                    <span className="row__label">Pesan supplier</span>
+                    <span className="row__value">{row.supplierMessage}</span>
+                  </div>
+                ) : null}
                 {row.refundStatus ? (
                   <div className="row">
                     <span className="row__label">Pengembalian dana</span>
@@ -138,6 +163,17 @@ export default function AdminTransactions() {
                   </div>
                 ) : null}
               </div>
+
+              {row.status === 'pending' ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={checking === row.id}
+                  onClick={() => checkSupplier(row.id)}
+                >
+                  {checking === row.id ? 'Memeriksa…' : 'Periksa ke supplier'}
+                </button>
+              ) : null}
 
               {row.refundStatus === 'failed' ? (
                 <button

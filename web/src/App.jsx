@@ -34,6 +34,18 @@ function Protected() {
   return <AppShell />
 }
 
+// Konsol admin punya tata letaknya sendiri, di luar AppShell pengguna: tanpa
+// beranda, saldo, atau navigasi belanja.
+function AdminGate() {
+  const { user } = useAuth()
+  const location = useLocation()
+
+  if (user === undefined) return <Boot />
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (user.role !== 'admin') return <Navigate to="/" replace />
+  return <AdminPage />
+}
+
 export default function App() {
   return (
     <Suspense fallback={<Boot />}>
@@ -45,12 +57,13 @@ export default function App() {
           <Route path="/kategori/:category" element={<CategoryPage />} />
           <Route path="/transaksi" element={<TransactionsPage />} />
           <Route path="/saldo" element={<BalancePage />} />
-          <Route path="/admin" element={<AdminPage />} />
           <Route path="/profil" element={<ProfilePage />} />
           <Route path="/beli/:productId" element={<PurchasePage />} />
           <Route path="/bantuan" element={<HelpPage />} />
           <Route path="/legal/:doc" element={<LegalPage />} />
         </Route>
+
+        <Route path="/admin/*" element={<AdminGate />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -565,6 +565,140 @@ class AdminController extends Controller
         return response()->json(['data' => $rows->map([self::class, 'serializeUser'])->all()]);
     }
 
+    /** Daftar produk beserta harga jual — dasar halaman "Harga" konsol admin. */
+    public function products(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->query('q', ''));
+        $category = (string) $request->query('category', '');
+
+        if ($category !== '' && ! in_array($category, CatalogController::CATEGORIES, true)) {
+            return response()->json(['message' => 'Kategori tidak dikenal.'], 422);
+        }
+
+        $rows = DB::table('products')
+            ->when($category !== '', fn ($query) => $query->where('category', $category))
+            ->when($search !== '', fn ($query) => $query->where(function ($inner) use ($search) {
+                $inner->where('name', 'ilike', '%'.$search.'%')
+                    ->orWhere('sku', 'ilike', '%'.$search.'%')
+                    ->orWhere('operator', 'ilike', '%'.$search.'%');
+            }))
+            ->orderBy('category')
+            ->orderBy('operator')
+            ->orderBy('sort_order')
+            ->orderBy('price')
+            ->limit(500)
+            ->get(['id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'active', 'is_demo']);
+
+        return response()->json(['data' => $rows->map([self::class, 'serializeAdminProduct'])->all()]);
+    }
+
+    /**
+     * Ubah harga reseller, harga publik, atau status tayang satu produk.
+     * Harga publik tidak boleh turun di bawah harga reseller agar akun pribadi
+     * tidak membayar lebih murah daripada reseller.
+     */
+    public function updateProduct(Request $request, string $id): JsonResponse
+    {
+        if (! ctype_digit($id)) {
+            return response()->json(['message' => 'Produk tidak valid.'], 422);
+        }
+
+        $product = DB::table('products')->where('id', (int) $id)->first();
+
+        if ($product === null) {
+            return response()->json(['message' => 'Produk tidak ditemukan.'], 404);
+        }
+
+        $data = $request->validate([
+            'price' => ['sometimes', 'integer', 'min:0'],
+            'retailPrice' => ['sometimes', 'integer', 'min:0'],
+            'active' => ['sometimes', 'boolean'],
+        ]);
+
+        $price = (int) ($data['price'] ?? $product->price);
+        $retail = (int) ($data['retailPrice'] ?? $product->retail_price);
+
+        if ($retail > 0 && $retail < $price) {
+            return response()->json([
+                'message' => 'Harga publik tidak boleh lebih rendah dari harga reseller.',
+                'errors' => ['retailPrice' => ['Harga publik tidak boleh lebih rendah dari harga reseller.']],
+            ], 422);
+        }
+
+        DB::table('products')->where('id', (int) $id)->update([
+            'price' => $price,
+            'retail_price' => $retail,
+            'active' => array_key_exists('active', $data) ? (bool) $data['active'] : (bool) $product->active,
+        ]);
+
+        $row = DB::table('products')
+            ->where('id', (int) $id)
+            ->first(['id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'active', 'is_demo']);
+
+        return response()->json(['data' => self::serializeAdminProduct($row)]);
+    }
+
+    /**
+     * Naikkan/turunkan harga sekaligus untuk satu kategori (opsional dibatasi
+     * satu operator). Harga publik ikut bergeser agar selisihnya tetap.
+     */
+    public function bulkPrice(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'category' => ['required', 'in:'.implode(',', CatalogController::CATEGORIES)],
+            'operator' => ['nullable', 'string', 'max:80'],
+            'mode' => ['required', 'in:percent,amount'],
+            'value' => ['required', 'numeric', 'between:-1000000,1000000'],
+        ]);
+
+        $operator = trim((string) ($data['operator'] ?? ''));
+
+        $rows = DB::table('products')
+            ->where('category', $data['category'])
+            ->when($operator !== '', fn ($query) => $query->where('operator', 'ilike', $operator))
+            ->get(['id', 'price', 'retail_price']);
+
+        if ($rows->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada produk untuk filter itu.'], 422);
+        }
+
+        $mode = (string) $data['mode'];
+        $value = (float) $data['value'];
+
+        $updated = DB::transaction(function () use ($rows, $mode, $value): int {
+            $count = 0;
+
+            foreach ($rows as $row) {
+                $price = self::shiftPrice((int) $row->price, $mode, $value);
+                $retail = (int) $row->retail_price > 0
+                    ? self::shiftPrice((int) $row->retail_price, $mode, $value)
+                    : 0;
+
+                if ($retail > 0 && $retail < $price) {
+                    $retail = $price;
+                }
+
+                DB::table('products')->where('id', $row->id)->update([
+                    'price' => $price,
+                    'retail_price' => $retail,
+                ]);
+
+                $count++;
+            }
+
+            return $count;
+        });
+
+        return response()->json(['data' => ['updated' => $updated]]);
+    }
+
+    private static function shiftPrice(int $price, string $mode, float $value): int
+    {
+        $next = $mode === 'percent' ? $price * (1 + $value / 100) : $price + $value;
+
+        return max(0, (int) round($next));
+    }
+
     /** Baris deposit beserta pemiliknya, untuk serialisasi tanggapan admin. */
     private function depositRow(int $id): object
     {
@@ -657,6 +791,22 @@ class AdminController extends Controller
                 'email' => $row->user_email,
                 'phone' => $row->user_phone,
             ],
+        ];
+    }
+
+    public static function serializeAdminProduct(object $row): array
+    {
+        return [
+            'id' => (int) $row->id,
+            'sku' => $row->sku,
+            'category' => $row->category,
+            'operator' => $row->operator,
+            'name' => $row->name,
+            'price' => (int) $row->price,
+            // Harga publik kosong (0) berarti mengikuti harga reseller.
+            'retailPrice' => (int) ($row->retail_price ?: $row->price),
+            'active' => (bool) $row->active,
+            'isDemo' => (bool) $row->is_demo,
         ];
     }
 

@@ -44,6 +44,9 @@ Route::prefix('v1')->group(function () {
         Route::get('deposits', [AdminController::class, 'deposits']);
         Route::post('deposits/{id}/sync', [AdminController::class, 'syncDeposit']);
         Route::post('deposits/{id}/cancel', [AdminController::class, 'cancelDeposit']);
+        Route::get('products', [AdminController::class, 'products']);
+        Route::post('products/bulk-price', [AdminController::class, 'bulkPrice']);
+        Route::patch('products/{id}', [AdminController::class, 'updateProduct']);
         Route::get('transactions', [AdminController::class, 'transactions']);
         Route::post('transactions/{id}/check', [AdminController::class, 'checkTransaction']);
         Route::post('transactions/{id}/refund', [AdminController::class, 'markRefundPaid']);

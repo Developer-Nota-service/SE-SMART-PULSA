@@ -198,6 +198,13 @@ export const api = {
   adminMarkRefundPaid: (id, note) =>
     request(`/admin/transactions/${id}/refund`, { method: 'POST', body: { note } }),
   adminUsers: (params) => request(`/admin/users${query(params)}`),
+  adminProducts: (params) => request(`/admin/products${query(params)}`),
+  adminUpdateProduct: (id, body) =>
+    request(`/admin/products/${id}`, { method: 'PATCH', body }),
+  adminBulkPrice: (body) =>
+    request('/admin/products/bulk-price', { method: 'POST', body }),
+  adminCheckTransaction: (id) =>
+    request(`/admin/transactions/${id}/check`, { method: 'POST', body: {} }),
 
   // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).
   syncPayments: (orderNumber) =>
