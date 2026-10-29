@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import CopyButton from './CopyButton.jsx'
+import PaymentChannelPicker from './PaymentChannelPicker.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import { api } from '../lib/api.js'
 import { rupiah } from '../lib/format.js'
+import { feeFor } from '../lib/payments.js'
 
 const MIN = 10000
 const MAX = 2000000
@@ -18,8 +20,30 @@ export default function DepositForm({ onCreated }) {
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [created, setCreated] = useState(null)
+  // Metode Midtrans menentukan biaya layanan; tagihan = nominal + biaya.
+  const [methods, setMethods] = useState([])
+  const [channel, setChannel] = useState('')
 
   const numericAmount = Number(String(amount).replace(/\D/g, '')) || 0
+  const selectedMethod = methods.find((method) => method.code === channel) || null
+  const fee = feeFor(numericAmount, selectedMethod)
+  const total = numericAmount + fee
+
+  useEffect(() => {
+    let active = true
+    api
+      .paymentMethods()
+      .then((data) => {
+        if (!active) return
+        const list = data?.methods || []
+        setMethods(list)
+        setChannel((current) => current || list[0]?.code || '')
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
 
   async function submit(event) {
     event.preventDefault()
@@ -31,9 +55,14 @@ export default function DepositForm({ onCreated }) {
       return
     }
 
+    if (!channel) {
+      setFieldError('Pilih metode pembayaran terlebih dahulu.')
+      return
+    }
+
     setSubmitting(true)
     try {
-      const deposit = await api.createDeposit(numericAmount)
+      const deposit = await api.createDeposit(numericAmount, channel)
       setCreated(deposit)
       setAmount('50000')
       onCreated?.()
@@ -90,6 +119,33 @@ export default function DepositForm({ onCreated }) {
           ))}
         </div>
 
+        <PaymentChannelPicker
+          methods={methods}
+          value={channel}
+          amount={numericAmount}
+          onChange={(code) => {
+            setChannel(code)
+            setCreated(null)
+          }}
+        />
+
+        {numericAmount > 0 && selectedMethod ? (
+          <div className="rows">
+            <div className="row">
+              <span className="row__label">Nominal saldo</span>
+              <span className="row__value">{rupiah(numericAmount)}</span>
+            </div>
+            <div className="row">
+              <span className="row__label">Biaya layanan</span>
+              <span className="row__value">{fee > 0 ? rupiah(fee) : 'Gratis'}</span>
+            </div>
+            <div className="row row--total">
+              <span className="row__label">Total dibayar</span>
+              <span className="row__value">{rupiah(total)}</span>
+            </div>
+          </div>
+        ) : null}
+
         {submitError ? (
           <p className="form-message" role="alert">
             {submitError}
@@ -97,7 +153,11 @@ export default function DepositForm({ onCreated }) {
         ) : null}
 
         <button type="submit" className="btn btn--primary btn--block" disabled={submitting}>
-          {submitting ? 'Membuat pesanan…' : 'Buat pesanan deposit'}
+          {submitting
+            ? 'Membuat pesanan…'
+            : total > numericAmount
+              ? `Buat pesanan · ${rupiah(total)}`
+              : 'Buat pesanan deposit'}
         </button>
       </form>
 
@@ -114,9 +174,21 @@ export default function DepositForm({ onCreated }) {
           </div>
           <div className="rows">
             <div className="row">
-              <span className="row__label">Nominal</span>
+              <span className="row__label">Nominal saldo</span>
               <span className="row__value">{rupiah(created.amount)}</span>
             </div>
+            {created.feeAmount > 0 ? (
+              <div className="row">
+                <span className="row__label">Biaya layanan</span>
+                <span className="row__value">{rupiah(created.feeAmount)}</span>
+              </div>
+            ) : null}
+            {created.feeAmount > 0 ? (
+              <div className="row">
+                <span className="row__label">Total dibayar</span>
+                <span className="row__value">{rupiah(created.total)}</span>
+              </div>
+            ) : null}
             <div className="row">
               <span className="row__label">Status</span>
               <span className="row__value">

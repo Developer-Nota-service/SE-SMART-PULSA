@@ -86,14 +86,17 @@ class TransactionRefund
                     return false;
                 }
 
-                $balance = (int) $user->balance + (int) $current->amount;
+                // Biaya layanan Midtrans ikut dikembalikan: pembeli sudah membayarnya,
+                // jadi transaksi yang gagal tidak boleh menyisakan kerugian fee.
+                $refundAmount = (int) $current->amount + (int) ($current->fee_amount ?? 0);
+                $balance = (int) $user->balance + $refundAmount;
 
                 DB::table('users')->where('id', $user->id)->update(['balance' => $balance]);
 
                 DB::table('balance_entries')->insert([
                     'user_id' => $user->id,
                     'direction' => 'credit',
-                    'amount' => (int) $current->amount,
+                    'amount' => $refundAmount,
                     'balance_after' => $balance,
                     'reference' => $current->order_number,
                     'description' => 'Pengembalian dana: transaksi gagal di supplier',

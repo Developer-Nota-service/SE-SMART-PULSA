@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\MidtransService;
 use App\Services\TransactionFulfillment;
 use App\Support\OrderNumber;
+use App\Support\PaymentFee;
 use App\Support\Pricing;
 use App\Support\PromoCode;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,8 @@ class TransactionController extends Controller
         'transactions.customer_number',
         'transactions.voucher_number',
         'transactions.amount',
+        'transactions.fee_amount',
+        'transactions.payment_channel',
         'transactions.promo_code',
         'transactions.discount_amount',
         'transactions.sell_price',
@@ -473,7 +476,20 @@ class TransactionController extends Controller
         $applied = $promo ? PromoCode::apply($promo, $price) : null;
         $amount = $applied['total'] ?? $price;
 
-        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $amount, $applied) {
+        // Biaya layanan Midtrans mengikuti metode yang dipilih pengguna dan
+        // ditagihkan di atas harga (dihitung server, bukan dari browser).
+        $channel = trim((string) $request->input('method'));
+
+        if ($channel === '' || ! PaymentFee::exists($channel)) {
+            return response()->json([
+                'message' => 'Pilih metode pembayaran terlebih dahulu.',
+                'errors' => ['method' => ['Metode pembayaran tidak dikenal.']],
+            ], 422);
+        }
+
+        $fee = PaymentFee::fee((int) $amount, $channel);
+
+        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $amount, $applied, $fee, $channel) {
             $id = DB::table('transactions')->insertGetId([
                 'user_id' => $user->id,
                 'product_id' => $product->id,
@@ -481,6 +497,8 @@ class TransactionController extends Controller
                 'customer_number' => $customerNumber,
                 'voucher_number' => $voucherNumber ?: null,
                 'amount' => $amount,
+                'fee_amount' => $fee,
+                'payment_channel' => $channel,
                 'promo_code' => $applied['code'] ?? null,
                 'discount_amount' => $applied['discount'] ?? 0,
                 'status' => 'pending',
@@ -495,6 +513,8 @@ class TransactionController extends Controller
                 'customer_number',
                 'voucher_number',
                 'amount',
+                'fee_amount',
+                'payment_channel',
                 'promo_code',
                 'discount_amount',
                 'status',
@@ -510,6 +530,10 @@ class TransactionController extends Controller
                 $amount,
                 $product->name,
                 ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone],
+                [
+                    'fee' => (int) $transaction->fee_amount,
+                    'enabled_payments' => PaymentFee::enabledPayments($channel),
+                ],
             );
         } catch (\Throwable $error) {
             // Belum ada tagihan yang sah; jangan tinggalkan pesanan pending.
@@ -528,6 +552,8 @@ class TransactionController extends Controller
                     'customer_number' => $transaction->customer_number,
                     'voucher_number' => $transaction->voucher_number,
                     'amount' => $transaction->amount,
+                    'fee_amount' => $transaction->fee_amount,
+                    'payment_channel' => $transaction->payment_channel,
                     'promo_code' => $transaction->promo_code,
                     'discount_amount' => $transaction->discount_amount,
                     'status' => $transaction->status,
@@ -632,6 +658,9 @@ class TransactionController extends Controller
             'customerNumber' => $row->customer_number,
             'voucherNumber' => $row->voucher_number ?? null,
             'amount' => (int) $row->amount,
+            'feeAmount' => (int) ($row->fee_amount ?? 0),
+            'total' => (int) $row->amount + (int) ($row->fee_amount ?? 0),
+            'paymentChannel' => $row->payment_channel ?? null,
             'promoCode' => $row->promo_code ?? null,
             'discountAmount' => (int) ($row->discount_amount ?? 0),
             'sellPrice' => isset($row->sell_price) ? (int) $row->sell_price : null,

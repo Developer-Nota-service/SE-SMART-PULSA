@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\MidtransService;
 use App\Support\OrderNumber;
+use App\Support\PaymentFee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +53,7 @@ class WalletController extends Controller
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->limit(50)
-            ->get(['id', 'order_number', 'amount', 'status', 'created_at', 'paid_at']);
+            ->get(['id', 'order_number', 'amount', 'fee_amount', 'payment_channel', 'status', 'created_at', 'paid_at']);
 
         return response()->json(['data' => $rows->map([self::class, 'serializeDeposit'])->all()]);
     }
@@ -82,17 +83,31 @@ class WalletController extends Controller
             ], 422);
         }
 
-        $deposit = OrderNumber::withUnique('DEP', function (string $orderNumber) use ($user, $amount) {
+        // Biaya layanan mengikuti metode yang dipilih; nominalnya dihitung server.
+        $channel = trim((string) $request->input('method'));
+
+        if ($channel === '' || ! PaymentFee::exists($channel)) {
+            return response()->json([
+                'message' => 'Pilih metode pembayaran terlebih dahulu.',
+                'errors' => ['method' => ['Metode pembayaran tidak dikenal.']],
+            ], 422);
+        }
+
+        $fee = PaymentFee::fee((int) $amount, $channel);
+
+        $deposit = OrderNumber::withUnique('DEP', function (string $orderNumber) use ($user, $amount, $fee, $channel) {
             $id = DB::table('deposits')->insertGetId([
                 'user_id' => $user->id,
                 'order_number' => $orderNumber,
                 'amount' => (int) $amount,
+                'fee_amount' => $fee,
+                'payment_channel' => $channel,
                 'status' => 'pending',
                 'created_at' => now(),
             ]);
 
             return DB::table('deposits')
-                ->select('id', 'order_number', 'amount', 'status', 'created_at', 'paid_at')
+                ->select('id', 'order_number', 'amount', 'fee_amount', 'payment_channel', 'status', 'created_at', 'paid_at')
                 ->find($id);
         });
 
@@ -105,6 +120,10 @@ class WalletController extends Controller
                 (int) $deposit->amount,
                 'Deposit saldo '.number_format((int) $deposit->amount, 0, ',', '.'),
                 ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone],
+                [
+                    'fee' => (int) $deposit->fee_amount,
+                    'enabled_payments' => PaymentFee::enabledPayments($channel),
+                ],
             );
         } catch (\Throwable $error) {
             // Pesanan tetap tersimpan sebagai pending; saldo hanya bertambah
@@ -123,10 +142,15 @@ class WalletController extends Controller
 
     public static function serializeDeposit(object $row): array
     {
+        $fee = (int) ($row->fee_amount ?? 0);
+
         return [
             'id' => (int) $row->id,
             'orderNumber' => $row->order_number,
             'amount' => (int) $row->amount,
+            'feeAmount' => $fee,
+            'total' => (int) $row->amount + $fee,
+            'paymentChannel' => $row->payment_channel ?? null,
             'status' => $row->status,
             'createdAt' => $row->created_at,
             'paidAt' => $row->paid_at,

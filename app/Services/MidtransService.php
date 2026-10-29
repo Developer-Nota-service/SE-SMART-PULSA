@@ -28,10 +28,16 @@ class MidtransService
     /**
      * Membuat transaksi Snap dan mengembalikan halaman pembayaran Midtrans.
      *
+     * `$options['fee']` = biaya layanan yang ditagihkan di atas nilai pesanan
+     * (gross_amount = amount + fee) supaya dana bersih setelah potongan Midtrans
+     * sama dengan nilai pesanan. `$options['enabled_payments']` membuka hanya
+     * metode yang dipilih pengguna, karena biaya tiap metode berbeda.
+     *
      * @param  array{name?: string|null, email?: string|null, phone?: string|null}  $customer
+     * @param  array{fee?: int, enabled_payments?: array<int, string>, fee_label?: string}  $options
      * @return array{token: string, redirectUrl: string}
      */
-    public function createSnapPayment(string $orderId, int $amount, string $itemName, array $customer): array
+    public function createSnapPayment(string $orderId, int $amount, string $itemName, array $customer, array $options = []): array
     {
         $key = (string) config('services.midtrans.server_key');
 
@@ -41,29 +47,50 @@ class MidtransService
             throw new RuntimeException('Pembayaran Midtrans belum dikonfigurasi. Isi MIDTRANS_SERVER_KEY.');
         }
 
+        $fee = max(0, (int) ($options['fee'] ?? 0));
+
+        $items = [[
+            'id' => $orderId,
+            'price' => $amount,
+            'quantity' => 1,
+            'name' => mb_substr($itemName, 0, 50),
+        ]];
+
+        if ($fee > 0) {
+            $items[] = [
+                'id' => $orderId.'-FEE',
+                'price' => $fee,
+                'quantity' => 1,
+                'name' => mb_substr((string) ($options['fee_label'] ?? 'Biaya layanan'), 0, 50),
+            ];
+        }
+
+        $payload = [
+            'transaction_details' => [
+                'order_id' => $orderId,
+                'gross_amount' => $amount + $fee,
+            ],
+            'item_details' => $items,
+            'customer_details' => array_filter([
+                'first_name' => $customer['name'] ?? null,
+                'email' => $customer['email'] ?? null,
+                'phone' => $customer['phone'] ?? null,
+            ]),
+            'callbacks' => [
+                'finish' => $this->finishUrl(),
+            ],
+        ];
+
+        $enabledPayments = array_values(array_filter((array) ($options['enabled_payments'] ?? [])));
+
+        if ($enabledPayments !== []) {
+            $payload['enabled_payments'] = $enabledPayments;
+        }
+
         $response = Http::withBasicAuth($key, '')
             ->acceptJson()
             ->timeout(20)
-            ->post($this->snapBaseUrl().'/snap/v1/transactions', [
-                'transaction_details' => [
-                    'order_id' => $orderId,
-                    'gross_amount' => $amount,
-                ],
-                'item_details' => [[
-                    'id' => $orderId,
-                    'price' => $amount,
-                    'quantity' => 1,
-                    'name' => mb_substr($itemName, 0, 50),
-                ]],
-                'customer_details' => array_filter([
-                    'first_name' => $customer['name'] ?? null,
-                    'email' => $customer['email'] ?? null,
-                    'phone' => $customer['phone'] ?? null,
-                ]),
-                'callbacks' => [
-                    'finish' => $this->finishUrl(),
-                ],
-            ]);
+            ->post($this->snapBaseUrl().'/snap/v1/transactions', $payload);
 
         if ($response->failed() || ! $response->json('redirect_url')) {
             Log::warning('Midtrans Snap gagal', [

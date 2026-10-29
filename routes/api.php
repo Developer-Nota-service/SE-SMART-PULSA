@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\DigiflazzWebhookController;
 use App\Http\Controllers\Api\MidtransController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\WalletController;
@@ -54,6 +55,9 @@ Route::prefix('v1')->group(function () {
 
     // Gambar banner beranda: nama file acak, dipakai langsung oleh <img>.
     Route::get('banner/{file}', [DashboardController::class, 'banner']);
+
+    // Metode pembayaran Midtrans + tarif biaya layanannya (config midtrans_fees).
+    Route::get('payments/methods', [PaymentController::class, 'methods']);
 
     // Konsol admin: pantau & selesaikan deposit, transaksi, dan penarikan.
     Route::middleware(['session.token', 'admin.only'])->prefix('admin')->group(function () {

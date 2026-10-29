@@ -129,13 +129,21 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   sah menjawab 422 `errors.promoCode` (bukan ditagih harga penuh).
   Produk supplier (`is_demo = false`) dibuat `pending` lalu diselesaikan Digiflazz
   (lihat "Pemenuhan transaksi (Digiflazz)"); produk demo langsung `success`
-- `POST /transactions/direct` `{productId,customerNumber,voucherNumber?,promoCode?}` → transaksi `pending` +
+- `POST /transactions/direct` `{productId,customerNumber,voucherNumber?,promoCode?,method}` → transaksi `pending` +
   `{transaction, payment:{token,redirectUrl}}` — **akun pribadi saja**: bayar langsung
   Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo). `promoCode`
   memotong tagihan Midtrans dengan aturan yang sama seperti jalur saldo.
-- `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
-  (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap; hanya akun
-  reseller — akun pribadi ditolak 422, saldonya hanya berasal dari pengembalian dana)
+  `method` = kode kanal dari `GET /payments/methods` (wajib, 422 bila kosong/tak
+  dikenal); biaya layanan kanal itu ditambahkan ke tagihan Snap (lihat "Biaya
+  layanan Midtrans").
+- `GET /payments/methods` → `{methods: [{code, label, percent, flat}]}` — daftar
+  metode Midtrans + tarif biaya (config `midtrans_fees`), dipakai pemilih metode di
+  halaman isi saldo dan halaman beli akun pribadi.
+- `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount,method}`
+  (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap plus
+  `feeAmount`/`total`/`paymentChannel`; hanya akun reseller — akun pribadi ditolak
+  422, saldonya hanya berasal dari pengembalian dana. `method` wajib; biaya layanan
+  kanal itu ikut ditagihkan, saldo yang dikreditkan tetap sebesar `amount`)
 - `GET /admin/overview` — angka ringkas + antrean masalah. `GET /admin/withdrawals?status=`,
   `POST /admin/withdrawals/{id}` `{action: process|paid|reject, note?}` (tolak =
   saldo kembali), `GET /admin/deposits?status=`, `POST /admin/deposits/{id}/sync`,
@@ -296,6 +304,35 @@ pending milik pengguna diperiksa. Frontend memanggilnya lewat
 `web/src/lib/usePaymentSync.js` setiap halaman Transaksi/Saldo dibuka (termasuk
 `/transaksi?order_id=...` dari redirect Midtrans), lalu memuat ulang data bila ada
 yang berubah.
+
+### Biaya layanan Midtrans (per metode)
+
+Midtrans memotong biayanya dari dana yang disettlekan, jadi tagihan dinaikkan
+(gross-up) supaya dana bersih yang diterima = nilai pesanan. Berlaku untuk
+**deposit reseller** dan **pembelian langsung akun pribadi**.
+
+- `config/midtrans_fees.php` — tabel kanal (`qris` 0.7%, `gopay` 2%, `shopeepay`
+  2%, `va` flat Rp4.000, `cstore` flat Rp5.000, `credit_card` 2.9% + Rp2.000),
+  masing-masing dengan `enabled_payments` (kode metode Snap yang dibuka).
+  Sesuaikan dengan tarif di dashboard Midtrans; jangan mengarang nominal di
+  frontend.
+- `app/Support/PaymentFee.php` — satu-satunya perhitungan:
+  `total = ceil((nilai + flat) / (1 - persen/100))`, `biaya = total - nilai`.
+  Dipakai `WalletController`/`TransactionController` saat membuat pesanan;
+  nominal dari browser tidak pernah dipakai.
+- Pesanan menyimpan `fee_amount` + `payment_channel` (`deposits` dan
+  `transactions`, migration `2026_11_06_000000_…`). `MidtransPaymentStatus`
+  mencocokkan `gross_amount` dengan `amount + fee_amount` — tagihan tanpa biaya
+  ditolak `amount_mismatch` (422 di webhook), jadi tidak ada pembayaran murah.
+- Saldo deposit yang dikreditkan tetap **`amount`** (bukan `amount + fee`):
+  biaya layanan bukan saldo pengguna. Sebaliknya, pengembalian dana transaksi
+  gagal di supplier (`TransactionRefund`) mengkreditkan `amount + fee_amount`
+  karena pembeli sudah membayar biaya itu.
+- Frontend: `web/src/components/PaymentChannelPicker.jsx` memakai
+  `GET /payments/methods` dan `feeFor()` di `web/src/lib/payments.js` (cermin
+  rumus untuk tampilan saja). Halaman isi saldo menampilkan nominal, biaya, dan
+  total; halaman beli akun pribadi menampilkan biaya pada ringkasan dan sheet
+  konfirmasi. Detail pesanan menampilkan baris biaya layanan bila ada.
 
 Refund transaksi gagal: `app/Services/TransactionRefund.php` mengkreditkan nominal
 transaksi Midtrans yang gagal di supplier ke **saldo pengguna** (berlaku untuk

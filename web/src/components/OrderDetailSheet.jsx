@@ -104,9 +104,15 @@ export default function OrderDetailSheet({ order, onClose, onUpdate }) {
               <span className="row__value">−{rupiah(order.discountAmount)}</span>
             </div>
           ) : null}
+          {order.feeAmount > 0 ? (
+            <div className="row">
+              <span className="row__label">Biaya layanan</span>
+              <span className="row__value">+{rupiah(order.feeAmount)}</span>
+            </div>
+          ) : null}
           <div className="row row--total">
             <span className="row__label">Total bayar</span>
-            <span className="row__value">{rupiah(order.amount)}</span>
+            <span className="row__value">{rupiah(order.amount + (order.feeAmount || 0))}</span>
           </div>
           {order.sellPrice !== null && order.sellPrice !== undefined ? (
             <div className="row">

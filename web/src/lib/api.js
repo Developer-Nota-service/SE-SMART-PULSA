@@ -187,7 +187,9 @@ export const api = {
 
   balanceEntries: () => request('/balance/entries'),
   deposits: () => request('/deposits'),
-  createDeposit: (amount) => request('/deposits', { method: 'POST', body: { amount } }),
+  // Metode Midtrans + tarif biaya layanan (config midtrans_fees di server).
+  paymentMethods: () => request('/payments/methods'),
+  createDeposit: (amount, method) => request('/deposits', { method: 'POST', body: { amount, method } }),
 
   // Penarikan saldo: daftar bank/e-wallet dan pengajuan.
   withdrawalChannels: () => request('/withdrawals/channels'),

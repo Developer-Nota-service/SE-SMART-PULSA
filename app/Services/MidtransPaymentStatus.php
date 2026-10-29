@@ -29,7 +29,10 @@ class MidtransPaymentStatus
         $deposit = DB::table('deposits')->where('order_number', $orderId)->first();
 
         if ($deposit) {
-            if (! self::amountMatches($grossAmount, (int) $deposit->amount)) {
+            // Yang ditagih = nilai deposit + biaya layanan metode pembayaran.
+            $expected = (int) $deposit->amount + (int) ($deposit->fee_amount ?? 0);
+
+            if (! self::amountMatches($grossAmount, $expected)) {
                 return self::AMOUNT_MISMATCH;
             }
 
@@ -41,7 +44,10 @@ class MidtransPaymentStatus
         $transaction = DB::table('transactions')->where('order_number', $orderId)->first();
 
         if ($transaction) {
-            if (! self::amountMatches($grossAmount, (int) $transaction->amount)) {
+            // Yang ditagih = nilai transaksi + biaya layanan metode pembayaran.
+            $expected = (int) $transaction->amount + (int) ($transaction->fee_amount ?? 0);
+
+            if (! self::amountMatches($grossAmount, $expected)) {
                 return self::AMOUNT_MISMATCH;
             }
 

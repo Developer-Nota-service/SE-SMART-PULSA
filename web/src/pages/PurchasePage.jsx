@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import CopyButton from '../components/CopyButton.jsx'
+import PaymentChannelPicker from '../components/PaymentChannelPicker.jsx'
 import PaymentOptions from '../components/PaymentOptions.jsx'
 import ProductDetails from '../components/ProductDetails.jsx'
 import PurchaseConfirmSheet from '../components/PurchaseConfirmSheet.jsx'
 import { ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { CheckIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
+import { feeFor } from '../lib/payments.js'
 import {
   categoryLabel,
   GAME_INPUT_HINT,
@@ -45,6 +47,9 @@ export default function PurchasePage() {
   const [promo, setPromo] = useState(null)
   const [promoError, setPromoError] = useState('')
   const [checkingPromo, setCheckingPromo] = useState(false)
+  // Akun pribadi memilih metode Midtrans karena biaya layanannya berbeda.
+  const [methods, setMethods] = useState([])
+  const [channel, setChannel] = useState('')
   const idempotencyKey = useRef(newIdempotencyKey())
 
   // Voucher inject tidak dikirim ke email: nomor voucher kosong pembeli itulah
@@ -72,6 +77,23 @@ export default function PurchasePage() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (!isPersonal) return undefined
+    let active = true
+    api
+      .paymentMethods()
+      .then((data) => {
+        if (!active) return
+        const list = data?.methods || []
+        setMethods(list)
+        setChannel((current) => current || list[0]?.code || '')
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [isPersonal])
+
   // Validasi dulu, lalu tampilkan konfirmasi; transaksi baru dikirim setelah
   // pembeli menyetujui peringatan kesalahan pengisian nomor.
   function submit(event) {
@@ -97,6 +119,11 @@ export default function PurchasePage() {
       }
     } else if (!/^\d{6,16}$/.test(customerNumber)) {
       setFieldError('Nomor tujuan harus 6-16 digit angka.')
+      return
+    }
+
+    if (isPersonal && !channel) {
+      setSubmitError('Pilih metode pembayaran terlebih dahulu.')
       return
     }
 
@@ -131,6 +158,7 @@ export default function PurchasePage() {
     setConfirming(false)
 
     const payload = { productId: product.id, customerNumber, promoCode: promo?.code || undefined }
+    if (isPersonal) payload.method = channel
 
     setSubmitting(true)
     try {
@@ -241,6 +269,10 @@ export default function PurchasePage() {
   const unitPrice = product.price
   const discount = promo?.discount || 0
   const payable = promo?.total ?? unitPrice
+  // Biaya layanan Midtrans ikut ditagihkan ke pembeli; nominal final dihitung server.
+  const selectedMethod = methods.find((item) => item.code === channel) || null
+  const fee = isPersonal ? feeFor(payable, selectedMethod) : 0
+  const total = payable + fee
   const priceLabel = isPersonal ? 'harga publik' : 'harga reseller'
   const method = isPersonal ? 'midtrans' : 'balance'
   const insufficient = !isPersonal && user ? user.balance < payable : false
@@ -366,12 +398,40 @@ export default function PurchasePage() {
             </div>
           )}
 
-          <PaymentOptions
-            method={method}
-            price={payable}
-            priceLabel={priceLabel}
-            balance={user?.balance ?? 0}
-          />
+          {isPersonal ? (
+            <>
+              <PaymentChannelPicker
+                methods={methods}
+                value={channel}
+                amount={payable}
+                onChange={setChannel}
+              />
+
+              {selectedMethod ? (
+                <div className="rows">
+                  <div className="row">
+                    <span className="row__label">Harga {priceLabel}</span>
+                    <span className="row__value">{rupiah(payable)}</span>
+                  </div>
+                  <div className="row">
+                    <span className="row__label">Biaya layanan {selectedMethod.label}</span>
+                    <span className="row__value">{fee > 0 ? rupiah(fee) : 'Gratis'}</span>
+                  </div>
+                  <div className="row row--total">
+                    <span className="row__label">Total dibayar</span>
+                    <span className="row__value">{rupiah(total)}</span>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <PaymentOptions
+              method={method}
+              price={payable}
+              priceLabel={priceLabel}
+              balance={user?.balance ?? 0}
+            />
+          )}
 
           {insufficient ? (
             <p className="form-message" role="alert">
@@ -403,7 +463,7 @@ export default function PurchasePage() {
                 : insufficient
                   ? 'Saldo tidak cukup'
                   : method === 'midtrans'
-                    ? `Bayar ${rupiah(payable)}`
+                    ? `Bayar ${rupiah(total)}`
                     : `Konfirmasi ${rupiah(payable)}`}
             </button>
           </div>
@@ -421,8 +481,14 @@ export default function PurchasePage() {
           customerNumber={customerNumber}
           voucherInject={voucherInject}
           amount={payable}
+          fee={fee}
+          channelLabel={isPersonal ? selectedMethod?.label : ''}
           promo={promo}
-          methodLabel={isPersonal ? 'Midtrans (bayar langsung)' : 'Saldo'}
+          methodLabel={
+            isPersonal
+              ? `Midtrans · ${selectedMethod?.label ?? 'pilih metode'}`
+              : 'Saldo'
+          }
           onConfirm={purchase}
           onClose={() => setConfirming(false)}
         />

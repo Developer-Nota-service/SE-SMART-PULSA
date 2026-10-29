@@ -12,6 +12,8 @@ export default function PurchaseConfirmSheet({
   customerNumber,
   voucherInject,
   amount,
+  fee = 0,
+  channelLabel = '',
   promo,
   methodLabel,
   onConfirm,
@@ -63,9 +65,17 @@ export default function PurchaseConfirmSheet({
               <span className="row__value">−{rupiah(promo.discount)}</span>
             </div>
           ) : null}
+          {fee > 0 ? (
+            <div className="row">
+              <span className="row__label">
+                Biaya layanan{channelLabel ? ` · ${channelLabel}` : ''}
+              </span>
+              <span className="row__value">+{rupiah(fee)}</span>
+            </div>
+          ) : null}
           <div className="row row--total">
             <span className="row__label">Total bayar</span>
-            <span className="row__value">{rupiah(amount)}</span>
+            <span className="row__value">{rupiah(amount + fee)}</span>
           </div>
         </div>
 
