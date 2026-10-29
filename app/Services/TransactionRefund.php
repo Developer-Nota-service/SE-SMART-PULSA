@@ -8,28 +8,22 @@ use Illuminate\Support\Facades\Log;
 /**
  * Pengembalian dana transaksi berbayar Midtrans yang gagal di supplier.
  *
- * Alurnya: minta refund ke Midtrans (dana kembali ke metode pembayaran asal).
- * Bila Midtrans menolak — metode seperti VA/transfer bank memang tidak
- * mendukung refund — nominal transaksi dikreditkan ke saldo pengguna lewat
- * `balance_entries`, sehingga uang tetap kembali dan bisa ditarik lewat menu
- * Penarikan.
+ * Dana pembeli langsung dikreditkan ke saldo aplikasi — berlaku untuk **semua
+ * tipe akun**, termasuk akun pribadi yang membayar langsung lewat Midtrans — dan
+ * bisa ditarik lewat menu Penarikan. Midtrans tidak dipanggil untuk refund, jadi
+ * pengembaliannya selesai saat itu juga dan tidak bergantung pada metode
+ * pembayaran yang dipakai (VA/transfer bank tidak mendukung refund Midtrans).
  *
- * Berlaku untuk **semua tipe akun**: akun pribadi juga punya saldo, khusus
- * menampung pengembalian dana seperti ini (transaksinya sendiri tetap dibayar
- * langsung lewat Midtrans). Bila kredit saldo gagal, refund ditandai
- * `refund_status = failed` agar admin mengembalikan dananya secara manual.
- *
- * Transaksi saldo (reseller) tidak disentuh di sini; pengembaliannya sudah
- * dilakukan `TransactionFulfillment::refundBalance()`. Kolom `refund_status`
+ * Bila kredit saldo gagal, refund ditandai `refund_status = failed` agar admin
+ * mengembalikan dananya secara manual ke rekening pengguna. Kolom `refund_status`
  * membuat proses ini idempoten: webhook/cek berulang tidak pernah membayar dua
  * kali.
+ *
+ * Transaksi saldo (reseller) tidak disentuh di sini; pengembaliannya sudah
+ * dilakukan `TransactionFulfillment::refundBalance()`.
  */
 class TransactionRefund
 {
-    public function __construct(private readonly MidtransService $midtrans)
-    {
-    }
-
     /**
      * Kembalikan dana transaksi yang gagal. Aman dipanggil berkali-kali.
      */
@@ -52,29 +46,15 @@ class TransactionRefund
             return;
         }
 
-        $result = $this->midtrans->refund(
-            (string) $transaction->order_number,
-            (int) $transaction->amount,
-            'Transaksi gagal diproses supplier',
-        );
-
-        if ($result['ok']) {
-            $this->settle($transaction->id, 'midtrans', $result['message']);
-
-            return;
-        }
-
-        // Semua tipe akun punya saldo dan bisa menariknya, jadi dana tetap
-        // kembali ke pengguna walau Midtrans menolak refund.
-        if ($this->creditBalance($transaction->id)) {
-            $this->settle($transaction->id, 'balance', $result['message']);
+        if ($this->creditBalance((int) $transaction->id)) {
+            $this->settle((int) $transaction->id, 'balance', 'Dana dikembalikan ke saldo akun.');
 
             return;
         }
 
         DB::table('transactions')->where('id', $transaction->id)->update([
             'refund_status' => 'failed',
-            'refund_message' => 'Perlu pengembalian manual ke rekening pengguna: '.$result['message'],
+            'refund_message' => 'Perlu pengembalian manual ke rekening pengguna.',
         ]);
     }
 
@@ -88,7 +68,7 @@ class TransactionRefund
     }
 
     /**
-     * Kredit saldo pengguna sebagai cadangan bila refund Midtrans tidak bisa.
+     * Kredit saldo pengguna sebesar nominal transaksi.
      */
     private function creditBalance(int $transactionId): bool
     {

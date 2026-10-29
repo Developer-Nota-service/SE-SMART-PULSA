@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\DigiflazzWebhookController;
 use App\Http\Controllers\Api\MidtransController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\WalletController;
@@ -51,6 +52,11 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware('session.token')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
+
+        // Pemberitahuan akun: transaksi gagal + status pengembalian dana, dan
+        // status penarikan saldo.
+        Route::get('notifications', [NotificationController::class, 'index']);
+        Route::post('notifications/read', [NotificationController::class, 'read']);
 
         // Pengaturan profil: nama, foto, kontak (OTP), tipe akun.
         Route::patch('profile', [ProfileController::class, 'updateName']);

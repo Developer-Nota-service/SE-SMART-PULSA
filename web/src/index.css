@@ -134,6 +134,9 @@ p {
   font-size: 13.5px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar__sub {
@@ -2083,4 +2086,136 @@ button.inline-link {
 
 .admin-queue {
   gap: 10px;
+}
+
+/* ---------- lonceng notifikasi ---------- */
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: none;
+}
+
+.topbar__actions .badge--demo {
+  margin-left: 0;
+}
+
+.icon-btn--notif {
+  position: relative;
+}
+
+.notif-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #e04545;
+  border: 1.5px solid #fff;
+}
+
+.sheet--notif {
+  max-height: 82vh;
+}
+
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notif-head .link-btn {
+  margin-top: 0;
+}
+
+.notif-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 0 0;
+}
+
+.notif-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.notif-item.is-unread {
+  background: #f5f9ff;
+  border-color: #d7e4f7;
+}
+
+.notif-item__mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #9aa8bd;
+}
+
+.notif-item--success .notif-item__mark {
+  background: #23a065;
+}
+
+.notif-item--warning .notif-item__mark {
+  background: #e0a21a;
+}
+
+.notif-item--danger .notif-item__mark {
+  background: #e04545;
+}
+
+.notif-item__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.notif-item__title {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.notif-item.is-unread .notif-item__title {
+  font-weight: 800;
+}
+
+.notif-item__text {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.notif-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.notif-empty {
+  padding: 22px 6px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }

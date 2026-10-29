@@ -75,6 +75,15 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `X-Real-IP` dulu — proxy Vite memakai `xfwd: true` — jadi pastikan proxy
   produksi ikut mengirim header itu. Data ini hanya informasi untuk pengguna,
   bukan dasar keputusan keamanan.
+- `GET /notifications` → `{ items, unreadCount }` — pemberitahuan akun untuk lonceng
+  di header: transaksi yang gagal (alasan supplier + status pengembalian dana) dan
+  status penarikan saldo. Tidak ada tabel notifikasi; isinya diturunkan
+  `app/Http/Controllers/Api/NotificationController.php` dari `transactions`
+  (`status = failed`) dan `withdrawals`, diurutkan berdasarkan waktu kejadian
+  (`refunded_at` → `fulfilled_at` → `created_at`, atau `processed_at` →
+  `created_at`). Belum dibaca = waktu kejadian lebih baru dari
+  `users.notifications_read_at`.
+  `POST /notifications/read` — tandai semua sudah dibaca (titik merah hilang).
 - `PATCH /profile` `{name}` — ubah nama tampilan (2-60 karakter).
 - `POST /profile/contact` `{email,phone}` → 200 `{ pending }`: setiap kontak yang
   berubah mendapat kode sendiri — email baru lewat **email** (`channel: email`),
@@ -233,11 +242,12 @@ pending milik pengguna diperiksa. Frontend memanggilnya lewat
 `/transaksi?order_id=...` dari redirect Midtrans), lalu memuat ulang data bila ada
 yang berubah.
 
-Refund: `MidtransService::refund()` memanggil `POST /v2/{order_id}/refund` dengan
-`refund_key = refund-<order_number>` (mengulang permintaan yang sama aman, tidak
-membuat refund ganda). Kapabilitas refund harus aktif di akun Midtrans — bila
-dashboard menolak, ajukan aktivasi ke support Midtrans; sampai aktif, jalur saldo
-di `TransactionRefund` yang dipakai.
+Refund transaksi gagal: `app/Services/TransactionRefund.php` mengkreditkan nominal
+transaksi Midtrans yang gagal di supplier ke **saldo pengguna** (berlaku untuk
+semua tipe akun, termasuk akun pribadi), tanpa memanggil API refund Midtrans.
+Pengembaliannya selesai saat itu juga dan tidak bergantung pada metode pembayaran
+(VA/transfer bank memang tidak mendukung refund Midtrans). Saldo itu bisa ditarik
+lewat menu Penarikan.
 
 Env (`config/services.php → midtrans`): `MIDTRANS_SERVER_KEY`,
 `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION`, `MIDTRANS_FINISH_URL`. Di sandbox
@@ -336,23 +346,19 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   `balance_entries` (credit); `supplier_status` final membuat webhook/cek berulang
   tidak mengubah apa pun.
 - **Transaksi yang dibayar lewat Midtrans** dan gagal di supplier dikembalikan
-  `app/Services/TransactionRefund.php`: minta refund penuh ke
-  `POST /v2/{order_id}/refund` Midtrans (dana kembali ke metode pembayaran asal).
-  Midtrans hanya mendukung refund untuk kartu, GoPay, ShopeePay, DANA, OVO, QRIS,
-  Kredivo, Akulaku; bila ditolak (mis. VA/transfer bank), nominal transaksi
-  dikreditkan ke saldo lewat `balance_entries` untuk **semua tipe akun** (reseller
-  maupun pribadi), supaya uangnya tetap kembali dan bisa ditarik.
+  `app/Services/TransactionRefund.php`: nominal transaksi **langsung dikreditkan ke
+  saldo pengguna** lewat `balance_entries`, untuk **semua tipe akun** (reseller
+  maupun pribadi). API refund Midtrans tidak dipanggil, jadi pengembalian selesai
+  saat itu juga dan tidak bergantung pada metode pembayaran.
   `refund_status = failed` hanya dipakai bila kredit saldo itu sendiri gagal —
   admin melihatnya di `GET /admin/overview` (`counts.refundsManual`, kartu
   "Refund manual"), mengirim dana ke rekening pembeli, lalu menandainya lewat
   `POST /admin/transactions/{id}/refund` (`refund_status = manual`) supaya antrean
-  kembali kosong. Hasilnya di `transactions.refund_status` — `processing` → `midtrans`
-  (refund ke metode asal), `balance` (dikreditkan ke saldo pengguna), atau
-  `failed`/`manual` (penanganan admin) — plus
-  `refund_message`/`refunded_at`. Klaim `refund_status` membuat pengembalian
-  hanya terjadi **sekali** (webhook/cek berulang aman). Panggilan refund Midtrans
-  dilakukan setelah transaksi DB selesai, bukan di dalamnya. Admin bisa memicu
-  ulang pengembalian lewat `POST /admin/transactions/{id}/check`.
+  kembali kosong. Hasilnya di `transactions.refund_status` — `processing` →
+  `balance` (dikreditkan ke saldo pengguna) atau `failed`/`manual` (penanganan
+  admin) — plus `refund_message`/`refunded_at`. Klaim `refund_status` membuat
+  pengembalian hanya terjadi **sekali** (webhook/cek berulang aman). Admin bisa
+  memicu ulang pengembalian lewat `POST /admin/transactions/{id}/check`.
 - `POST /api/v1/digiflazz/webhook` — publik, wajib `X-Hub-Signature:
   sha1=<hmac>` dari `DIGIFLAZZ_WEBHOOK_SECRET`; menjawab 503 bila secret belum
   diisi. Event `ping` dijawab `pong`, ref_id tak dikenal dijawab 200 agar

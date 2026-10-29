@@ -90,6 +90,13 @@ export const InjectIcon = (p) => (
   </svg>
 )
 
+export const BellIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6.5 10.5a5.5 5.5 0 0 1 11 0c0 2.9.8 4.5 1.5 5.4H5c.7-.9 1.5-2.5 1.5-5.4z" />
+    <path d="M10 19a2 2 0 0 0 4 0" />
+  </svg>
+)
+
 export const ChevronRightIcon = (p) => (
   <svg {...base} {...p}>
     <path d="m9.5 6 6 6-6 6" />

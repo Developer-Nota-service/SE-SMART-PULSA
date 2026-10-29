@@ -151,6 +151,10 @@ export const api = {
   products: (params) => request(`/products${query(params)}`),
   product: (id) => request(`/products/${id}`),
 
+  // Pemberitahuan akun: transaksi gagal + status refund, status penarikan.
+  notifications: () => request('/notifications'),
+  markNotificationsRead: () => request('/notifications/read', { method: 'POST', body: {} }),
+
   transactions: (params) => request(`/transactions${query(params)}`),
   transaction: (id) => request(`/transactions/${id}`),
   purchase: (payload, idempotencyKey) =>
