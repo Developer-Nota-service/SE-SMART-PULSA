@@ -108,6 +108,13 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 - `GET /products?category=` · `GET /products/:id` — `price` adalah harga untuk tipe
   akun peminta, `retailPrice` harga publik
 - `GET /transactions?status=&category=&from=&to=` · `GET /transactions/:id`
+  (baris memuat `sellPrice`: harga jual yang dicetak di struk, `null` = total bayar)
+- `PATCH /transactions/{id}/sell-price` `{sellPrice}` → transaksi terbaru.
+  `sellPrice` 0-1.000.000.000 atau `null`/kosong untuk kembali ke total bayar.
+  Hanya pemilik transaksi (404 bila bukan miliknya). Dipakai struk supaya pembeli
+  di konter tidak melihat harga modal/total bayar aplikasi; fitur ini ditujukan
+  untuk reseller tetapi dibuka untuk semua tipe akun (akun demo di preview
+  bertipe pribadi, dan akun pribadi pun bisa menjual lagi).
 - `POST /promos/validate` `{code,productId}` → `{price, code, title,
   discountPercent, discount, total}`: pemeriksaan kode promo sebelum membeli
   (dipakai halaman beli). 404 produk tidak tersedia, 422 kode kosong/tidak
@@ -551,6 +558,31 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   `refundStatus`, `refundMessage`, `refundedAt`; detail pesanan menampilkan nomor
   seri (token PLN/pulsa) beserta tombol salin, dan baris **Pengembalian dana**
   untuk transaksi yang gagal di supplier.
+
+## Struk pesanan (printer thermal + WhatsApp)
+
+Detail pesanan (`web/src/components/OrderDetailSheet.jsx`) punya blok **Struk
+pesanan** (`web/src/components/ReceiptActions.jsx`) untuk reseller yang melayani
+pembeli di konter:
+
+- **Ukuran kertas** 58 mm (printer saku) atau 80 mm (printer kasir) dipilih di
+  halaman dan disimpan di `localStorage` (`sesp_receipt_paper`).
+- **Cetak struk** membuka jendela baru berisi HTML struk (`printReceipt()` di
+  `web/src/lib/receipt.js`) dengan `@page { size: 58mm|80mm auto; margin: 0 }`,
+  lalu memanggil `window.print()`. Ukuran kertas/margin akhir tetap mengikuti
+  dialog printer pengguna, jadi printer thermal lain tetap bisa dipakai.
+- **Kirim WhatsApp (JPG)** menggambar struk ke canvas (`createReceiptImage()`) lalu
+  memakai `navigator.share` bila perangkat mendukung berbagi file (ponsel → pilih
+  WhatsApp). Bila tidak didukung (desktop), muncul pratinjau JPG dengan tombol
+  **Unduh JPG** + **Buka WhatsApp** (tautan `wa.me` ke nomor tujuan bila nomor itu
+  memang nomor HP, selain itu `api.whatsapp.com/send?text=`). Gambar tidak bisa
+  dilampirkan lewat URL, jadi pengguna melampirkan file yang diunduh.
+- **Harga jual di struk** (`web/src/components/SellPriceEditor.jsx`) tampil di
+  detail pesanan: isi harga jual sendiri (mis. harga untuk pembeli di konter) → disimpan ke
+  `transactions.sell_price` lewat `PATCH /transactions/{id}/sell-price`. Struk
+  (cetak maupun JPG) memakai `sellPrice` bila ada, kalau tidak total bayar —
+  harga modal tidak ikut tercetak. Kosongkan + simpan untuk kembali ke total bayar.
+- Semua isi struk dibangun di `buildReceipt()` sehingga cetak dan JPG selalu sama.
 
 ## Invariant keamanan (jangan dilanggar)
 

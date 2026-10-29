@@ -24,6 +24,7 @@ class TransactionController extends Controller
         'transactions.amount',
         'transactions.promo_code',
         'transactions.discount_amount',
+        'transactions.sell_price',
         'transactions.status',
         'transactions.payment_method',
         'transactions.paid_at',
@@ -96,6 +97,55 @@ class TransactionController extends Controller
         if (! $row) {
             return response()->json(['message' => 'Transaksi tidak ditemukan.'], 404);
         }
+
+        return response()->json(['data' => self::serialize($row)]);
+    }
+
+    /**
+     * Harga jual yang tampil di struk reseller (cetak thermal / gambar WhatsApp).
+     * Struk hanya memuat harga ini — total bayar di aplikasi (harga modal) tidak
+     * ikut tercetak, jadi pembeli di konter tidak melihat harga dari penyedia.
+     * Nilai `null`/kosong mengembalikan struk ke total bayar.
+     */
+    public function updateSellPrice(Request $request, string $id): JsonResponse
+    {
+        if (! ctype_digit($id)) {
+            return response()->json(['message' => 'Transaksi tidak valid.'], 422);
+        }
+
+        $user = $request->attributes->get('authUser');
+
+        $raw = $request->input('sellPrice');
+        $sellPrice = null;
+
+        if ($raw !== null && $raw !== '') {
+            if (! is_numeric($raw) || (int) $raw < 0 || (int) $raw > 1_000_000_000) {
+                return response()->json([
+                    'message' => 'Harga jual tidak valid.',
+                    'errors' => [
+                        'sellPrice' => ['Harga jual harus angka 0 - 1.000.000.000, atau dikosongkan.'],
+                    ],
+                ], 422);
+            }
+
+            $sellPrice = (int) $raw;
+        }
+
+        $owned = DB::table('transactions')
+            ->where('id', (int) $id)
+            ->where('user_id', $user->id)
+            ->exists();
+
+        if (! $owned) {
+            return response()->json(['message' => 'Transaksi tidak ditemukan.'], 404);
+        }
+
+        DB::table('transactions')->where('id', (int) $id)->update(['sell_price' => $sellPrice]);
+
+        $row = DB::table('transactions')
+            ->join('products', 'products.id', '=', 'transactions.product_id')
+            ->where('transactions.id', (int) $id)
+            ->first(self::SELECT_COLUMNS);
 
         return response()->json(['data' => self::serialize($row)]);
     }
@@ -584,6 +634,7 @@ class TransactionController extends Controller
             'amount' => (int) $row->amount,
             'promoCode' => $row->promo_code ?? null,
             'discountAmount' => (int) ($row->discount_amount ?? 0),
+            'sellPrice' => isset($row->sell_price) ? (int) $row->sell_price : null,
             'status' => $row->status,
             'paymentMethod' => $row->payment_method ?? 'balance',
             'paidAt' => $row->paid_at ?? null,

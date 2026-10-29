@@ -160,6 +160,9 @@ export const api = {
 
   transactions: (params) => request(`/transactions${query(params)}`),
   transaction: (id) => request(`/transactions/${id}`),
+  // Harga jual di struk (khusus reseller); null = pakai total bayar.
+  updateSellPrice: (id, sellPrice) =>
+    request(`/transactions/${id}/sell-price`, { method: 'PATCH', body: { sellPrice } }),
   purchase: (payload, idempotencyKey) =>
     request('/transactions', {
       method: 'POST',

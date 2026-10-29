@@ -123,7 +123,16 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {selected ? <OrderDetailSheet order={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? (
+        <OrderDetailSheet
+          order={selected}
+          onUpdate={(updated) => {
+            setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+            setSelected(updated)
+          }}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
     </div>
   )
 }

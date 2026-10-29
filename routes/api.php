@@ -106,6 +106,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::get('transactions/{id}', [TransactionController::class, 'show']);
+        // Harga jual di struk milik reseller (pembeli tidak melihat harga modal).
+        Route::patch('transactions/{id}/sell-price', [TransactionController::class, 'updateSellPrice']);
         Route::post('transactions', [TransactionController::class, 'store']);
         Route::post('transactions/direct', [TransactionController::class, 'direct']);
         // Cek kode promo sebelum membeli; nominal tetap dihitung ulang saat transaksi.

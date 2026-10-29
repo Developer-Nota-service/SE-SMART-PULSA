@@ -2801,3 +2801,96 @@ button.inline-link {
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* ---------- struk (cetak thermal + WhatsApp) ---------- */
+.receipt {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f9fbfe;
+  padding: 12px;
+  text-align: left;
+}
+
+.receipt__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receipt__head .field__label {
+  margin-bottom: 0;
+}
+
+.receipt__paper {
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.receipt__actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.receipt__preview {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  margin: 12px auto 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.overlay--stacked {
+  z-index: 60;
+}
+
+/* ---------- harga jual reseller ---------- */
+.sell-price {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f9fbfe;
+  padding: 12px;
+  text-align: left;
+}
+
+.sell-price__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sell-price__head .field__label {
+  margin-bottom: 0;
+}
+
+.sell-price__badge {
+  border-radius: 999px;
+  background: #e6f4ea;
+  color: #157347;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sell-price__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.sell-price__row .btn {
+  align-self: stretch;
+}

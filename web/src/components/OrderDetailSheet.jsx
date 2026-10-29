@@ -1,10 +1,15 @@
 import { useEffect } from 'react'
+import { useAuth } from '../auth/AuthContext.jsx'
 import { categoryLabel, dateTime, refundLabel, rupiah } from '../lib/format.js'
 import CopyButton from './CopyButton.jsx'
+import ReceiptActions from './ReceiptActions.jsx'
+import SellPriceEditor from './SellPriceEditor.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import { CloseIcon } from './Icons.jsx'
 
-export default function OrderDetailSheet({ order, onClose }) {
+export default function OrderDetailSheet({ order, onClose, onUpdate }) {
+  const { user } = useAuth()
+
   useEffect(() => {
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -103,7 +108,17 @@ export default function OrderDetailSheet({ order, onClose }) {
             <span className="row__label">Total bayar</span>
             <span className="row__value">{rupiah(order.amount)}</span>
           </div>
+          {order.sellPrice !== null && order.sellPrice !== undefined ? (
+            <div className="row">
+              <span className="row__label">Harga jual di struk</span>
+              <span className="row__value">{rupiah(order.sellPrice)}</span>
+            </div>
+          ) : null}
         </div>
+
+        <ReceiptActions order={order} seller={user} />
+
+        <SellPriceEditor order={order} onChange={onUpdate} />
 
         {order.product?.isDemo ? (
           <p className="note note--muted">
