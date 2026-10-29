@@ -410,6 +410,19 @@ sumber data: `app/Support/DashboardContent.php`, dipakai `DashboardController`
 
 Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
 
+**Digiflazz adalah satu-satunya supplier.** Tidak ada integrasi supplier lain
+(TriPay, P-Store/Amerta, server H2H lain) dan tidak boleh ditambahkan tanpa
+permintaan eksplisit — seluruh katalog `is_demo = false` berasal dari
+`digiflazz:sync-products`. Produk manual lama berawalan `TSL` (tanpa
+`cost_price`/`seller_name`) bukan produk Digiflazz: biarkan nonaktif, jangan
+diaktifkan kembali karena transaksinya tidak bisa dipenuhi supplier.
+
+Akun **development** (`DIGIFLAZZ_TESTING=true`) hanya mengirim sebagian katalog —
+misalnya pulsa Telkomsel bisa kosong walau kategori lain penuh. Itu batas akun
+dev, bukan bug sinkron; setelah `DIGIFLAZZ_TESTING=false` dan kunci produksi
+dipakai, jalankan `php artisan digiflazz:sync-products` untuk menarik katalog
+penuh lalu periksa jumlah produk per operator di konsol admin.
+
 - `config/digiflazz.php` → `DIGIFLAZZ_USERNAME`, `DIGIFLAZZ_API_KEY`,
   `DIGIFLAZZ_WEBHOOK_SECRET` (dashboard Secrets), `DIGIFLAZZ_TESTING` (default
   `true` = mode development Digiflazz; set `false` saat go-live),
