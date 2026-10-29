@@ -21,6 +21,9 @@ const marginOverCost = (row) =>
 export default function AdminProducts() {
   const [category, setCategory] = useState('')
   const [search, setSearch] = useState('')
+  // Provider = seller Digiflazz (`seller_name`) yang memasok produk ke akun ini.
+  const [provider, setProvider] = useState('')
+  const [providers, setProviders] = useState([])
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,13 +42,21 @@ export default function AdminProducts() {
     setLoading(true)
     setError('')
     try {
-      setItems(await api.adminProducts({ category, q: search }))
+      const data = await api.adminProducts({ category, q: search, provider })
+      const nextProviders = data.providers || []
+      // Provider yang hilang dari daftar (mis. setelah ganti kategori) direset
+      // supaya daftar produk tidak kosong tanpa pilihan yang bisa dipilih lagi.
+      if (provider && !nextProviders.some((option) => option.name === provider)) {
+        setProvider('')
+      }
+      setItems(data.items || [])
+      setProviders(nextProviders)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
       setLoading(false)
     }
-  }, [category, search])
+  }, [category, search, provider])
 
   useEffect(() => {
     load()
@@ -77,7 +88,7 @@ export default function AdminProducts() {
     try {
       const result = await api.adminSyncDigiflazz()
       setNotice(
-        `Harga modal ${result.products} produk diperbarui dari Digiflazz (${result.active} aktif).`,
+        `Harga modal ${result.products} produk dari ${result.providers} provider diperbarui dari Digiflazz (${result.active} aktif).`,
       )
       await load()
     } catch (requestError) {
@@ -117,11 +128,31 @@ export default function AdminProducts() {
         />
       </label>
 
+      {providers.length > 0 ? (
+        <label className="field field--compact">
+          <span className="field__label">Provider Digiflazz</span>
+          <select
+            className="input"
+            value={provider}
+            onChange={(event) => setProvider(event.target.value)}
+          >
+            <option value="">Semua provider ({providers.length})</option>
+            {providers.map((option) => (
+              <option key={option.name} value={option.name}>
+                {option.name} · {option.products} produk
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       <div className="card admin-card">
         <p className="admin-card__title">Harga modal Digiflazz</p>
         <p className="admin-card__sub">
-          Tarik harga modal dan provider terbaru dari Digiflazz. Harga jual yang sudah Anda atur
-          tidak berubah — hanya produk baru yang dihitung otomatis dari margin.
+          Tarik harga modal dan provider terbaru dari seluruh seller Digiflazz. Harga jual yang
+          sudah Anda atur tidak berubah — hanya produk baru yang dihitung otomatis dari margin.
+          Harga max tiap produk dikirim ke Digiflazz sebagai max_price saat transaksi, jadi tidak
+          perlu mengaturnya lagi di dashboard Digiflazz.
         </p>
         <button
           type="button"
@@ -216,6 +247,12 @@ export default function AdminProducts() {
                   </span>
                 </div>
                 <div>
+                  <span className="admin-price__label">Harga max</span>
+                  <span className="admin-price__value">
+                    {row.maxCostPrice ? rupiah(row.maxCostPrice) : '–'}
+                  </span>
+                </div>
+                <div>
                   <span className="admin-price__label">Reseller</span>
                   <span className="admin-price__value">{rupiah(row.price)}</span>
                 </div>
@@ -223,19 +260,14 @@ export default function AdminProducts() {
                   <span className="admin-price__label">Publik</span>
                   <span className="admin-price__value">{rupiah(row.retailPrice)}</span>
                 </div>
-                <div>
-                  <span className="admin-price__label">Selisih</span>
-                  <span className="admin-price__value">{marginPercent(row)}%</span>
-                </div>
               </div>
 
               {row.costPrice ? (
                 <p className="admin-card__sub">
-                  {row.sellerName ? `${row.sellerName} · ` : ''}
-                  margin modal {marginOverCost(row)}%
-                  {row.maxCostPrice ? ` · harga max ${rupiah(row.maxCostPrice)}` : ''}
+                  Provider {row.sellerName || '—'} · margin modal {marginOverCost(row)}% · selisih{' '}
+                  {marginPercent(row)}%
                   {row.maxCostPrice && row.maxCostPrice < row.costPrice
-                    ? ' (di bawah modal — transaksi akan ditolak Digiflazz)'
+                    ? ' · harga max di bawah modal, transaksi akan ditolak Digiflazz'
                     : ''}
                   {row.costSyncedAt ? ` · modal diperbarui ${dateTime(row.costSyncedAt)}` : ''}
                 </p>
@@ -366,8 +398,9 @@ function PriceSheet({ product, onClose, onSaved }) {
               onChange={(event) => setMaxCostPrice(event.target.value.replace(/\D/g, ''))}
             />
             <span className="field__hint">
-              Modal Digiflazz sekarang {rupiah(product.costPrice)}. Bila harga modal naik melewati
-              angka ini, transaksi ditolak Digiflazz dan saldo pembeli dikembalikan.
+              Modal Digiflazz sekarang {rupiah(product.costPrice)}
+              {product.sellerName ? ` dari ${product.sellerName}` : ''}. Bila harga modal naik
+              melewati angka ini, transaksi ditolak Digiflazz dan saldo pembeli dikembalikan.
             </span>
           </label>
         ) : null}

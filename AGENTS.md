@@ -122,14 +122,16 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/deposits/{id}/cancel`, `GET /admin/transactions?status=&q=`,
   `POST /admin/transactions/{id}/check`, `POST /admin/transactions/{id}/refund`
   (tandai refund manual sudah dikirim),
-  `GET /admin/users?q=`, `GET /admin/products?category=&q=` (tiap baris memuat
-  `costPrice`/`sellerName`/`maxCostPrice`/`costSyncedAt`),
+  `GET /admin/users?q=`, `GET /admin/products?category=&q=&provider=`
+  (`{data: {items, providers}}`; tiap baris memuat `costPrice`/`sellerName`/
+  `maxCostPrice`/`costSyncedAt`, `providers` = ringkasan seller Digiflazz
+  `{name, products}` yang ikut filter kategori/kata kunci),
   `PATCH /admin/products/{id}` `{price?,retailPrice?,maxCostPrice?,active?}` (harga
   publik tidak boleh di bawah harga reseller; `maxCostPrice` = batas harga modal,
   `0`/`null` = tanpa batas),
   `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
   (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk),
-  `POST /admin/products/sync-digiflazz` → `{products,active,skipped,deactivated}`:
+  `POST /admin/products/sync-digiflazz` → `{products,providers,active,skipped,deactivated}`:
   tarik harga modal terbaru dari Digiflazz (harga jual admin tidak ditimpa). 422
   bila kredensial kosong, 502 bila Digiflazz menolak (mis. limit pricelist).
   Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
@@ -300,11 +302,14 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   pembelian. Lihat "Konten beranda pengguna".
 
 - **Harga** (`web/src/components/admin/AdminProducts.jsx`) — daftar produk per
-  kategori, harga **modal** (`products.cost_price`, dari Digiflazz), harga reseller
-  (`products.price`), harga publik (`products.retail_price`), selisih %, provider
-  (`seller_name`), dan status tayang. Kartu "Harga modal Digiflazz" punya tombol
-  **Ambil harga terbaru** (`POST /admin/products/sync-digiflazz`) yang memperbarui
-  modal + provider tanpa menyentuh harga jual yang sudah diatur admin. Sheet "Ubah
+  kategori, harga **modal** (`products.cost_price`, dari Digiflazz), **harga max**
+  (`max_cost_price`), harga reseller (`products.price`), harga publik
+  (`retail_price`), selisih %, provider (`seller_name`), dan status tayang.
+  Pemilih **Provider Digiflazz** menyaring produk per seller dari daftar harga
+  Digiflazz (ringkasan `{name, products}` dari `GET /admin/products`). Kartu
+  "Harga modal Digiflazz" punya tombol **Ambil harga terbaru**
+  (`POST /admin/products/sync-digiflazz`) yang memperbarui modal + provider seluruh
+  seller sekaligus tanpa menyentuh harga jual yang sudah diatur admin. Sheet "Ubah
   harga" juga mengisi **Harga max modal** (`max_cost_price`) — batas harga modal
   yang mau dibayar; dikirim ke Digiflazz sebagai `max_price` sehingga transaksi
   ditolak (dan saldo pembeli dikembalikan) bila harga supplier menembus batas itu.
@@ -421,6 +426,10 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
 - `products.max_cost_price` (diisi admin) dikirim sebagai `max_price` saat topup
   (`TransactionFulfillment`), jadi harga supplier yang melonjak melewati batas itu
   membuat transaksi ditolak dan dana pembeli dikembalikan lewat jalur refund biasa.
+  **Harga max hanya diatur di aplikasi** — daftar harga Digiflazz tidak mengirim
+  nilai "harga maksimal" yang diisi di dashboard mereka (field respons hanya
+  `price` + `seller_name`), jadi jangan mencari field itu di API; `max_price` per
+  transaksi inilah yang menegakkan batasnya.
 - **Isi `customer_no` mengikuti produk Digiflazz** (satu kolom teks; formatnya
   ditentukan seller lewat `desc` daftar harga): pulsa/data/e-wallet = nomor HP;
   token PLN = ID pelanggan/nomor meter; game = ID game/User ID, sebagian produk

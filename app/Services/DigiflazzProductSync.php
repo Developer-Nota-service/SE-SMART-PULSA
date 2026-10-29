@@ -30,7 +30,7 @@ class DigiflazzProductSync
     }
 
     /**
-     * @return array{products: int, active: int, skipped: int, deactivated: int}
+     * @return array{products: int, providers: int, active: int, skipped: int, deactivated: int}
      */
     public function sync(): array
     {
@@ -39,10 +39,11 @@ class DigiflazzProductSync
         $margin = (float) config('digiflazz.margin_percent');
         $now = now();
         $skus = [];
+        $providers = [];
         $active = 0;
         $skipped = 0;
 
-        DB::transaction(function () use ($rows, $margin, $now, &$skus, &$active, &$skipped): void {
+        DB::transaction(function () use ($rows, $margin, $now, &$skus, &$providers, &$active, &$skipped): void {
             foreach ($rows as $row) {
                 $sku = trim((string) ($row['buyer_sku_code'] ?? ''));
                 $category = $this->categoryFor($row);
@@ -56,6 +57,11 @@ class DigiflazzProductSync
 
                 $enabled = (bool) ($row['buyer_product_status'] ?? false)
                     && (bool) ($row['seller_product_status'] ?? false);
+                $seller = $this->seller((string) ($row['seller_name'] ?? ''));
+
+                if ($seller !== null) {
+                    $providers[$seller] = true;
+                }
 
                 $supplier = [
                     'category' => $category,
@@ -65,7 +71,7 @@ class DigiflazzProductSync
                     // zone_id") — ditampilkan di halaman beli.
                     'instruction' => $this->instruction((string) ($row['desc'] ?? '')),
                     'cost_price' => $cost,
-                    'seller_name' => $this->seller((string) ($row['seller_name'] ?? '')),
+                    'seller_name' => $seller,
                     'active' => $enabled,
                     'is_demo' => false,
                     'cost_synced_at' => $now,
@@ -99,6 +105,7 @@ class DigiflazzProductSync
 
         return [
             'products' => count($skus),
+            'providers' => count($providers),
             'active' => $active,
             'skipped' => $skipped,
             'deactivated' => $deactivated,

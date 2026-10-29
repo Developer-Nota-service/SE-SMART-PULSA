@@ -629,18 +629,26 @@ class AdminController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
         $category = (string) $request->query('category', '');
+        $provider = trim((string) $request->query('provider', ''));
 
         if ($category !== '' && ! in_array($category, CatalogController::CATEGORIES, true)) {
             return response()->json(['message' => 'Kategori tidak dikenal.'], 422);
         }
 
-        $rows = DB::table('products')
-            ->when($category !== '', fn ($query) => $query->where('category', $category))
-            ->when($search !== '', fn ($query) => $query->where(function ($inner) use ($search) {
-                $inner->where('name', 'ilike', '%'.$search.'%')
-                    ->orWhere('sku', 'ilike', '%'.$search.'%')
-                    ->orWhere('operator', 'ilike', '%'.$search.'%');
-            }))
+        // Filter yang sama dipakai daftar produk dan ringkasan provider, supaya
+        // pilihan provider mengikuti kategori/kata kunci yang sedang aktif.
+        $filtered = static function ($query) use ($category, $search) {
+            return $query
+                ->when($category !== '', fn ($inner) => $inner->where('category', $category))
+                ->when($search !== '', fn ($inner) => $inner->where(function ($keyword) use ($search) {
+                    $keyword->where('name', 'ilike', '%'.$search.'%')
+                        ->orWhere('sku', 'ilike', '%'.$search.'%')
+                        ->orWhere('operator', 'ilike', '%'.$search.'%');
+                }));
+        };
+
+        $rows = $filtered(DB::table('products'))
+            ->when($provider !== '', fn ($query) => $query->where('seller_name', $provider))
             ->orderBy('category')
             ->orderBy('operator')
             ->orderBy('sort_order')
@@ -651,7 +659,23 @@ class AdminController extends Controller
                 'cost_price', 'seller_name', 'max_cost_price', 'cost_synced_at', 'active', 'is_demo',
             ]);
 
-        return response()->json(['data' => $rows->map([self::class, 'serializeAdminProduct'])->all()]);
+        // Provider = seller Digiflazz (`seller_name`) yang mengirim produk ke akun
+        // ini; hanya produk supplier nyata yang punya provider.
+        $providers = $filtered(DB::table('products'))
+            ->where('is_demo', false)
+            ->whereNotNull('seller_name')
+            ->select('seller_name', DB::raw('count(*) as products'))
+            ->groupBy('seller_name')
+            ->orderByDesc('products')
+            ->orderBy('seller_name')
+            ->get()
+            ->map(fn ($row) => ['name' => $row->seller_name, 'products' => (int) $row->products])
+            ->all();
+
+        return response()->json(['data' => [
+            'items' => $rows->map([self::class, 'serializeAdminProduct'])->all(),
+            'providers' => $providers,
+        ]]);
     }
 
     /**
