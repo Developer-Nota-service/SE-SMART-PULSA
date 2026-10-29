@@ -228,10 +228,6 @@ export default function PurchasePage() {
             ) : null}
           </div>
 
-          <p className="note note--muted">
-            Produk DEMO — tidak ada pengiriman pulsa/token nyata pada tahap ini.
-          </p>
-
           <div className="button-row">
             <button type="button" className="btn btn--outline" onClick={() => navigate('/')}>
               Beranda
@@ -288,7 +284,6 @@ export default function PurchasePage() {
       </button>
 
       <section className="card">
-        {product.isDemo ? <span className="badge badge--demo badge--xs">DEMO</span> : null}
         <h2 className="section-title">{product.name}</h2>
         <p className="section-hint">
           {product.operator} · {categoryLabel(product.category)}

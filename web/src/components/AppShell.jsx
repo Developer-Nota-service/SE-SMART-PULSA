@@ -15,7 +15,6 @@ export default function AppShell() {
         </Link>
         <div className="topbar__actions">
           <NotificationBell />
-          <span className="badge badge--demo">DEMO</span>
         </div>
       </header>
 

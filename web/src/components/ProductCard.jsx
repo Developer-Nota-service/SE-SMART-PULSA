@@ -6,7 +6,6 @@ export default function ProductCard({ product }) {
     <Link to={`/beli/${product.id}`} className="product">
       <span className="product__top">
         <span className="product__operator">{product.operator}</span>
-        {product.isDemo ? <span className="badge badge--demo badge--xs">DEMO</span> : null}
         {product.disturbed ? (
           <span className="badge badge--muted badge--xs">Gangguan</span>
         ) : null}

@@ -126,11 +126,7 @@ export default function OrderDetailSheet({ order, onClose, onUpdate }) {
 
         <SellPriceEditor order={order} onChange={onUpdate} />
 
-        {order.product?.isDemo ? (
-          <p className="note note--muted">
-            Pesanan ini memakai produk DEMO. Tidak ada pengiriman pulsa/token nyata.
-          </p>
-        ) : order.status === 'pending' ? (
+        {order.status === 'pending' ? (
           <p className="note note--muted">
             Pesanan sedang diproses penyedia. Nomor seri muncul di sini setelah selesai.
           </p>

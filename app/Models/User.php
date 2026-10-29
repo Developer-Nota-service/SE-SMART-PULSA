@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'email', 'password_hash'])]
+#[Hidden(['password_hash', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -26,7 +26,13 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'password_hash' => 'hashed',
         ];
+    }
+
+    /** Kolom sandi aplikasi ini bernama `password_hash`, bukan `password`. */
+    public function getAuthPassword(): string
+    {
+        return (string) $this->password_hash;
     }
 }

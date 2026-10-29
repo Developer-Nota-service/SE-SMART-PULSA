@@ -19,6 +19,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // cookie must not be encrypted/decrypted by the framework.
         $middleware->encryptCookies(except: ['sesp_session']);
 
+        // Di belakang reverse proxy hosting, IP klien hanya terbaca benar bila
+        // proxy-nya dipercaya (rate limit & riwayat login memakai IP). Kosong =
+        // tidak ada proxy yang dipercaya (perilaku default Laravel).
+        $trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
+
+        if ($trustedProxies !== '') {
+            $middleware->trustProxies(at: $trustedProxies === '*'
+                ? '*'
+                : array_map('trim', explode(',', $trustedProxies)));
+        }
+
         $middleware->alias([
             'session.token' => AuthenticateSessionToken::class,
             'admin.only' => EnsureAdmin::class,

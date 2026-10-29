@@ -163,7 +163,6 @@ export default function DepositForm({ onCreated }) {
 
       {created ? (
         <div className="deposit-result">
-          <span className="badge badge--demo badge--xs">DEMO</span>
           <p className="deposit-result__title">Pesanan deposit dibuat</p>
           <div className="detail-order">
             <span className="detail-order__label">Nomor pesanan</span>

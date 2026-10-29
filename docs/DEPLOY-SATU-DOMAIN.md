@@ -51,6 +51,10 @@ SESSION_DRIVER=file                         # tabel `sessions` dipakai untuk tok
 CACHE_STORE=file
 QUEUE_CONNECTION=sync
 COOKIE_SECURE=1
+SESSION_SECURE_COOKIE=1
+# IP proxy hosting (Traefik/Nginx) agar IP klien & rate limit benar.
+# Pakai `*` hanya bila aplikasi tidak bisa diakses langsung tanpa proxy.
+TRUSTED_PROXIES=*
 MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx      # Dashboard Midtrans > Settings > Access Keys
 MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxx
 MIDTRANS_IS_PRODUCTION=1
@@ -167,10 +171,15 @@ Cek log container: harus muncul `INFO Running migrations.` lalu Apache menyala.
    lalu login sebagai admin → `/admin` terbuka.
 6. Daftar akun baru dengan nomor WhatsApp aktif → kode OTP masuk → masuk → saldo Rp0 tampil.
 
-> **Produk DEMO tetap di-seed di produksi** supaya katalog tidak kosong, dan
-> transaksinya hanya simulasi (tidak dikirim ke supplier). Setelah
-> `php artisan digiflazz:sync-products` berhasil, nonaktifkan produk DEMO dari
-> konsol admin (`/admin/harga`) agar pembeli tidak membayar produk simulasi.
+> **Produksi tidak berisi data demo.** `DatabaseSeeder` melewati akun demo,
+> riwayat demo, dan 95 produk simulasi saat `APP_ENV=production`, jadi katalog
+> kosong sampai `php artisan digiflazz:sync-products` dijalankan dengan
+> kredensial produksi. Database lama yang masih menyimpan produk `is_demo = true`
+> (dari deploy sebelumnya) perlu dinonaktifkan sekali:
+>
+> ```sql
+> UPDATE products SET active = false WHERE is_demo = true;
+> ```
 
 ## Cek database baru terisi
 
@@ -180,6 +189,52 @@ Di tab **Deployments → App Logs** atau console project:
 php artisan migrate:status      # tiga migration berstatus Ran
 php artisan db:show             # driver pgsql, database se-smart-pulsa-db
 ```
+
+## Backup database
+
+`docker/backup-db.sh` membuat `pg_dump` terkompresi dan menghapus backup lebih tua
+dari 14 hari:
+
+```bash
+BACKUP_DIR=/var/backups/pulsa ./docker/backup-db.sh
+```
+
+Cron harian di server (02.00):
+
+```cron
+0 2 * * * cd /path/ke/aplikasi && ./docker/backup-db.sh >> /var/log/pulsa-backup.log 2>&1
+```
+
+Salin hasilnya keluar dari VPS (rsync/S3) supaya tidak ikut hilang bila server
+rusak, dan uji restore sekali sebelum go-live:
+
+```bash
+gunzip -c pulsa-20261029-020000.sql.gz | psql "$DATABASE_URL"
+```
+
+## Test otomatis
+
+```bash
+php artisan test          # atau: ./vendor/bin/phpunit
+./vendor/bin/pint --test  # gaya kode PHP
+```
+
+Test berjalan tanpa database eksternal (sqlite in-memory, lihat `phpunit.xml`).
+
+## Keamanan go-live
+
+- Postgres **tidak boleh** dipublikasikan: tidak ada port `5432` yang di-map ke
+  host/internet; aplikasi menghubunginya lewat jaringan internal Docker.
+- `APP_ENV=production` + `APP_DEBUG=false`; `.env` tidak pernah masuk repo.
+- `APP_KEY` dibuat khusus untuk deployment (`php artisan key:generate --show`),
+  jangan memakai key sandbox. Mengganti `APP_KEY` membatalkan semua sesi dan
+  membuat kredensial integrasi terenkripsi tidak terbaca (isi ulang lewat tab
+  Integrasi).
+- Ganti sandi database dari nilai contoh dan batasi SSH ke login key saja.
+- Isi `TRUSTED_PROXIES` dengan IP proxy sendiri, jangan `*` bila server bisa
+  diakses langsung tanpa proxy.
+- Kredensial pihak ketiga hanya lewat env/dashboard atau tab **Integrasi**
+  (tersimpan terenkripsi); jangan menulisnya di file repo.
 
 ## Catatan
 

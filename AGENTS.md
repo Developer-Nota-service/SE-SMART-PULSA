@@ -1,6 +1,7 @@
 # AGENTS.md — SE SMART PULSA
 
-PPOB demo app. **Backend Laravel 13 (PHP 8.4) + Postgres**, frontend React (Vite)
+PPOB app (produksi memakai produk Digiflazz; data demo hanya ada di sandbox).
+**Backend Laravel 13 (PHP 8.4) + Postgres**, frontend React (Vite)
 di `web/`. Satu domain: Laravel melayani API `/api/v1` dan React hasil build di `/app`.
 
 ## Menjalankan (sandbox/base44)
@@ -39,8 +40,9 @@ docker compose -f docker-compose.base44.yml restart web       # npm
 - `routes/api.php` + `app/Http/Controllers/Api/*` — kontrak API v1.
 - `app/Http/Middleware/AuthenticateSessionToken.php` — token cookie `sesp_session`
   atau `Authorization: Bearer`.
-- `database/migrations/*` — skema; `database/seeders/DatabaseSeeder.php` — produk +
-  akun + riwayat demo (idempotent, aman dijalankan setiap boot).
+- `database/migrations/*` — skema; `database/seeders/DatabaseSeeder.php` — akun admin
+  pemilik + banner/promo awal (idempotent, aman dijalankan setiap boot). Katalog,
+  akun, dan riwayat demo hanya di-seed saat **bukan** `APP_ENV=production`.
 - `web/` — React; `vite.config.js` build ke `public/app` dengan base `/app/`.
 - `routes/web.php` — `/` → `/app`; `/app/{any}` → `public/app/index.html` (SPA fallback).
 
@@ -206,11 +208,10 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
 
 Akun demo: `demo@sesmartpulsa.id` / `demo12345`. Data demo: saldo Rp186.900,
 4 transaksi (success/pending/failed), 4 deposit (paid/pending/expired), 95 produk
-DEMO di 7 kategori. **Hanya untuk non-produksi:** `DatabaseSeeder::seedUsers()`
-melewati akun demo + riwayat demo saat `APP_ENV=production` (katalog memuat produk
-supplier asli, jadi saldo demo bisa dipakai membeli SKU nyata), dan kotak
-kredensial demo di `LoginPage.jsx` disembunyikan di build produksi
-(`import.meta.env.PROD`). Jangan menghidupkan kembali keduanya untuk produksi.
+DEMO di 7 kategori. **Hanya untuk non-produksi:** `DatabaseSeeder::run()` melewati
+akun demo, riwayat demo, **dan katalog demo** saat `APP_ENV=production`, jadi
+produksi hanya berisi katalog hasil `digiflazz:sync-products`. Kotak kredensial
+demo dan seluruh label DEMO di UI sudah dihapus; jangan menambahkannya kembali.
 
 **Akun admin adalah akun pribadi pemilik** — `muhammadyusufrifaldi@gmail.com` /
 `081346043318` (role `admin`, sudah terverifikasi). Tidak ada sandi default: akun
@@ -719,6 +720,10 @@ pembeli di konter:
   `verification.devCode` yang dibatasi preview mode.
 - `COOKIE_SECURE=1` untuk deployment HTTPS. Cookie `sesp_session` dikecualikan dari
   `EncryptCookies` (token acak, bukan payload terenkripsi).
+- Postgres tidak pernah dipublikasikan: tidak ada port host untuk service `db` dan
+  jangan menambahkannya "supaya mudah diakses". Backup lewat `docker/backup-db.sh`.
+- Di belakang reverse proxy, isi `TRUSTED_PROXIES` (IP proxy) supaya IP klien
+  terbaca — kalau tidak, rate limit login dan riwayat login menumpuk di satu IP.
 - Kredensial integrasi hanya dikirim tersamarkan, disimpan terenkripsi
   (`integration_credentials`), dan diubah hanya dengan password admin. Jangan
   menambahkan endpoint yang mengembalikan nilai asli atau menerima nilai baru
@@ -726,13 +731,22 @@ pembeli di konter:
 
 ## Deploy
 
-Lihat `docs/DEPLOY-SATU-DOMAIN.md`. Ringkas: DockHosting project `se-smart-pulsa`
-framework **Laravel** (root repo, port **80**), `npm run build` untuk React, dan
-environment `APP_KEY`, `DATABASE_URL` (Postgres `se-smart-pulsa-db`),
-`COOKIE_SECURE=1`. Build type Dockerfile memakai `Dockerfile` + `docker/entrypoint.sh`,
-yang otomatis `migrate --force` + `db:seed` ke database kosong saat container start.
-Auto-deploy hosting mengikuti branch `main`; pastikan branch itu sudah berisi kode
-Laravel, bukan backend Node lama.
+Lihat `docs/DEPLOY-SATU-DOMAIN.md`. Ringkas: framework **Laravel** (root repo,
+port **80**), `npm run build` untuk React, dan environment `APP_KEY`,
+`DATABASE_URL` (Postgres internal), `COOKIE_SECURE=1`,
+`SESSION_SECURE_COOKIE=1`, `TRUSTED_PROXIES` (IP proxy hosting). Build type
+Dockerfile memakai `Dockerfile` + `docker/entrypoint.sh`, yang otomatis
+`migrate --force` + `db:seed` ke database kosong saat container start. Produksi
+tidak berisi data demo: jalankan `php artisan digiflazz:sync-products` setelah
+kredensial produksi terpasang. Backup harian: `docker/backup-db.sh` (lihat cron di
+dokumen deploy). Auto-deploy hosting mengikuti branch `main`.
+
+## Test otomatis
+
+`php artisan test` atau `./vendor/bin/phpunit` (sqlite in-memory, tanpa DB
+eksternal). Gaya kode: `./vendor/bin/pint --test`. Test yang ada: aturan harga
+(`Pricing`), status gangguan produk (`ProductAvailability`), signature webhook
+Digiflazz, dan validasi login.
 
 ## Verifikasi
 
@@ -776,10 +790,11 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
 
 ## Catatan
 
-- Produk demo (`is_demo = true`, label DEMO) tidak pernah dikirim ke supplier.
-  Produk hasil `digiflazz:sync-products` ber-`is_demo = false` dan benar-benar
-  dikirim ke Digiflazz saat dibayar; harganya datang dari daftar harga supplier,
-  jangan dikarang manual.
+- Produk demo (`is_demo = true`) tidak pernah dikirim ke supplier dan **tidak
+  dibuat di produksi**; kolomnya dipertahankan agar riwayat transaksi lama tetap
+  utuh. Produk hasil `digiflazz:sync-products` ber-`is_demo = false` dan
+  benar-benar dikirim ke Digiflazz saat dibayar; harganya datang dari daftar harga
+  supplier, jangan dikarang manual.
 - Sebelum transaksi dikirim, halaman beli menampilkan `PurchaseConfirmSheet`
   (`web/src/components/PurchaseConfirmSheet.jsx`): produk, tujuan yang sudah
   diketik, total, dan `PURCHASE_DISCLAIMER` dari `web/src/lib/format.js` —

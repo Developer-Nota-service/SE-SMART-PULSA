@@ -5,10 +5,6 @@ import { ShieldIcon } from '../components/Icons.jsx'
 import OtpVerification from '../components/OtpVerification.jsx'
 import PasswordReset from '../components/PasswordReset.jsx'
 
-const DEMO = { email: 'demo@sesmartpulsa.id', password: 'demo12345' }
-// Build produksi tidak boleh mencantumkan kredensial demo di halaman login.
-const SHOW_DEMO = !import.meta.env.PROD
-
 export default function LoginPage() {
   const { user, login, register } = useAuth()
   const navigate = useNavigate()
@@ -258,38 +254,11 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {SHOW_DEMO ? (
-        <div className="demo-box">
-          <span className="badge badge--demo badge--xs">DEMO</span>
-          <p>
-            Akun demo: <strong>{DEMO.email}</strong> · password <strong>{DEMO.password}</strong>
-          </p>
-          <button
-            type="button"
-            className="btn btn--outline btn--sm"
-            onClick={() => {
-              setMode('login')
-              setForm({
-                name: '',
-                email: DEMO.email,
-                phone: '',
-                password: DEMO.password,
-                accountType: 'personal',
-              })
-              setMessage('')
-              setErrors({})
-            }}
-          >
-            Isi akun demo
-          </button>
-        </div>
-        ) : null}
           </>
         )}
 
         <p className="auth__note">
           <ShieldIcon /> Akun baru wajib diverifikasi lewat kode OTP WhatsApp sebelum bisa masuk.
-          {SHOW_DEMO ? ' Akun demo sudah terverifikasi.' : ''}
         </p>
       </div>
     </div>

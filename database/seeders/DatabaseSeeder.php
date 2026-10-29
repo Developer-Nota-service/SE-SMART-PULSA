@@ -58,8 +58,14 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $demoId = $this->seedUsers();
-        $this->seedProducts();
-        $this->seedDemoHistory($demoId);
+
+        // Produksi bebas data demo: katalognya hanya produk Digiflazz hasil
+        // `digiflazz:sync-products`, bukan produk simulasi.
+        if (! app()->environment('production')) {
+            $this->seedProducts();
+            $this->seedDemoHistory($demoId);
+        }
+
         $this->seedDashboardContent();
     }
 
@@ -180,6 +186,7 @@ class DatabaseSeeder extends Seeder
             ->update(['role' => 'user']);
     }
 
+    /** Katalog simulasi (is_demo = true) hanya untuk sandbox/preview. */
     private function seedProducts(): void
     {
         foreach ($this->buildProducts() as $product) {

@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     q: 'Apakah produk yang dijual sudah aktif?',
-    a: 'Belum. Seluruh produk bertanda DEMO hanya untuk pengujian alur aplikasi. Tidak ada pulsa, token listrik, atau voucher yang benar-benar dikirim pada tahap ini.',
+    a: 'Ya. Produk yang tampil berasal dari penyedia resmi dan diproses otomatis setelah pembayaran dikonfirmasi. Produk yang sedang gangguan penyedia ditandai dan tidak bisa dibeli sampai harganya normal.',
   },
   {
     q: 'Transaksi saya gagal, apakah dana kembali?',

@@ -330,8 +330,6 @@ export default function AdminProducts() {
                   ) : null}
                   {!row.active ? (
                     <span className="badge badge--xs badge--muted">Nonaktif</span>
-                  ) : row.isDemo ? (
-                    <span className="badge badge--xs badge--demo">DEMO</span>
                   ) : null}
                 </div>
               </div>

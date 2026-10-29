@@ -14,11 +14,7 @@ const documents = {
         body: 'Saldo merupakan titipan untuk pembelian produk dan tidak dapat dipindahtangankan. Nominal, harga, dan status transaksi ditentukan oleh server. Transaksi yang telah berhasil diproses tidak dapat dibatalkan.',
       },
       {
-        heading: '3. Produk demo',
-        body: 'Produk bertanda DEMO tidak mengirim produk nyata dan hanya dipakai untuk pengujian alur aplikasi. Jangan menganggapnya sebagai transaksi sebenarnya.',
-      },
-      {
-        heading: '4. Pembatasan',
+        heading: '3. Pembatasan',
         body: 'Penyalahgunaan layanan, termasuk upaya mengubah nominal atau status pembayaran dari sisi pengguna, dapat mengakibatkan penangguhan akun.',
       },
     ],
