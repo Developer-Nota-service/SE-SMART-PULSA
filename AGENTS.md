@@ -140,6 +140,10 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   dan kode produk mengikuti Digiflazz. 422 bila kredensial kosong, 429 dengan
   `{retryAfterSeconds}` selama jeda 5 menit (batas pricelist Digiflazz), 502 bila
   Digiflazz menolak beserta pesan aslinya.
+  `GET /admin/cost-comparison?q=&view=all|tripay|digiflazz&limit=` →
+  `{configured, items, total, summary, fetchedAt}`: banding harga modal Digiflazz
+  vs daftar harga TriPay. 422 `{data:{configured:false}}` bila `TRIPAY_API_KEY`
+  kosong, 502 bila TriPay menolak (pesan aslinya diteruskan).
   Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
   pratinjau peringkat), `POST /admin/banners`, `PATCH|DELETE /admin/banners/{id}`,
   `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}`,
@@ -294,8 +298,9 @@ Dijaga `app/Http/Middleware/EnsureAdmin.php` (alias `admin.only`).
 (beranda, saldo, dan navigasi belanja tidak tampil) — `AdminGate` di `App.jsx`
 memeriksa `role`, dan `AdminPage.jsx` adalah shell sendiri (header navy, strip
 identitas, nav 6 tab). Rutenya `/admin` (Ringkasan), `/admin/beranda`,
-`/admin/harga`, `/admin/transaksi`, `/admin/keuangan?tab=deposit|penarikan`,
-`/admin/pengguna`; tautan dari ringkasan membawa status di query
+`/admin/harga`, `/admin/banding-harga`, `/admin/transaksi`,
+`/admin/keuangan?tab=deposit|penarikan`, `/admin/pengguna`; tautan dari ringkasan
+membawa status di query
 (`/admin/transaksi?status=failed`) sehingga antrean langsung terbuka. Admin
 tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
 
@@ -325,6 +330,20 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   hilang dari katalog pengguna, jadi AdminController menolak harga publik di
   bawah harga reseller agar akun pribadi tidak membayar lebih murah.
 
+- **Banding modal TriPay** (`web/src/components/admin/AdminCostComparison.jsx`,
+  rute `/admin/banding-harga`, dibuka dari tombol "Banding modal dengan TriPay" di
+  tab Harga) — `GET /admin/cost-comparison` membandingkan `products.cost_price`
+  (Digiflazz) dengan daftar produk TriPay (`GET /pembelian/produk`,
+  `config/tripay.php` → `TRIPAY_API_KEY` dari Secrets, `TRIPAY_BASE_URL` default
+  `https://tripay.id/api/v2`, `TRIPAY_CACHE_SECONDS` default 300).
+  `app/Services/CostComparison.php` mencocokkan **nama produk yang dinormalkan**
+  (huruf besar, tanpa spasi/tanda baca, akhiran "RP" dibuang) karena kedua supplier
+  tidak memakai kode produk yang sama; produk yang namanya berbeda muncul sebagai
+  "tanpa padanan" (`summary.unmatched`, `summary.tripayOnly`) dan harus diperiksa
+  admin. Harga TriPay yang `status = 0` diabaikan, nama ganda memakai harga
+  termurah. `summary.potentialSaving` = jumlah selisih positif (belum dipotong
+  biaya deposit). Halaman ini **hanya pembanding** — pemenuhan transaksi tetap
+  lewat Digiflazz sampai ada adapter TriPay untuk topup + callback.
 - **Penarikan** — `pending → processing → paid`; `pending|processing → rejected`.
   Status final tidak bisa diubah (409), jadi saldo tidak bisa kembali dua kali.
   Tolak menambah saldo pengguna secara atomik + satu baris `balance_entries`

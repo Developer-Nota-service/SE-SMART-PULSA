@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api.js'
 import { CATEGORIES, categoryLabel, dateTime, rupiah } from '../../lib/format.js'
 import { CloseIcon } from '../Icons.jsx'
@@ -125,6 +126,10 @@ export default function AdminProducts() {
         <h2 className="section-title">Harga produk</h2>
         <span className="section-hint">{items.length} produk</span>
       </div>
+
+      <Link to="/admin/banding-harga" className="btn btn--outline btn--sm">
+        Banding modal dengan TriPay
+      </Link>
 
       <div className="chips admin-tabs">
         {FILTERS.map((filter) => (

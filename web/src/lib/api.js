@@ -209,6 +209,8 @@ export const api = {
   // Tarik harga modal terbaru dari Digiflazz; harga jual admin tidak ditimpa.
   adminSyncDigiflazz: () =>
     request('/admin/products/sync-digiflazz', { method: 'POST', body: {} }),
+  // Banding harga modal Digiflazz dengan daftar harga TriPay.
+  adminCostComparison: (params) => request(`/admin/cost-comparison${query(params)}`),
   adminCheckTransaction: (id) =>
     request(`/admin/transactions/${id}/check`, { method: 'POST', body: {} }),
 

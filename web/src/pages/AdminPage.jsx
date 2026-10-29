@@ -8,6 +8,7 @@ import {
   UserIcon,
   WalletIcon,
 } from '../components/Icons.jsx'
+import AdminCostComparison from '../components/admin/AdminCostComparison.jsx'
 import AdminDashboard from '../components/admin/AdminDashboard.jsx'
 import AdminFinance from '../components/admin/AdminFinance.jsx'
 import AdminOverview from '../components/admin/AdminOverview.jsx'
@@ -66,6 +67,7 @@ export default function AdminPage() {
           <Route index element={<AdminOverview />} />
           <Route path="beranda" element={<AdminDashboard />} />
           <Route path="harga" element={<AdminProducts />} />
+          <Route path="banding-harga" element={<AdminCostComparison />} />
           <Route path="transaksi" element={<AdminTransactions />} />
           <Route path="keuangan" element={<AdminFinance />} />
           <Route path="pengguna" element={<AdminUsers />} />

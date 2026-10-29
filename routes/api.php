@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AdminCostComparisonController;
 use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DashboardController;
@@ -54,6 +55,8 @@ Route::prefix('v1')->group(function () {
         // Tarik harga modal terbaru dari Digiflazz (harga jual admin tetap).
         Route::post('products/sync-digiflazz', [AdminController::class, 'syncDigiflazz']);
         Route::patch('products/{id}', [AdminController::class, 'updateProduct']);
+        // Banding harga modal Digiflazz (tabel products) dengan daftar harga TriPay.
+        Route::get('cost-comparison', [AdminCostComparisonController::class, 'index']);
 
         // Konten beranda pengguna: banner, promo, dan peringkat pembelian.
         Route::get('dashboard', [AdminDashboardController::class, 'index']);
