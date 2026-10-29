@@ -9,6 +9,9 @@ di `web/`. Satu domain: Laravel melayani API `/api/v1` dan React hasil build di 
 
 - `web` — Vite dev server, host port **3000** → 5173 (entry preview).
 - `laravel` — `php artisan serve` di 8000; otomatis `migrate` + `db:seed` saat start.
+  Migrasi hanya dijalankan saat container start: setelah menambah file migrasi baru,
+  `docker compose -f docker-compose.base44.yml restart laravel` (kalau tidak, query ke
+  kolom baru gagal dengan `column ... does not exist`).
 - `db` — Postgres 16, volume `pgdata`. Data backend Node lama tetap ada di database
   `pulsa`; Laravel memakai database sendiri `pulsa_laravel` (dibuat `dbsetup`).
 - `dbsetup` — one-shot: `CREATE DATABASE pulsa_laravel` bila belum ada.
