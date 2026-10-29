@@ -235,7 +235,8 @@ export default function AdminProducts() {
           Tarik harga modal dan provider terbaru dari seluruh seller Digiflazz. Semua produk di
           daftar Digiflazz otomatis tayang di kategorinya, kode produk mengikuti kode Digiflazz, dan
           harga jual yang sudah Anda atur tidak berubah — hanya produk baru yang dihitung otomatis
-          dari margin. Sinkron juga berjalan otomatis tiap 30 menit; kenaikan harga dikirim ke
+          dari margin. Harga max modal diisi otomatis modal + Rp100 dan diperbarui saat seller
+          produk berganti. Sinkron juga berjalan otomatis tiap 30 menit; kenaikan harga dikirim ke
           WhatsApp admin. Bila harga supplier melewati harga max, produk ditandai gangguan dan
           otomatis tidak bisa dibeli.
         </p>
@@ -492,7 +493,8 @@ function PriceSheet({ product, onClose, onSaved }) {
             />
             <span className="field__hint">
               Modal Digiflazz sekarang {rupiah(product.costPrice)}
-              {product.sellerName ? ` dari ${product.sellerName}` : ''}. Bila harga modal naik
+              {product.sellerName ? ` dari ${product.sellerName}` : ''}. Diisi otomatis modal +
+              Rp100 saat sinkron dan diperbarui bila seller produk berganti. Bila harga modal naik
               melewati angka ini, produk otomatis ditandai gangguan dan tidak bisa dibeli sampai
               harganya turun lagi.
             </span>

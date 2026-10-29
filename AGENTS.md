@@ -587,7 +587,12 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   yang berubah) masuk katalog tanpa menekan tombol. Di sandbox dijalankan service
   compose `scheduler` (`php artisan schedule:work`); di produksi tambahkan cron
   `* * * * * php artisan schedule:run`.
-- `products.max_cost_price` (diisi admin) adalah batas harga modal. Saat sinkron,
+- `products.max_cost_price` adalah batas harga modal. Sinkron mengisinya
+  otomatis sebesar **harga seller + Rp100** (`DigiflazzProductSync::MAX_COST_MARGIN`)
+  untuk produk baru, produk yang batasnya masih kosong, dan produk yang
+  `seller_name`-nya berganti (ganti seller = acuan harga baru). Batas yang sudah
+  ada **tidak** ikut berubah saat harga modal naik/turun — itulah yang membuat
+  kenaikan lebih dari Rp100 menandai produk gangguan. Saat sinkron,
   kenaikan harga modal (`cost_price` baru > lama) dicatat per SKU dan dikirim ke
   WhatsApp admin lewat `App\Services\DigiflazzPriceAlert` (Fonnte; penerima dari
   `dashboard_settings.priceAlertWhatsapp`). Pesan hanya dikirim bila ada kenaikan,

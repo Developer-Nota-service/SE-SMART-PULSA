@@ -21,6 +21,10 @@ use Illuminate\Support\Facades\DB;
  * lagi dikirim Digiflazz dinonaktifkan (tidak dihapus) supaya riwayat transaksi
  * lama tetap utuh.
  *
+ * Harga max modal diisi otomatis = harga seller + Rp100 (`MAX_COST_MARGIN`)
+ * untuk produk baru, produk yang batasnya masih kosong, dan produk yang
+ * seller-nya berganti. Batas yang sudah ada tidak ikut naik saat harga modal
+ * naik/turun, jadi kenaikan lebih dari Rp100 membuat produk berstatus gangguan.
  * Kenaikan harga modal dicatat dan dikirim ke WhatsApp admin lewat
  * `DigiflazzPriceAlert`. Produk yang harga sellernya melewati
  * `products.max_cost_price` tetap tayang tetapi tidak bisa dibeli
@@ -35,6 +39,13 @@ class DigiflazzProductSync
 {
     /** Jeda minimal antar tarikan pricelist (batas Digiflazz: 1x per 5 menit). */
     public const COOLDOWN_SECONDS = 300;
+
+    /**
+     * Toleransi harga max modal di atas harga seller. Batas ini diisi otomatis
+     * untuk semua produk supplier supaya admin tidak perlu mengisi satu per satu:
+     * kenaikan harga modal lebih dari Rp100 membuat produk berstatus gangguan.
+     */
+    public const MAX_COST_MARGIN = 100;
 
     private const COOLDOWN_KEY = 'digiflazz:pricelist-cooldown';
 
@@ -139,20 +150,28 @@ class DigiflazzProductSync
                     if ($renamedFrom !== null) {
                         $this->recordIncrease($increases, $renamedFrom, $sku, $name, $cost);
 
-                        DB::table('products')->where('id', $renamedFrom->id)->update($supplier + ['sku' => $sku]);
+                        DB::table('products')->where('id', $renamedFrom->id)->update($supplier + [
+                            'sku' => $sku,
+                            'max_cost_price' => $this->maxCostPrice($renamedFrom, $seller, $cost),
+                        ]);
 
                         unset($bySku[$renamedFrom->sku]);
                         $bySku[$sku] = (object) ['id' => $renamedFrom->id, 'sku' => $sku];
                         $renamed++;
                     } else {
-                        DB::table('products')->insert($supplier + $this->autoPrices($cost, $margin) + ['sku' => $sku]);
+                        DB::table('products')->insert($supplier + $this->autoPrices($cost, $margin) + [
+                            'sku' => $sku,
+                            'max_cost_price' => $cost + self::MAX_COST_MARGIN,
+                        ]);
                         $bySku[$sku] = (object) ['id' => null, 'sku' => $sku];
                         $created++;
                     }
                 } else {
                     $this->recordIncrease($increases, $existing, $sku, $name, $cost);
 
-                    DB::table('products')->where('id', $existing->id)->update($supplier);
+                    DB::table('products')->where('id', $existing->id)->update($supplier + [
+                        'max_cost_price' => $this->maxCostPrice($existing, $seller, $cost),
+                    ]);
                 }
 
                 $skus[] = $sku;
@@ -209,6 +228,25 @@ class DigiflazzProductSync
             'new' => $cost,
             'max' => (int) ($product->max_cost_price ?? 0),
         ];
+    }
+
+    /**
+     * Harga max modal otomatis: harga seller saat ini + Rp100.
+     *
+     * Nilai yang sudah ada dipertahankan supaya kenaikan harga modal yang
+     * melewati batas tetap memblokir produk; batas hanya diisi saat masih
+     * kosong atau saat seller produk berganti (harga seller baru jadi acuan).
+     */
+    private function maxCostPrice(object $product, ?string $seller, int $cost): int
+    {
+        $current = (int) ($product->max_cost_price ?? 0);
+        $previousSeller = (string) ($product->seller_name ?? '');
+
+        if ($current <= 0 || $previousSeller !== (string) ($seller ?? '')) {
+            return $cost + self::MAX_COST_MARGIN;
+        }
+
+        return $current;
     }
 
     /**
