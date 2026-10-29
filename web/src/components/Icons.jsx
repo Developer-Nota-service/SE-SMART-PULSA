@@ -16,6 +16,13 @@ export const HomeIcon = (p) => (
   </svg>
 )
 
+export const MegaphoneIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 10.5v3a1.5 1.5 0 0 0 1.5 1.5H8l8 4V5l-8 4H5.5A1.5 1.5 0 0 0 4 10.5z" />
+    <path d="M8 15v3.5a1.5 1.5 0 0 0 1.5 1.5h1A1.5 1.5 0 0 0 12 18.5V16" />
+  </svg>
+)
+
 export const HistoryIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M4 12a8 8 0 1 0 2.6-5.9" />

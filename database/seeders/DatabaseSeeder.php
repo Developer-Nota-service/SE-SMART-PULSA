@@ -60,6 +60,48 @@ class DatabaseSeeder extends Seeder
         $demoId = $this->seedUsers();
         $this->seedProducts();
         $this->seedDemoHistory($demoId);
+        $this->seedDashboardContent();
+    }
+
+    /** Banner + promo awal beranda; hanya diisi saat tabelnya masih kosong. */
+    private function seedDashboardContent(): void
+    {
+        if (DB::table('banners')->count() === 0) {
+            DB::table('banners')->insert([
+                [
+                    'title' => 'Transaksi pulsa lebih hemat',
+                    'subtitle' => 'Harga reseller untuk saldo, harga publik untuk pembayaran langsung.',
+                    'tone' => 'navy',
+                    'active' => true,
+                    'sort_order' => 0,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+                [
+                    'title' => 'Isi saldo kapan saja',
+                    'subtitle' => 'Deposit otomatis lewat Midtrans, saldo langsung masuk setelah dibayar.',
+                    'tone' => 'blue',
+                    'active' => true,
+                    'sort_order' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+            ]);
+        }
+
+        if (DB::table('promos')->count() === 0) {
+            DB::table('promos')->insert([
+                'title' => 'Peringkat pembelian bulan ini',
+                'description' => 'Transaksi sukses terbanyak tampil di beranda. Ayo kejar posisi teratas!',
+                'code' => '',
+                'badge' => 'Baru',
+                'valid_until' => null,
+                'active' => true,
+                'sort_order' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     private function seedUsers(): int

@@ -26,6 +26,9 @@ class AdminController extends Controller
     /** Deposit pending lebih tua dari ini dianggap bermasalah (tidak dibayar). */
     private const STALE_DEPOSIT_MINUTES = 30;
 
+    /** Zona waktu laporan penjualan harian (WITA) — hari mengikuti waktu pengelola. */
+    private const REPORT_TIMEZONE = 'Asia/Makassar';
+
     /** Status yang boleh diubah untuk setiap aksi admin penarikan. */
     private const WITHDRAWAL_ACTIONS = [
         'process' => ['from' => ['pending'], 'to' => 'processing'],
@@ -52,9 +55,11 @@ class AdminController extends Controller
 
         $depositsPending = DB::table('deposits')->where('status', 'pending');
         $withdrawalsPending = DB::table('withdrawals')->where('status', 'pending');
+        $sales = $this->salesTotals();
 
         return response()->json([
             'data' => [
+                'salesDaily' => $this->dailySales(),
                 'counts' => [
                     'withdrawalsPending' => (int) (clone $withdrawalsPending)->count(),
                     'withdrawalsPendingAmount' => (int) (clone $withdrawalsPending)->sum('amount'),
@@ -81,9 +86,62 @@ class AdminController extends Controller
                         ->count(),
                     'users' => (int) DB::table('users')->count(),
                     'balanceTotal' => (int) DB::table('users')->sum('balance'),
+                    // Penjualan = transaksi sukses (omzet), bukan deposit.
+                    'salesToday' => (int) $sales->today_revenue,
+                    'salesTodayOrders' => (int) $sales->today_orders,
+                    'salesWeek' => (int) $sales->revenue,
+                    'salesWeekOrders' => (int) $sales->orders,
                 ],
             ],
         ]);
+    }
+
+    /** Omzet transaksi sukses hari ini dan 7 hari terakhir (zona laporan). */
+    private function salesTotals(): object
+    {
+        $start = Carbon::now(self::REPORT_TIMEZONE)->startOfDay()->subDays(6)->utc();
+        $todayStart = Carbon::now(self::REPORT_TIMEZONE)->startOfDay()->utc();
+
+        return DB::table('transactions')
+            ->where('status', 'success')
+            ->where('created_at', '>=', $start)
+            ->selectRaw('COALESCE(SUM(amount), 0) AS revenue, COUNT(*) AS orders')
+            ->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? THEN amount ELSE 0 END), 0) AS today_revenue', [$todayStart])
+            ->selectRaw('COUNT(CASE WHEN created_at >= ? THEN 1 END) AS today_orders', [$todayStart])
+            ->first();
+    }
+
+    /** Ringkasan penjualan per hari untuk 7 hari terakhir, termasuk hari tanpa penjualan. */
+    private function dailySales(int $days = 7): array
+    {
+        $start = Carbon::now(self::REPORT_TIMEZONE)->startOfDay()->subDays($days - 1);
+
+        $rows = DB::table('transactions')
+            ->where('status', 'success')
+            ->where('created_at', '>=', $start->copy()->utc())
+            ->selectRaw(
+                "to_char(created_at AT TIME ZONE ?, 'YYYY-MM-DD') AS day, COUNT(*) AS orders, COALESCE(SUM(amount), 0) AS revenue",
+                [self::REPORT_TIMEZONE],
+            )
+            ->groupBy('day')
+            ->get()
+            ->keyBy('day');
+
+        $series = [];
+
+        for ($i = 0; $i < $days; $i++) {
+            $date = $start->copy()->addDays($i);
+            $key = $date->format('Y-m-d');
+            $row = $rows->get($key);
+
+            $series[] = [
+                'date' => $key,
+                'orders' => (int) ($row->orders ?? 0),
+                'revenue' => (int) ($row->revenue ?? 0),
+            ];
+        }
+
+        return $series;
     }
 
     public function withdrawals(Request $request): JsonResponse

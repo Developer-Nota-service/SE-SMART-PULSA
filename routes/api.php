@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\DigiflazzWebhookController;
 use App\Http\Controllers\Api\MidtransController;
@@ -47,6 +49,16 @@ Route::prefix('v1')->group(function () {
         Route::get('products', [AdminController::class, 'products']);
         Route::post('products/bulk-price', [AdminController::class, 'bulkPrice']);
         Route::patch('products/{id}', [AdminController::class, 'updateProduct']);
+
+        // Konten beranda pengguna: banner, promo, dan peringkat pembelian.
+        Route::get('dashboard', [AdminDashboardController::class, 'index']);
+        Route::post('banners', [AdminDashboardController::class, 'storeBanner']);
+        Route::patch('banners/{id}', [AdminDashboardController::class, 'updateBanner']);
+        Route::delete('banners/{id}', [AdminDashboardController::class, 'destroyBanner']);
+        Route::post('promos', [AdminDashboardController::class, 'storePromo']);
+        Route::patch('promos/{id}', [AdminDashboardController::class, 'updatePromo']);
+        Route::delete('promos/{id}', [AdminDashboardController::class, 'destroyPromo']);
+        Route::patch('dashboard-settings', [AdminDashboardController::class, 'updateSettings']);
         Route::get('transactions', [AdminController::class, 'transactions']);
         Route::post('transactions/{id}/check', [AdminController::class, 'checkTransaction']);
         Route::post('transactions/{id}/refund', [AdminController::class, 'markRefundPaid']);
@@ -67,6 +79,9 @@ Route::prefix('v1')->group(function () {
         Route::post('profile/contact/verify', [ProfileController::class, 'verifyContact']);
         Route::patch('profile/account-type', [ProfileController::class, 'changeAccountType']);
         Route::post('profile/avatar', [ProfileController::class, 'uploadAvatar']);
+
+        // Konten beranda: banner, promo aktif, peringkat pembelian otomatis.
+        Route::get('dashboard', [DashboardController::class, 'show']);
 
         Route::get('products', [CatalogController::class, 'index']);
         Route::get('products/{id}', [CatalogController::class, 'show']);

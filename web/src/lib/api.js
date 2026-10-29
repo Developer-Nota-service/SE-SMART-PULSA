@@ -148,6 +148,9 @@ export const api = {
     }
   },
 
+  // Konten beranda: banner, promo aktif, peringkat pembelian otomatis.
+  dashboard: () => request('/dashboard'),
+
   products: (params) => request(`/products${query(params)}`),
   product: (id) => request(`/products/${id}`),
 
@@ -205,6 +208,17 @@ export const api = {
     request('/admin/products/bulk-price', { method: 'POST', body }),
   adminCheckTransaction: (id) =>
     request(`/admin/transactions/${id}/check`, { method: 'POST', body: {} }),
+
+  // Pengaturan beranda pengguna: banner, promo, peringkat pembelian.
+  adminDashboard: () => request('/admin/dashboard'),
+  adminCreateBanner: (body) => request('/admin/banners', { method: 'POST', body }),
+  adminUpdateBanner: (id, body) => request(`/admin/banners/${id}`, { method: 'PATCH', body }),
+  adminDeleteBanner: (id) => request(`/admin/banners/${id}`, { method: 'DELETE' }),
+  adminCreatePromo: (body) => request('/admin/promos', { method: 'POST', body }),
+  adminUpdatePromo: (id, body) => request(`/admin/promos/${id}`, { method: 'PATCH', body }),
+  adminDeletePromo: (id) => request(`/admin/promos/${id}`, { method: 'DELETE' }),
+  adminUpdateDashboardSettings: (body) =>
+    request('/admin/dashboard-settings', { method: 'PATCH', body }),
 
   // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).
   syncPayments: (orderNumber) =>

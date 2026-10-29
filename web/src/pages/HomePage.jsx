@@ -3,13 +3,18 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import BalanceCard from '../components/BalanceCard.jsx'
 import CategoryGrid from '../components/CategoryGrid.jsx'
+import HomeBanners from '../components/HomeBanners.jsx'
+import HomeLeaderboard from '../components/HomeLeaderboard.jsx'
+import HomePromos from '../components/HomePromos.jsx'
 import TransactionItem from '../components/TransactionItem.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
 
-// Beranda hanya menampilkan kategori; daftar produk muncul di halaman kategori.
+// Beranda menampilkan konten yang diatur admin (banner, promo, peringkat),
+// kategori, dan transaksi terbaru; daftar produk muncul di halaman kategori.
 export default function HomePage() {
   const { user } = useAuth()
+  const [dashboard, setDashboard] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -18,7 +23,8 @@ export default function HomePage() {
     setLoading(true)
     setError('')
     try {
-      const txList = await api.transactions()
+      const [content, txList] = await Promise.all([api.dashboard(), api.transactions()])
+      setDashboard(content)
       setTransactions(txList.slice(0, 3))
     } catch (requestError) {
       setError(requestError.message)
@@ -35,6 +41,9 @@ export default function HomePage() {
     <div className="stack">
       <BalanceCard account={user} />
 
+      <HomeBanners banners={dashboard?.banners} />
+      <HomePromos promos={dashboard?.promos} />
+
       <section>
         <div className="section-head">
           <h2 className="section-title">Kategori</h2>
@@ -42,6 +51,8 @@ export default function HomePage() {
         </div>
         <CategoryGrid />
       </section>
+
+      <HomeLeaderboard leaderboard={dashboard?.leaderboard} />
 
       <section>
         <div className="section-head">

@@ -1,6 +1,14 @@
 import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
-import { HistoryIcon, HomeIcon, TicketIcon, UserIcon, WalletIcon } from '../components/Icons.jsx'
+import {
+  HistoryIcon,
+  HomeIcon,
+  MegaphoneIcon,
+  TicketIcon,
+  UserIcon,
+  WalletIcon,
+} from '../components/Icons.jsx'
+import AdminDashboard from '../components/admin/AdminDashboard.jsx'
 import AdminFinance from '../components/admin/AdminFinance.jsx'
 import AdminOverview from '../components/admin/AdminOverview.jsx'
 import AdminProducts from '../components/admin/AdminProducts.jsx'
@@ -9,6 +17,7 @@ import AdminUsers from '../components/admin/AdminUsers.jsx'
 
 const TABS = [
   { to: '/admin', label: 'Ringkasan', Icon: HomeIcon, end: true },
+  { to: '/admin/beranda', label: 'Beranda', Icon: MegaphoneIcon },
   { to: '/admin/harga', label: 'Harga', Icon: TicketIcon },
   { to: '/admin/transaksi', label: 'Transaksi', Icon: HistoryIcon },
   { to: '/admin/keuangan', label: 'Keuangan', Icon: WalletIcon },
@@ -17,8 +26,9 @@ const TABS = [
 
 /**
  * Konsol admin dengan tata letak sendiri — terpisah dari tampilan pengguna
- * (tanpa beranda, saldo, atau keranjang). Isinya pekerjaan pengelola: harga
- * produk, transaksi bermasalah, uang masuk/keluar, dan akun pengguna.
+ * (tanpa beranda, saldo, atau keranjang). Isinya pekerjaan pengelola: konten
+ * beranda pengguna, harga produk, transaksi bermasalah, uang masuk/keluar, dan
+ * akun pengguna.
  * Hanya bisa dibuka akun ber-role admin.
  */
 export default function AdminPage() {
@@ -54,6 +64,7 @@ export default function AdminPage() {
       <main className="admin-content">
         <Routes>
           <Route index element={<AdminOverview />} />
+          <Route path="beranda" element={<AdminDashboard />} />
           <Route path="harga" element={<AdminProducts />} />
           <Route path="transaksi" element={<AdminTransactions />} />
           <Route path="keuangan" element={<AdminFinance />} />

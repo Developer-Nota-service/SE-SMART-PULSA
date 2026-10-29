@@ -127,7 +127,19 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   boleh di bawah harga reseller),
   `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
   (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk).
+  Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
+  pratinjau peringkat), `POST /admin/banners`, `PATCH|DELETE /admin/banners/{id}`,
+  `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}`,
+  `PATCH /admin/dashboard-settings`
+  `{leaderboardEnabled?,leaderboardLimit?,leaderboardPeriodDays?,leaderboardAccountType?}`
+  (`leaderboardAccountType`: `all|reseller|personal`).
   Semua butuh `role = admin` (middleware `admin.only`).
+- `GET /admin/overview` juga mengirim `salesDaily` (7 hari terakhir: `date`,
+  `orders`, `revenue` transaksi sukses) dan `counts.salesToday` /
+  `salesWeek` beserta jumlah pesanannya. Hari dihitung pada zona
+  `Asia/Makassar` (`AdminController::REPORT_TIMEZONE`), bukan UTC.
+- `GET /dashboard` (sesi pengguna) — banner aktif, promo aktif (yang belum
+  kedaluwarsa), dan peringkat pembelian. Lihat "Konten beranda pengguna".
 - `POST /midtrans/notification` — webhook publik, diverifikasi lewat `signature_key`
 - `POST /midtrans/sync` `{orderNumber?}` — cek status resmi ke API Midtrans untuk
   pesanan pending milik pengguna (cadangan bila webhook tidak sampai), signature
@@ -268,11 +280,19 @@ Dijaga `app/Http/Middleware/EnsureAdmin.php` (alias `admin.only`).
 **Tata letak terpisah dari akun pengguna.** `/admin` tidak memakai `AppShell`
 (beranda, saldo, dan navigasi belanja tidak tampil) — `AdminGate` di `App.jsx`
 memeriksa `role`, dan `AdminPage.jsx` adalah shell sendiri (header navy, strip
-identitas, nav 5 tab). Rutenya `/admin` (Ringkasan), `/admin/harga`,
-`/admin/transaksi`, `/admin/keuangan?tab=deposit|penarikan`,
+identitas, nav 6 tab). Rutenya `/admin` (Ringkasan), `/admin/beranda`,
+`/admin/harga`, `/admin/transaksi`, `/admin/keuangan?tab=deposit|penarikan`,
 `/admin/pengguna`; tautan dari ringkasan membawa status di query
 (`/admin/transaksi?status=failed`) sehingga antrean langsung terbuka. Admin
 tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
+
+- **Ringkasan** (`web/src/components/admin/AdminOverview.jsx`) — kartu angka
+  penting plus **ringkasan penjualan harian** 7 hari (grafik batang + daftar
+  pesanan/omzet). Omzet = transaksi `success`; deposit tidak dihitung sebagai
+  penjualan.
+- **Beranda** (`web/src/components/admin/AdminDashboard.jsx`) — banner dan promo
+  beranda pengguna (tambah/ubah/tayangkan/hapus) serta pengaturan peringkat
+  pembelian. Lihat "Konten beranda pengguna".
 
 - **Harga** (`web/src/components/admin/AdminProducts.jsx`) — daftar produk per
   kategori, harga reseller (`products.price`), harga publik
@@ -297,6 +317,31 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   `stale` (+ `ageMinutes`) supaya gampang ditindak.
 - Akun admin: akun pribadi pemilik (`muhammadyusufrifaldi@gmail.com`, role `admin`).
   Tidak ada akun admin kedua; jangan menyeed ulang akun dengan sandi publik.
+
+## Konten beranda pengguna
+
+Banner, promo, dan peringkat pembelian diatur admin di tab **Beranda**. Satu
+sumber data: `app/Support/DashboardContent.php`, dipakai `DashboardController`
+(pengguna) dan `AdminDashboardController` (admin).
+
+- Tabel `banners` (judul, keterangan, `tone` `navy|blue|green|amber`, `active`,
+  `sort_order`) dan `promos` (judul, keterangan, kode, label, `valid_until`,
+  `active`, `sort_order`). Hanya baris `active` yang dikirim ke beranda; promo
+  juga harus belum lewat `valid_until`. Urutan `sort_order` lalu terbaru.
+- Peringkat **tidak punya tabel sendiri** — dihitung dari transaksi `success`
+  milik `users.role = 'user'` pada rentang `leaderboardPeriodDays` (7/30/90),
+  diurutkan dari jumlah transaksi lalu nominal, dengan pilihan peserta semua
+  akun / reseller / pribadi. Akun admin tidak pernah masuk peringkat.
+- Nama pembeli disamarkan server (`DashboardContent::maskName()` →
+  `Bud*** S.`) karena peringkat tampil ke semua pengguna; jangan kirim nama
+  lengkap.
+- Pengaturan ada di `dashboard_settings` (key/value): `leaderboardEnabled`,
+  `leaderboardLimit` (3/5/10), `leaderboardPeriodDays` (7/30/90),
+  `leaderboardAccountType` (`all|reseller|personal`). Nilai bawaan diisi
+  `DashboardContent::settings()`, jadi tabel boleh kosong.
+- Beranda (`web/src/pages/HomePage.jsx`) memuat `GET /dashboard` bersama
+  transaksi terbaru; tampilannya `HomeBanners`, `HomePromos`, dan
+  `HomeLeaderboard` (menyembunyikan diri bila kosong atau peringkat nonaktif).
 
 ## Penarikan saldo (withdraw)
 

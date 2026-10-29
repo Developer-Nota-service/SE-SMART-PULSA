@@ -14,6 +14,12 @@ function Stat({ label, value, hint }) {
   )
 }
 
+const dayLabel = (value) => {
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
 /**
  * Ringkasan angka penting + antrean pekerjaan yang perlu ditindak admin:
  * penarikan menunggu, deposit menggantung, dan transaksi gagal.
@@ -21,6 +27,7 @@ function Stat({ label, value, hint }) {
 export default function AdminOverview() {
   const navigate = useNavigate()
   const [counts, setCounts] = useState(null)
+  const [salesDaily, setSalesDaily] = useState([])
   const [queue, setQueue] = useState({ withdrawals: [], deposits: [], transactions: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -36,6 +43,7 @@ export default function AdminOverview() {
         api.adminTransactions({ status: 'failed' }),
       ])
       setCounts(overview.counts)
+      setSalesDaily(overview.salesDaily ?? [])
       setQueue({
         withdrawals: withdrawals.slice(0, 3),
         deposits: deposits.filter((row) => row.stale).slice(0, 3),
@@ -55,6 +63,12 @@ export default function AdminOverview() {
   if (loading) return <LoadingState label="Memuat ringkasan…" />
   if (error) return <ErrorState message={error} onRetry={load} />
   if (!counts) return null
+
+  const maxRevenue = Math.max(...salesDaily.map((row) => row.revenue), 1)
+  const bestDay = salesDaily.reduce(
+    (best, row) => (row.revenue > (best?.revenue ?? 0) ? row : best),
+    null,
+  )
 
   const queueEmpty =
     queue.withdrawals.length === 0 &&
@@ -90,8 +104,62 @@ export default function AdminOverview() {
           hint="kirim dana ke rekening pengguna"
         />
         <Stat label="Deposit masuk hari ini" value={rupiah(counts.depositsPaidToday)} />
+        <Stat
+          label="Penjualan hari ini"
+          value={rupiah(counts.salesToday)}
+          hint={`${counts.salesTodayOrders ?? 0} pesanan sukses`}
+        />
+        <Stat
+          label="Penjualan 7 hari"
+          value={rupiah(counts.salesWeek)}
+          hint={`${counts.salesWeekOrders ?? 0} pesanan sukses`}
+        />
         <Stat label="Transaksi hari ini" value={counts.transactionsToday} />
       </div>
+
+      <section>
+        <div className="section-head">
+          <h3 className="section-title">Penjualan harian</h3>
+          <span className="section-hint">7 hari terakhir</span>
+        </div>
+
+        <div className="card admin-card">
+          {salesDaily.length === 0 ? (
+            <p className="admin-card__sub">Belum ada data penjualan.</p>
+          ) : (
+            <>
+              <div className="sales-chart" aria-hidden="true">
+                {salesDaily.map((row) => (
+                  <div className="sales-chart__col" key={row.date}>
+                    <span className="sales-chart__value">
+                      {row.revenue > 0 ? rupiah(row.revenue) : ''}
+                    </span>
+                    <span
+                      className={`sales-chart__bar${row.date === salesDaily.at(-1)?.date ? ' is-today' : ''}`}
+                      style={{ height: `${Math.max((row.revenue / maxRevenue) * 100, 4)}%` }}
+                    />
+                    <span className="sales-chart__label">{dayLabel(row.date)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rows">
+                {[...salesDaily].reverse().map((row) => (
+                  <div className="row" key={row.date}>
+                    <span className="row__label">
+                      {dayLabel(row.date)} · {row.orders} pesanan
+                      {bestDay && bestDay.date === row.date && row.revenue > 0 ? (
+                        <span className="badge badge--xs badge--ok">Terbaik</span>
+                      ) : null}
+                    </span>
+                    <span className="row__value">{rupiah(row.revenue)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
 
       <div className="section-head">
         <h3 className="section-title">Perlu tindakan</h3>
