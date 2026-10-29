@@ -51,6 +51,8 @@ export default function HomePage() {
         <CategoryGrid />
       </section>
 
+      <HomePromos promos={dashboard?.promos} />
+
       <HomeLeaderboard leaderboard={dashboard?.leaderboard} />
 
       <section>
@@ -78,8 +80,6 @@ export default function HomePage() {
           </div>
         )}
       </section>
-
-      <HomePromos promos={dashboard?.promos} />
     </div>
   )
 }
