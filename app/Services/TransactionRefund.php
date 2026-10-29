@@ -14,10 +14,10 @@ use Illuminate\Support\Facades\Log;
  * `balance_entries`, sehingga uang tetap kembali dan bisa ditarik lewat menu
  * Penarikan.
  *
- * Kredit saldo hanya untuk akun **reseller**. Akun pribadi tidak memakai saldo
- * dan tidak bisa menariknya, jadi refund yang ditolak Midtrans ditandai
- * `refund_status = failed` agar admin mengembalikan dananya secara manual ke
- * rekening pengguna.
+ * Berlaku untuk **semua tipe akun**: akun pribadi juga punya saldo, khusus
+ * menampung pengembalian dana seperti ini (transaksinya sendiri tetap dibayar
+ * langsung lewat Midtrans). Bila kredit saldo gagal, refund ditandai
+ * `refund_status = failed` agar admin mengembalikan dananya secara manual.
  *
  * Transaksi saldo (reseller) tidak disentuh di sini; pengembaliannya sudah
  * dilakukan `TransactionFulfillment::refundBalance()`. Kolom `refund_status`
@@ -64,9 +64,9 @@ class TransactionRefund
             return;
         }
 
-        // Kredit saldo hanya untuk akun reseller: akun pribadi tidak memakai
-        // saldo, jadi uang yang masuk ke sana tidak bisa dipakai/ditarik.
-        if ($this->isReseller((int) $transaction->user_id) && $this->creditBalance($transaction->id)) {
+        // Semua tipe akun punya saldo dan bisa menariknya, jadi dana tetap
+        // kembali ke pengguna walau Midtrans menolak refund.
+        if ($this->creditBalance($transaction->id)) {
             $this->settle($transaction->id, 'balance', $result['message']);
 
             return;
@@ -76,11 +76,6 @@ class TransactionRefund
             'refund_status' => 'failed',
             'refund_message' => 'Perlu pengembalian manual ke rekening pengguna: '.$result['message'],
         ]);
-    }
-
-    private function isReseller(int $userId): bool
-    {
-        return (string) DB::table('users')->where('id', $userId)->value('account_type') === 'reseller';
     }
 
     private function settle(int $transactionId, string $status, string $message): void

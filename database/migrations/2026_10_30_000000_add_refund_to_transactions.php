@@ -10,8 +10,9 @@ use Illuminate\Support\Facades\Schema;
  *
  * `refund_status`: `processing` (sedang dicoba), `midtrans` (dana dikembalikan
  * ke metode pembayaran asal), `balance` (Midtrans menolak/metodenya tidak
- * mendukung refund, dana dikreditkan ke saldo pengguna), `failed` (keduanya
- * gagal; admin menindak lewat konsol).
+ * mendukung refund, dana dikreditkan ke saldo pengguna untuk semua tipe akun),
+ * `failed` (kredit saldo gagal; admin menindak lewat konsol), `manual` (refund
+ * sudah dikirim manual oleh admin).
  */
 return new class extends Migration
 {

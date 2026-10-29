@@ -13,7 +13,7 @@ const OPTIONS = [
     key: 'personal',
     title: 'Pribadi',
     meta: 'Harga publik · bayar via Midtrans',
-    detail: 'Tanpa saldo: setiap transaksi dibayar langsung lewat Midtrans.',
+    detail: 'Bayar langsung via Midtrans. Saldo hanya menampung pengembalian dana dan bisa ditarik.',
   },
 ]
 
@@ -83,7 +83,7 @@ export default function AccountTypeSwitcher({ user }) {
       {selected !== current ? (
         <p className="section-hint">
           {selected === 'personal'
-            ? 'Setelah pindah: harga jadi harga publik, pembayaran via Midtrans, saldo & isi saldo dinonaktifkan. Saldo harus kosong dan tidak ada deposit pending.'
+            ? 'Setelah pindah: harga jadi harga publik dan isi saldo dinonaktifkan. Saldo dari pengembalian dana tetap bisa ditarik; selesaikan deposit pending dulu.'
             : 'Setelah pindah: harga jadi harga reseller dan pembayaran memakai saldo (isi saldo diaktifkan).'}
         </p>
       ) : null}

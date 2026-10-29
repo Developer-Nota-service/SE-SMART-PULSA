@@ -51,64 +51,63 @@ export default function BalancePage() {
 
       {isPersonal ? (
         <section className="card">
-          <h2 className="section-title">Akun pribadi tanpa saldo</h2>
+          <h2 className="section-title">Saldo pengembalian dana</h2>
           <p className="section-hint">
-            Semua transaksi akun pribadi dibayar langsung lewat Midtrans dengan harga publik, jadi
-            saldo tidak diperlukan. Isi saldo hanya tersedia untuk akun reseller.
+            Transaksi akun pribadi dibayar langsung lewat Midtrans. Bila transaksi gagal di
+            supplier dan Midtrans tidak bisa mengembalikan dananya, nominalnya otomatis masuk ke
+            saldo ini dan bisa ditarik ke rekening/e-wallet tujuan. Isi saldo hanya tersedia untuk
+            akun reseller.
           </p>
         </section>
       ) : (
-        <>
-          <DepositForm onCreated={load} />
-          <WithdrawForm balance={user?.balance} onCreated={(balance) => {
-            updateBalance(balance)
-            load()
-          }} />
-        </>
+        <DepositForm onCreated={load} />
       )}
 
-      {isPersonal ? null : (
-        <section>
-          <div className="section-head">
-            <h2 className="section-title">Riwayat penarikan</h2>
-            <span className="section-hint">{withdrawals.length} pengajuan</span>
+      <WithdrawForm balance={user?.balance} onCreated={(balance) => {
+        updateBalance(balance)
+        load()
+      }} />
+
+      <section>
+        <div className="section-head">
+          <h2 className="section-title">Riwayat penarikan</h2>
+          <span className="section-hint">{withdrawals.length} pengajuan</span>
+        </div>
+
+        {loading ? (
+          <LoadingState label="Memuat penarikan…" />
+        ) : withdrawals.length === 0 ? (
+          <EmptyState
+            title="Belum ada penarikan"
+            description="Pengajuan tarik saldo akan tercatat di sini."
+          />
+        ) : (
+          <div className="tx-list">
+            {withdrawals.map((withdrawal) => (
+              <div key={withdrawal.id} className="tx">
+                <span className="tx__icon tx__icon--debit">
+                  <ArrowOutIcon />
+                </span>
+                <span className="tx__body">
+                  <span className="tx__name">
+                    Tarik saldo ke {withdrawal.providerName}
+                  </span>
+                  <span className="tx__meta">
+                    {withdrawal.accountNumber} · {withdrawal.verifiedHolder || withdrawal.accountHolder}
+                  </span>
+                  <span className="tx__time">
+                    {dateTime(withdrawal.createdAt)} · {withdrawal.reference}
+                  </span>
+                </span>
+                <span className="tx__right">
+                  <span className="tx__amount">−{rupiah(withdrawal.amount)}</span>
+                  <StatusBadge status={withdrawal.status} />
+                </span>
+              </div>
+            ))}
           </div>
-
-          {loading ? (
-            <LoadingState label="Memuat penarikan…" />
-          ) : withdrawals.length === 0 ? (
-            <EmptyState
-              title="Belum ada penarikan"
-              description="Pengajuan tarik saldo akan tercatat di sini."
-            />
-          ) : (
-            <div className="tx-list">
-              {withdrawals.map((withdrawal) => (
-                <div key={withdrawal.id} className="tx">
-                  <span className="tx__icon tx__icon--debit">
-                    <ArrowOutIcon />
-                  </span>
-                  <span className="tx__body">
-                    <span className="tx__name">
-                      Tarik saldo ke {withdrawal.providerName}
-                    </span>
-                    <span className="tx__meta">
-                      {withdrawal.accountNumber} · {withdrawal.verifiedHolder || withdrawal.accountHolder}
-                    </span>
-                    <span className="tx__time">
-                      {dateTime(withdrawal.createdAt)} · {withdrawal.reference}
-                    </span>
-                  </span>
-                  <span className="tx__right">
-                    <span className="tx__amount">−{rupiah(withdrawal.amount)}</span>
-                    <StatusBadge status={withdrawal.status} />
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+        )}
+      </section>
 
       <section>
         <div className="section-head">
@@ -121,7 +120,14 @@ export default function BalancePage() {
         ) : error ? (
           <ErrorState message={error} onRetry={load} />
         ) : deposits.length === 0 ? (
-          <EmptyState title="Belum ada deposit" description="Buat pesanan deposit pertama Anda." />
+          <EmptyState
+            title="Belum ada deposit"
+            description={
+              isPersonal
+                ? 'Akun pribadi tidak membuat deposit; saldo hanya dari pengembalian dana.'
+                : 'Buat pesanan deposit pertama Anda.'
+            }
+          />
         ) : (
           <div className="tx-list">
             {deposits.map((deposit) => (

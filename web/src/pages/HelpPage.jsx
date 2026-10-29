@@ -16,8 +16,8 @@ const faqs = [
     a: 'Belum. Seluruh produk bertanda DEMO hanya untuk pengujian alur aplikasi. Tidak ada pulsa, token listrik, atau voucher yang benar-benar dikirim pada tahap ini.',
   },
   {
-    q: 'Transaksi saya gagal, apakah saldo kembali?',
-    a: 'Saldo hanya dipotong ketika transaksi dinyatakan berhasil. Transaksi gagal atau masih menunggu tidak memotong saldo.',
+    q: 'Transaksi saya gagal, apakah dana kembali?',
+    a: 'Saldo hanya dipotong ketika transaksi dinyatakan berhasil. Transaksi gagal atau masih menunggu tidak memotong saldo. Untuk pembayaran Midtrans, dana dikembalikan ke metode pembayaran asal; bila metode itu tidak mendukung pengembalian, nominalnya otomatis masuk ke saldo akun Anda (semua tipe akun) dan bisa ditarik lewat menu Saldo.',
   },
   {
     q: 'Bagaimana melaporkan masalah transaksi?',

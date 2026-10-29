@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 /**
- * Penarikan saldo (withdraw) untuk akun reseller.
+ * Penarikan saldo (withdraw) untuk semua tipe akun — termasuk akun pribadi,
+ * yang saldonya berasal dari pengembalian dana transaksi gagal.
  *
  * Aturan: kelipatan Rp100.000, minimal Rp100.000, dana diproses 1-7 hari kerja.
  * Saldo dipotong saat pengajuan (atomik, satu transaksi DB dengan
@@ -83,14 +84,6 @@ class WithdrawalController extends Controller
 
         $user = $request->attributes->get('authUser');
         $fresh = DB::table('users')->find($user->id);
-
-        // Saldo hanya ada di akun reseller.
-        if ((string) ($fresh->account_type ?? 'reseller') !== 'reseller') {
-            return $this->unprocessable(
-                'Penarikan saldo hanya untuk akun reseller.',
-                'amount',
-            );
-        }
 
         if ((int) $fresh->balance < $amount) {
             return $this->unprocessable('Saldo tidak cukup untuk penarikan ini.', 'amount');

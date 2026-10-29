@@ -85,8 +85,8 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   lalu ditandai terverifikasi. Kontak lama tetap aktif sampai kode dikonfirmasi.
 - `PATCH /profile/account-type` `{accountType}` — pindah reseller ↔ pribadi tanpa
   daftar ulang; harga, metode bayar, dan fitur langsung mengikuti tipe baru. Pindah
-  ke pribadi ditolak 422 bila saldo > 0 atau masih ada deposit pending, supaya saldo
-  tidak tertahan.
+  ke pribadi ditolak 422 bila masih ada deposit pending atau penarikan yang
+  diproses; saldo boleh tetap ada karena akun pribadi juga bisa menariknya.
 - `POST /profile/avatar` (multipart `avatar`, JPG/PNG/WEBP maks 2 MB) → `user.avatarUrl`;
   file disimpan di `storage/app/private/avatars` dan disajikan lewat
   `GET /avatar/{file}` (nama acak 32 hex, tanpa sesi karena dipakai `<img>`).
@@ -106,7 +106,7 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   Midtrans, harga publik (reseller ditolak 422, wajib pakai saldo)
 - `GET /balance/entries` (ledger) · `GET /deposits` · `POST /deposits` `{amount}`
   (`POST /deposits` mengembalikan `payment`/`paymentError` untuk Snap; hanya akun
-  reseller — akun pribadi ditolak 422 karena tidak memakai saldo)
+  reseller — akun pribadi ditolak 422, saldonya hanya berasal dari pengembalian dana)
 - `GET /admin/overview` — angka ringkas + antrean masalah. `GET /admin/withdrawals?status=`,
   `POST /admin/withdrawals/{id}` `{action: process|paid|reject, note?}` (tolak =
   saldo kembali), `GET /admin/deposits?status=`, `POST /admin/deposits/{id}/sync`,
@@ -199,8 +199,9 @@ Harga dan metode bayar ditentukan oleh tipe akun (`users.account_type`):
 - **Reseller** — `products.price` (lebih murah), **wajib isi saldo** dan membayar
   dengan saldo (`POST /transactions`). Jalur Midtrans langsung ditolak.
 - **Pribadi** — `products.retail_price` (5% di atas harga saldo, dibulatkan ke atas
-  per Rp100), **tidak memakai saldo**: semua transaksi lewat Midtrans
-  (`POST /transactions/direct`) dan `POST /deposits` ditolak.
+  per Rp100), **transaksi tidak memakai saldo**: semua transaksi lewat Midtrans
+  (`POST /transactions/direct`) dan `POST /deposits` ditolak. Saldo tetap ada untuk
+  menampung pengembalian dana transaksi gagal dan bisa ditarik lewat menu Penarikan.
 
 `app/Support/Pricing::unitPrice()` adalah satu-satunya sumber aturan ini dan dipakai
 oleh `CatalogController` (harga yang dikirim ke UI), `POST /transactions` (potong
@@ -271,7 +272,8 @@ nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
 `GET /withdrawals/channels` · `GET /withdrawals` ·
 `POST /withdrawals` `{amount,channelType,providerCode,accountNumber,accountHolder}`.
 
-- Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, hanya akun reseller.
+- Minimal Rp100.000, kelipatan Rp100.000, proses 1-7 hari kerja, berlaku untuk
+  **semua tipe akun** — saldo akun pribadi berasal dari pengembalian dana.
 - Saldo dipotong atomik bersama `balance_entries` saat pengajuan; penarikan yang
   masih diproses menahan perubahan tipe akun ke pribadi.
 - **Nama pemilik rekening diisi pengguna, bukan hasil pengecekan otomatis.**
@@ -338,16 +340,15 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   `POST /v2/{order_id}/refund` Midtrans (dana kembali ke metode pembayaran asal).
   Midtrans hanya mendukung refund untuk kartu, GoPay, ShopeePay, DANA, OVO, QRIS,
   Kredivo, Akulaku; bila ditolak (mis. VA/transfer bank), nominal transaksi
-  dikreditkan ke saldo lewat `balance_entries` **hanya bila akun pembeli reseller**
-  (`users.account_type = reseller`), supaya uangnya tetap bisa ditarik.
-  Akun **pribadi** tidak memakai saldo dan tidak bisa menariknya, jadi refund yang
-  ditolak Midtrans ditandai `failed` dengan pesan "Perlu pengembalian manual ke
-  rekening pengguna" — admin melihatnya di `GET /admin/overview`
-  (`counts.refundsManual`, kartu "Refund manual"), mengirim dana ke rekening
-  pembeli, lalu menandainya lewat `POST /admin/transactions/{id}/refund`
-  (`refund_status = manual`) supaya antrean kembali kosong. Hasilnya di `transactions.refund_status` — `processing` → `midtrans`
-  (refund ke metode asal) atau `balance` (dikreditkan ke saldo reseller), `failed`
-  bila Midtrans menolak dan saldo tidak boleh dipakai — plus
+  dikreditkan ke saldo lewat `balance_entries` untuk **semua tipe akun** (reseller
+  maupun pribadi), supaya uangnya tetap kembali dan bisa ditarik.
+  `refund_status = failed` hanya dipakai bila kredit saldo itu sendiri gagal —
+  admin melihatnya di `GET /admin/overview` (`counts.refundsManual`, kartu
+  "Refund manual"), mengirim dana ke rekening pembeli, lalu menandainya lewat
+  `POST /admin/transactions/{id}/refund` (`refund_status = manual`) supaya antrean
+  kembali kosong. Hasilnya di `transactions.refund_status` — `processing` → `midtrans`
+  (refund ke metode asal), `balance` (dikreditkan ke saldo pengguna), atau
+  `failed`/`manual` (penanganan admin) — plus
   `refund_message`/`refunded_at`. Klaim `refund_status` membuat pengembalian
   hanya terjadi **sekali** (webhook/cek berulang aman). Panggilan refund Midtrans
   dilakukan setelah transaksi DB selesai, bukan di dalamnya. Admin bisa memicu

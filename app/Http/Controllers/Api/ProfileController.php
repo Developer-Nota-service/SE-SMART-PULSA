@@ -195,18 +195,9 @@ class ProfileController extends Controller
             ], 422);
         }
 
-        // Saldo reseller tidak bisa dipakai akun pribadi, jadi jangan sampai
-        // uang pengguna tertahan setelah berpindah tipe.
+        // Saldo tetap boleh ada setelah pindah tipe: akun pribadi juga punya
+        // saldo (dari pengembalian dana) dan bisa menariknya.
         if ($type === 'personal') {
-            $balance = (int) $fresh->balance;
-
-            if ($balance > 0) {
-                return response()->json([
-                    'message' => 'Saldo Rp'.number_format($balance, 0, ',', '.').' masih tersisa. Habiskan saldo dulu sebelum pindah ke akun pribadi.',
-                    'errors' => ['accountType' => ['Saldo masih tersisa.']],
-                ], 422);
-            }
-
             $pendingDeposit = DB::table('deposits')
                 ->where('user_id', $fresh->id)
                 ->where('status', 'pending')

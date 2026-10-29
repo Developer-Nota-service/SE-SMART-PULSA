@@ -10,7 +10,7 @@ const PRESETS = [100000, 200000, 500000, 1000000]
 const isAccountNumber = (value) => /^\d{6,20}$/.test(value)
 
 /**
- * Form tarik saldo untuk akun reseller. Nominal wajib kelipatan Rp100.000 dan
+ * Form tarik saldo untuk semua tipe akun. Nominal wajib kelipatan Rp100.000 dan
  * nama pemilik rekening diisi pengguna; admin memeriksanya sebelum dana dikirim.
  */
 export default function WithdrawForm({ balance = 0, onCreated }) {
