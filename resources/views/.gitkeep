@@ -1,0 +1,2 @@
+# Direktori ini harus ada: `php artisan optimize` menjalankan view:cache dan
+# gagal (DirectoryNotFoundException) bila resources/views tidak ada.

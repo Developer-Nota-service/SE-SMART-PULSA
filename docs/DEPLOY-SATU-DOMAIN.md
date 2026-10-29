@@ -24,9 +24,10 @@ Repo ini adalah **aplikasi Laravel** di root. React ada di `web/` dan di-build k
 `npm run build` di root hanya membangun React ke `public/app` (lihat `package.json`).
 `--seed` idempotent, jadi aman dijalankan setiap deploy.
 
-> **Catatan branch:** auto-deploy mengikuti branch `main`. Branch itu masih berisi
-> backend Node.js lama (`api/`). Pilih/merge branch yang berisi kode Laravel dulu,
-> kalau tidak, hosting akan tetap menjalankan aplikasi Node lama.
+> **Catatan branch:** auto-deploy mengikuti branch `main`, yang sudah berisi kode
+> Laravel (folder `api/` Node lama sudah tidak ada). Hosting hanya membawa kode yang
+> sudah di-merge ke `main`, jadi merge branch fitur terbaru dulu sebelum deploy —
+> kalau tidak, produksi menjalankan versi lama.
 
 ### Environment wajib
 
@@ -123,6 +124,18 @@ belum dikonfigurasi".
 Tanpa kredensial ini, produk demo tetap berjalan seperti biasa dan transaksi
 produk nyata berhenti di status `pending` (tidak ada panggilan ke supplier).
 
+### Job terjadwal (sinkron produk otomatis)
+
+Sinkron katalog Digiflazz tiap 30 menit dijalankan penjadwal Laravel. Image
+produksi hanya menjalankan Apache, jadi tambahkan cron di hosting:
+
+```cron
+* * * * * cd /path/ke/aplikasi && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Tanpa cron ini aplikasi tetap jalan, tetapi produk/`desc` baru dari Digiflazz tidak
+masuk sendiri (harus lewat tombol "Ambil harga terbaru" di konsol admin).
+
 ### Kalau preset Laravel tidak jalan
 
 Ganti **build type** ke **Dockerfile** — `Dockerfile` di root sudah menyiapkan
@@ -153,6 +166,11 @@ Cek log container: harus muncul `INFO Running migrations.` lalu Apache menyala.
 5. Atur sandi admin lewat tautan email: `php artisan admin:password-link <email-owner>`,
    lalu login sebagai admin → `/admin` terbuka.
 6. Daftar akun baru dengan nomor WhatsApp aktif → kode OTP masuk → masuk → saldo Rp0 tampil.
+
+> **Produk DEMO tetap di-seed di produksi** supaya katalog tidak kosong, dan
+> transaksinya hanya simulasi (tidak dikirim ke supplier). Setelah
+> `php artisan digiflazz:sync-products` berhasil, nonaktifkan produk DEMO dari
+> konsol admin (`/admin/harga`) agar pembeli tidak membayar produk simulasi.
 
 ## Cek database baru terisi
 
