@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api.js'
-import { CATEGORIES, categoryLabel, dateTime, rupiah } from '../../lib/format.js'
+import {
+  CATEGORIES,
+  categoryLabel,
+  dateTime,
+  providerLabel,
+  providerRank,
+  rupiah,
+} from '../../lib/format.js'
 import { CloseIcon } from '../Icons.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../StateViews.jsx'
 
@@ -28,6 +35,10 @@ const formatWait = (seconds) => {
 export default function AdminProducts() {
   const [category, setCategory] = useState('')
   const [search, setSearch] = useState('')
+  // Operator = Telkomsel, XL, Indosat, … (kolom `products.operator`); pilihannya
+  // mengikuti kategori yang sedang dibuka.
+  const [operator, setOperator] = useState('')
+  const [operators, setOperators] = useState([])
   // Provider = seller Digiflazz (`seller_name`) yang memasok produk ke akun ini.
   const [provider, setProvider] = useState('')
   const [providers, setProviders] = useState([])
@@ -57,25 +68,41 @@ export default function AdminProducts() {
     setLoading(true)
     setError('')
     try {
-      const data = await api.adminProducts({ category, q: search, provider })
+      const data = await api.adminProducts({ category, q: search, provider, operator })
       const nextProviders = data.providers || []
-      // Provider yang hilang dari daftar (mis. setelah ganti kategori) direset
-      // supaya daftar produk tidak kosong tanpa pilihan yang bisa dipilih lagi.
+      const nextOperators = data.operators || []
+      // Provider/operator yang hilang dari daftar (mis. setelah ganti kategori)
+      // direset supaya daftar produk tidak kosong tanpa pilihan yang bisa dipilih.
       if (provider && !nextProviders.some((option) => option.name === provider)) {
         setProvider('')
       }
+      if (operator && !nextOperators.some((option) => option.name === operator)) {
+        setOperator('')
+      }
       setItems(data.items || [])
       setProviders(nextProviders)
+      setOperators(nextOperators)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
       setLoading(false)
     }
-  }, [category, search, provider])
+  }, [category, search, provider, operator])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Chip operator diurutkan seperti katalog pengguna: Telkomsel, Indosat/IM3,
+  // XL, … lalu sisanya dari yang produknya terbanyak.
+  const orderedOperators = useMemo(
+    () =>
+      [...operators].sort((a, b) => {
+        const byRank = providerRank(providerLabel(a.name)) - providerRank(providerLabel(b.name))
+        return byRank !== 0 ? byRank : b.products - a.products
+      }),
+    [operators],
+  )
 
   const applyBulk = async () => {
     const value = Number(bulkValue)
@@ -85,8 +112,12 @@ export default function AdminProducts() {
     setBulkError('')
     setNotice('')
     try {
-      const result = await api.adminBulkPrice({ category, mode: bulkMode, value })
-      setNotice(`Harga ${result.updated} produk ${categoryLabel(category)} diperbarui.`)
+      const result = await api.adminBulkPrice({ category, operator, mode: bulkMode, value })
+      setNotice(
+        `Harga ${result.updated} produk ${categoryLabel(category)}${
+          operator ? ` ${providerLabel(operator)}` : ''
+        } diperbarui.`,
+      )
       setBulkValue('')
       await load()
     } catch (requestError) {
@@ -132,12 +163,40 @@ export default function AdminProducts() {
             key={filter.key || 'all'}
             type="button"
             className={`chip${category === filter.key ? ' is-active' : ''}`}
-            onClick={() => setCategory(filter.key)}
+            onClick={() => {
+              setCategory(filter.key)
+              // Operator hanya berlaku di dalam satu kategori, jadi pilihannya
+              // diulang dari awal setiap kategori berganti.
+              setOperator('')
+            }}
           >
             {filter.label}
           </button>
         ))}
       </div>
+
+      {category && orderedOperators.length > 0 ? (
+        <div className="chips" role="group" aria-label="Filter operator">
+          <button
+            type="button"
+            className={`chip${operator === '' ? ' is-active' : ''}`}
+            onClick={() => setOperator('')}
+          >
+            Semua operator
+          </button>
+          {orderedOperators.map((option) => (
+            <button
+              key={option.name}
+              type="button"
+              className={`chip${operator === option.name ? ' is-active' : ''}`}
+              onClick={() => setOperator(option.name)}
+            >
+              {providerLabel(option.name)}
+              <span className="chip__count">{option.products}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <label className="field field--compact">
         <span className="field__label">Cari produk, SKU, atau operator</span>
@@ -199,7 +258,8 @@ export default function AdminProducts() {
         <div className="card admin-card">
           <p className="admin-card__title">Ubah harga massal</p>
           <p className="admin-card__sub">
-            Berlaku untuk {items.length} produk {categoryLabel(category)} yang tampil di bawah.
+            Berlaku untuk {items.length} produk {categoryLabel(category)}
+            {operator ? ` ${providerLabel(operator)}` : ''} yang tampil di bawah.
           </p>
           <div className="admin-bulk">
             <select

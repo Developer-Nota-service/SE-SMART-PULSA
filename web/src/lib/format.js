@@ -38,6 +38,31 @@ export const CATEGORIES = [
   { key: 'voucher_inject', label: 'Voucher Inject', icon: 'inject' },
 ]
 
+// Urutan provider populer di menu; sisanya menyusul (terbesar dulu).
+export const PROVIDER_ORDER = ['Telkomsel', 'Indosat/IM3', 'XL', 'Axis', 'by.U', 'Smartfren']
+
+// Nama tampil resmi per operator (kunci huruf kecil).
+export const PROVIDER_NAMES = {
+  telkomsel: 'Telkomsel',
+  indosat: 'Indosat/IM3',
+  im3: 'Indosat/IM3',
+  xl: 'XL',
+  axis: 'Axis',
+  'by.u': 'by.U',
+  smartfren: 'Smartfren',
+  tri: 'Tri',
+}
+
+// Nama operator dari supplier tidak seragam (TELKOMSEL vs Telkomsel); katalog
+// pengguna dan filter operator konsol admin memakai label yang sama.
+export const providerLabel = (name) =>
+  PROVIDER_NAMES[String(name || '').toLowerCase()] || name || 'Lainnya'
+
+export const providerRank = (label) => {
+  const index = PROVIDER_ORDER.indexOf(label)
+  return index === -1 ? PROVIDER_ORDER.length : index
+}
+
 // Voucher biasa dan voucher inject sama-sama dikirim sebagai kode ke email pembeli.
 export const isVoucherCategory = (key) => key === 'voucher' || key === 'voucher_inject'
 

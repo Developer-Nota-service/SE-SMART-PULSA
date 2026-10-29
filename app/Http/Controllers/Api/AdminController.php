@@ -630,6 +630,7 @@ class AdminController extends Controller
         $search = trim((string) $request->query('q', ''));
         $category = (string) $request->query('category', '');
         $provider = trim((string) $request->query('provider', ''));
+        $operator = trim((string) $request->query('operator', ''));
 
         if ($category !== '' && ! in_array($category, CatalogController::CATEGORIES, true)) {
             return response()->json(['message' => 'Kategori tidak dikenal.'], 422);
@@ -648,6 +649,7 @@ class AdminController extends Controller
         };
 
         $rows = $filtered(DB::table('products'))
+            ->when($operator !== '', fn ($query) => $query->where('operator', 'ilike', $operator))
             ->when($provider !== '', fn ($query) => $query->where('seller_name', $provider))
             ->orderBy('category')
             ->orderBy('operator')
@@ -662,6 +664,7 @@ class AdminController extends Controller
         // Provider = seller Digiflazz (`seller_name`) yang mengirim produk ke akun
         // ini; hanya produk supplier nyata yang punya provider.
         $providers = $filtered(DB::table('products'))
+            ->when($operator !== '', fn ($query) => $query->where('operator', 'ilike', $operator))
             ->where('is_demo', false)
             ->whereNotNull('seller_name')
             ->select('seller_name', DB::raw('count(*) as products'))
@@ -672,9 +675,24 @@ class AdminController extends Controller
             ->map(fn ($row) => ['name' => $row->seller_name, 'products' => (int) $row->products])
             ->all();
 
+        // Operator (Telkomsel, XL, …) untuk kategori yang sedang dibuka. Penulisan
+        // supplier tidak seragam (TELKOMSEL vs Telkomsel), jadi digabung per huruf
+        // kecil; filter `operator` di atas memakai ilike sehingga keduanya cocok.
+        $operators = $filtered(DB::table('products'))
+            ->whereNotNull('operator')
+            ->where('operator', '!=', '')
+            ->select(DB::raw('min(operator) as name'), DB::raw('count(*) as products'))
+            ->groupBy(DB::raw('lower(operator)'))
+            ->orderByDesc('products')
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($row) => ['name' => $row->name, 'products' => (int) $row->products])
+            ->all();
+
         return response()->json(['data' => [
             'items' => $rows->map([self::class, 'serializeAdminProduct'])->all(),
             'providers' => $providers,
+            'operators' => $operators,
         ]]);
     }
 

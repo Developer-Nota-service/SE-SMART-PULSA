@@ -3,33 +3,20 @@ import { Navigate, useParams } from 'react-router-dom'
 import ProductCard from '../components/ProductCard.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
-import { CATEGORIES, categoryLabel, VOUCHER_INJECT_NOTE } from '../lib/format.js'
+import {
+  CATEGORIES,
+  categoryLabel,
+  PROVIDER_NAMES,
+  PROVIDER_ORDER,
+  providerRank,
+  VOUCHER_INJECT_NOTE,
+} from '../lib/format.js'
 
 const CATEGORY_KEYS = CATEGORIES.map((item) => item.key)
-
-// Urutan provider yang diinginkan di menu pulsa; sisanya menyusul (terbesar dulu).
-const PROVIDER_ORDER = ['Telkomsel', 'Indosat/IM3', 'XL', 'Axis', 'by.U', 'Smartfren']
-
-// Nama tampil resmi per operator (kunci huruf kecil).
-const PROVIDER_NAMES = {
-  telkomsel: 'Telkomsel',
-  indosat: 'Indosat/IM3',
-  im3: 'Indosat/IM3',
-  xl: 'XL',
-  axis: 'Axis',
-  'by.u': 'by.U',
-  smartfren: 'Smartfren',
-  tri: 'Tri',
-}
 
 // Penjelasan khusus kategori (mis. voucher inject butuh voucher kosong).
 const CATEGORY_NOTES = {
   voucher_inject: VOUCHER_INJECT_NOTE,
-}
-
-const rankOf = (label) => {
-  const index = PROVIDER_ORDER.indexOf(label)
-  return index === -1 ? PROVIDER_ORDER.length : index
 }
 
 // Nama operator datang dari supplier dengan penulisan berbeda (TELKOMSEL vs
@@ -58,10 +45,10 @@ function groupByProvider(products) {
       items: group.items,
     }))
     .sort((a, b) => {
-      const byRank = rankOf(a.label) - rankOf(b.label)
+      const byRank = providerRank(a.label) - providerRank(b.label)
       if (byRank !== 0) return byRank
       // Provider yang diurutkan eksplisit tetap di posisinya; sisanya terbesar dulu.
-      if (rankOf(a.label) < PROVIDER_ORDER.length) return 0
+      if (providerRank(a.label) < PROVIDER_ORDER.length) return 0
       return b.items.length - a.items.length || a.label.localeCompare(b.label)
     })
 }

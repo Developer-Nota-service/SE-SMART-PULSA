@@ -125,10 +125,13 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/deposits/{id}/cancel`, `GET /admin/transactions?status=&q=`,
   `POST /admin/transactions/{id}/check`, `POST /admin/transactions/{id}/refund`
   (tandai refund manual sudah dikirim),
-  `GET /admin/users?q=`, `GET /admin/products?category=&q=&provider=`
-  (`{data: {items, providers}}`; tiap baris memuat `costPrice`/`sellerName`/
-  `maxCostPrice`/`costSyncedAt`, `providers` = ringkasan seller Digiflazz
-  `{name, products}` yang ikut filter kategori/kata kunci),
+  `GET /admin/users?q=`, `GET /admin/products?category=&q=&operator=&provider=`
+  (`{data: {items, providers, operators}}`; tiap baris memuat `costPrice`/
+  `sellerName`/`maxCostPrice`/`costSyncedAt`; `operators` = ringkasan operator
+  `{name, products}` untuk kategori/kata kunci yang aktif, dikelompokkan per
+  huruf kecil karena penulisan supplier tidak seragam; `providers` = ringkasan
+  seller Digiflazz `{name, products}` yang ikut filter kategori/kata kunci/
+  operator),
   `PATCH /admin/products/{id}` `{price?,retailPrice?,maxCostPrice?,active?}` (harga
   publik tidak boleh di bawah harga reseller; `maxCostPrice` = batas harga modal,
   `0`/`null` = tanpa batas),
@@ -312,7 +315,12 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   kategori, harga **modal** (`products.cost_price`, dari Digiflazz), **harga max**
   (`max_cost_price`), harga reseller (`products.price`), harga publik
   (`retail_price`), selisih %, provider (`seller_name`), dan status tayang.
-  Pemilih **Provider Digiflazz** menyaring produk per seller dari daftar harga
+  Setelah kategori dipilih, muncul deret **chip operator** (Telkomsel,
+  Indosat/IM3, XL, Axis, by.U, Smartfren, lalu sisanya terbesar dulu — label dan
+  urutan dari `providerLabel`/`providerRank` di `web/src/lib/format.js`, sama
+  dengan katalog pengguna) yang menyaring produk kategori itu per
+  `products.operator`; chip direset saat kategori berganti. Pemilih **Provider
+  Digiflazz** menyaring produk per seller dari daftar harga
   Digiflazz (ringkasan `{name, products}` dari `GET /admin/products`). Kartu
   "Harga modal Digiflazz" punya tombol **Ambil harga terbaru**
   (`POST /admin/products/sync-digiflazz`) yang memperbarui modal + provider seluruh
@@ -321,8 +329,10 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   yang mau dibayar; dikirim ke Digiflazz sebagai `max_price` sehingga transaksi
   ditolak (dan saldo pembeli dikembalikan) bila harga supplier menembus batas itu.
   Satu produk diubah
-  lewat sheet "Ubah harga"; satu kategori bisa digeser massal (persen atau
-  rupiah) di kartu "Ubah harga massal". Produk nonaktif (`active = false`)
+  lewat sheet "Ubah harga"; satu kategori — atau satu operator di dalamnya bila
+  chip operator sedang aktif — bisa digeser massal (persen atau rupiah) di kartu
+  "Ubah harga massal" (`operator` pada `POST /admin/products/bulk-price`).
+  Produk nonaktif (`active = false`)
   hilang dari katalog pengguna, jadi AdminController menolak harga publik di
   bawah harga reseller agar akun pribadi tidak membayar lebih murah.
 
@@ -606,9 +616,10 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   daftar produk muncul di `/kategori/:category` (`web/src/pages/CategoryPage.jsx`)
   tanpa kartu kategori lagi (hanya judul kategori):
   provider tampil sebagai deret chip menyamping (bisa di-scroll; urutan mengikuti
-  `PROVIDER_ORDER` di `CategoryPage.jsx`: Telkomsel, Indosat/IM3, XL, Axis, by.U,
-  Smartfren, lalu sisanya terbesar dulu; nama operator dipetakan lewat
-  `PROVIDER_NAMES`),
+  `PROVIDER_ORDER` di `web/src/lib/format.js`: Telkomsel, Indosat/IM3, XL, Axis,
+  by.U, Smartfren, lalu sisanya terbesar dulu; nama operator dipetakan lewat
+  `PROVIDER_NAMES`, labelnya `providerLabel()` — dipakai juga oleh chip operator
+  di konsol admin),
   produk provider terpilih muncul menurun di bawahnya. Nama operator supplier yang
   beda huruf besar/kecil digabung (TELKOMSEL = Telkomsel).
   Kategori `voucher_inject` (Voucher Inject) berisi voucher Telkomsel yang harus
