@@ -2219,27 +2219,84 @@ button.inline-link {
   opacity: 0.86;
 }
 
-/* ---------- konten beranda pengguna ---------- */
-.banner-strip {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  padding-bottom: 2px;
+.admin-preview__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  object-fit: cover;
+  border-radius: 14px;
+  background: var(--navy-deep);
 }
 
-.banner-strip::-webkit-scrollbar {
-  display: none;
+.banner-upload__preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 8px;
+  background: var(--bg);
+}
+
+/* ---------- konten beranda pengguna ---------- */
+/* Slider banner: satu slide per layar, bergeser otomatis dari komponen. */
+.banner-slider {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: var(--navy-deep);
+}
+
+.banner-slider__track {
+  display: flex;
+  transition: transform 450ms ease;
+}
+
+.banner-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+.banner-slide__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  object-fit: cover;
+}
+
+.banner-slider__dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.banner-slider__dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: width 200ms ease, background 200ms ease;
+}
+
+.banner-slider__dot.is-active {
+  width: 16px;
+  background: #fff;
 }
 
 .banner {
-  flex: 0 0 86%;
-  scroll-snap-align: start;
   border-radius: var(--radius);
   padding: 16px;
   color: #fff;
+  min-height: 96px;
   background: linear-gradient(140deg, var(--navy) 0%, var(--navy-deep) 100%);
-  box-shadow: var(--shadow);
 }
 
 .banner--blue {

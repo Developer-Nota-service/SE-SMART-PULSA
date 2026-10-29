@@ -78,16 +78,30 @@ class DashboardContent
             ->when($onlyActive, fn ($query) => $query->where('active', true))
             ->orderBy('sort_order')
             ->orderByDesc('id')
-            ->get(['id', 'title', 'subtitle', 'tone', 'active', 'sort_order'])
+            ->get(['id', 'title', 'subtitle', 'image_path', 'tone', 'active', 'sort_order'])
             ->map(fn ($row) => [
                 'id' => (int) $row->id,
                 'title' => $row->title,
                 'subtitle' => (string) $row->subtitle,
+                'imageUrl' => self::bannerImageUrl($row->image_path),
                 'tone' => in_array($row->tone, self::TONES, true) ? $row->tone : 'navy',
                 'active' => (bool) $row->active,
                 'sortOrder' => (int) $row->sort_order,
             ])
             ->all();
+    }
+
+    /**
+     * URL publik gambar banner. Nama file acak (32 hex) sehingga alamatnya tidak
+     * bisa ditebak; dipakai langsung oleh <img> di beranda dan konsol admin.
+     */
+    public static function bannerImageUrl(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+
+        return '/api/v1/banner/'.basename($path);
     }
 
     public static function promos(bool $onlyActive): array

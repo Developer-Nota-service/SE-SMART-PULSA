@@ -324,10 +324,20 @@ Banner, promo, dan peringkat pembelian diatur admin di tab **Beranda**. Satu
 sumber data: `app/Support/DashboardContent.php`, dipakai `DashboardController`
 (pengguna) dan `AdminDashboardController` (admin).
 
-- Tabel `banners` (judul, keterangan, `tone` `navy|blue|green|amber`, `active`,
-  `sort_order`) dan `promos` (judul, keterangan, kode, label, `valid_until`,
-  `active`, `sort_order`). Hanya baris `active` yang dikirim ke beranda; promo
-  juga harus belum lewat `valid_until`. Urutan `sort_order` lalu terbaru.
+- Tabel `banners` (judul, keterangan, `image_path`, `tone` `navy|blue|green|amber`,
+  `active`, `sort_order`) dan `promos` (judul, keterangan, kode, label,
+  `valid_until`, `active`, `sort_order`). Hanya baris `active` yang dikirim ke
+  beranda; promo juga harus belum lewat `valid_until`. Urutan `sort_order` lalu
+  terbaru.
+- Banner memakai **gambar** (JPG/PNG/WEBP maks 4 MB) yang diunggah admin:
+  `POST /admin/banners` dan `POST /admin/banners/{id}` (multipart; PATCH tetap
+  untuk ubahan JSON seperti tayang/sembunyi), field file `image`, `removeImage=1`
+  untuk menghapus. File disimpan di `storage/app/private/banners` dengan nama acak
+  32 hex dan disajikan publik lewat `GET /banner/{file}` (tanpa sesi, dipakai
+  `<img>`). Judul opsional bila gambar ada — dipakai sebagai teks alternatif, dan
+  `tone` hanya tampilan cadangan untuk banner lama tanpa gambar.
+- Beranda menampilkan banner sebagai **slider otomatis** (`HomeBanners`): satu
+  slide per layar, bergeser tiap 4 detik, dengan titik penunjuk yang bisa diklik.
 - Peringkat **tidak punya tabel sendiri** — dihitung dari transaksi `success`
   milik `users.role = 'user'` pada rentang `leaderboardPeriodDays` (7/30/90),
   diurutkan dari jumlah transaksi lalu nominal, dengan pilihan peserta semua

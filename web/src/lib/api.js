@@ -211,7 +211,9 @@ export const api = {
 
   // Pengaturan beranda pengguna: banner, promo, peringkat pembelian.
   adminDashboard: () => request('/admin/dashboard'),
-  adminCreateBanner: (body) => request('/admin/banners', { method: 'POST', body }),
+  adminCreateBanner: (form) => request('/admin/banners', { method: 'POST', form }),
+  // Simpan banner lengkap dengan gambar (multipart) — PATCH tidak membaca file.
+  adminSaveBanner: (id, form) => request(`/admin/banners/${id}`, { method: 'POST', form }),
   adminUpdateBanner: (id, body) => request(`/admin/banners/${id}`, { method: 'PATCH', body }),
   adminDeleteBanner: (id) => request(`/admin/banners/${id}`, { method: 'DELETE' }),
   adminCreatePromo: (body) => request('/admin/promos', { method: 'POST', body }),

@@ -141,10 +141,18 @@ export default function AdminDashboard() {
         ) : (
           banners.map((row) => (
             <article className="card admin-card" key={`banner-${row.id}`}>
-              <div className={`admin-preview admin-preview--${row.tone}`}>
-                <p className="admin-preview__title">{row.title}</p>
-                {row.subtitle ? <p className="admin-preview__text">{row.subtitle}</p> : null}
-              </div>
+              {row.imageUrl ? (
+                <img
+                  className="admin-preview__image"
+                  src={row.imageUrl}
+                  alt={row.title || 'Banner'}
+                />
+              ) : (
+                <div className={`admin-preview admin-preview--${row.tone}`}>
+                  <p className="admin-preview__title">{row.title}</p>
+                  {row.subtitle ? <p className="admin-preview__text">{row.subtitle}</p> : null}
+                </div>
+              )}
 
               <div className="admin-card__actions">
                 <button
@@ -173,7 +181,7 @@ export default function AdminDashboard() {
               </div>
 
               <p className="admin-card__sub">
-                Gaya {toneLabel(row.tone)} ·{' '}
+                {row.imageUrl ? 'Banner gambar' : `Gaya ${toneLabel(row.tone)}`} ·{' '}
                 {row.active ? 'tampil di beranda' : 'disembunyikan'}
               </p>
             </article>
@@ -398,22 +406,51 @@ function BannerSheet({ banner, onClose, onSaved }) {
   const [subtitle, setSubtitle] = useState(banner?.subtitle || '')
   const [tone, setTone] = useState(banner?.tone || 'navy')
   const [active, setActive] = useState(banner?.active ?? true)
+  const [image, setImage] = useState(null)
+  const [removeImage, setRemoveImage] = useState(false)
+  const [preview, setPreview] = useState(banner?.imageUrl || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   useSheetClose(onClose)
+
+  const hasImage = Boolean(image) || (Boolean(banner?.imageUrl) && !removeImage)
+
+  const pickImage = (event) => {
+    const picked = event.target.files?.[0] || null
+    setImage(picked)
+    setRemoveImage(false)
+    setPreview(picked ? URL.createObjectURL(picked) : banner?.imageUrl || '')
+  }
+
+  const clearImage = () => {
+    setImage(null)
+    setRemoveImage(Boolean(banner?.imageUrl))
+    setPreview('')
+  }
 
   const save = async (event) => {
     event.preventDefault()
     setBusy(true)
     setError('')
     try {
-      const body = { title, subtitle, tone, active }
-      if (banner) await api.adminUpdateBanner(banner.id, body)
-      else await api.adminCreateBanner(body)
+      const form = new FormData()
+      form.append('title', title)
+      form.append('subtitle', subtitle)
+      form.append('tone', tone)
+      form.append('active', active ? '1' : '0')
+      if (image) form.append('image', image)
+      if (removeImage) form.append('removeImage', '1')
+
+      if (banner) await api.adminSaveBanner(banner.id, form)
+      else await api.adminCreateBanner(form)
       onSaved()
     } catch (requestError) {
-      setError(requestError.errors?.title?.[0] || requestError.message)
+      setError(
+        requestError.errors?.image?.[0] ||
+          requestError.errors?.title?.[0] ||
+          requestError.message,
+      )
     } finally {
       setBusy(false)
     }
@@ -447,6 +484,27 @@ function BannerSheet({ banner, onClose, onSaved }) {
           />
         </label>
 
+        <div className="field">
+          <span className="field__label">Gambar banner (JPG, PNG, atau WEBP · maks 4 MB)</span>
+          {preview ? (
+            <img className="banner-upload__preview" src={preview} alt="Pratinjau banner" />
+          ) : null}
+          <input
+            className="input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={pickImage}
+          />
+          {hasImage ? (
+            <button type="button" className="btn btn--ghost btn--sm" onClick={clearImage}>
+              Hapus gambar
+            </button>
+          ) : null}
+          <span className="field__hint">
+            Ukuran ideal 3:1 (mis. 1200 × 400). Tanpa gambar, banner tampil sebagai kartu warna.
+          </span>
+        </div>
+
         <label className="field">
           <span className="field__label">Keterangan</span>
           <input
@@ -459,7 +517,7 @@ function BannerSheet({ banner, onClose, onSaved }) {
         </label>
 
         <div className="field">
-          <span className="field__label">Warna</span>
+          <span className="field__label">Warna (bila tanpa gambar)</span>
           <div className="chips">
             {TONES.map((item) => (
               <button
@@ -489,7 +547,7 @@ function BannerSheet({ banner, onClose, onSaved }) {
           </p>
         ) : null}
 
-        <button type="submit" className="btn btn--primary" disabled={busy || title.trim().length < 3}>
+        <button type="submit" className="btn btn--primary" disabled={busy || (!hasImage && title.trim().length < 3)}>
           {busy ? 'Menyimpan…' : 'Simpan banner'}
         </button>
       </form>

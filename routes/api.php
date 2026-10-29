@@ -38,6 +38,9 @@ Route::prefix('v1')->group(function () {
     // Foto profil: nama file acak, dipakai langsung oleh <img>.
     Route::get('avatar/{file}', [ProfileController::class, 'avatar']);
 
+    // Gambar banner beranda: nama file acak, dipakai langsung oleh <img>.
+    Route::get('banner/{file}', [DashboardController::class, 'banner']);
+
     // Konsol admin: pantau & selesaikan deposit, transaksi, dan penarikan.
     Route::middleware(['session.token', 'admin.only'])->prefix('admin')->group(function () {
         Route::get('overview', [AdminController::class, 'overview']);
@@ -53,6 +56,8 @@ Route::prefix('v1')->group(function () {
         // Konten beranda pengguna: banner, promo, dan peringkat pembelian.
         Route::get('dashboard', [AdminDashboardController::class, 'index']);
         Route::post('banners', [AdminDashboardController::class, 'storeBanner']);
+        // POST untuk unggah gambar (multipart hanya terbaca pada POST), PATCH untuk ubahan JSON.
+        Route::post('banners/{id}', [AdminDashboardController::class, 'updateBanner']);
         Route::patch('banners/{id}', [AdminDashboardController::class, 'updateBanner']);
         Route::delete('banners/{id}', [AdminDashboardController::class, 'destroyBanner']);
         Route::post('promos', [AdminDashboardController::class, 'storePromo']);
