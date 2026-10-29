@@ -485,10 +485,16 @@ penuh lalu periksa jumlah produk per operator di konsol admin.
   (`|`, titik, `#`), bukan hanya angka. `desc` seller disimpan di
   `products.instruction` dan **ditulis ulang setiap sinkron** (termasuk saat seller
   produk berganti), lalu tampil di halaman beli sebagai blok **Keterangan produk**
-  (`web/src/components/ProductDetails.jsx`). Untuk kategori `data` blok itu juga
-  merangkum kuota / masa aktif / jaringan dari nama + keterangan supplier dan
-  menambahkan peringatan soal kuota lokal/zona serta jam pemakaian; keterangan
-  asli supplier tetap ditampilkan utuh di bawahnya (`white-space: pre-line`).
+  (`web/src/components/ProductDetails.jsx`). Blok itu hanya menjelaskan **jenis
+  produk yang sedang dibuka**, dipilih `productNote()` di
+  `web/src/lib/productNotes.js` dari `category` + `name` + `instruction`: paket data
+  Flash, Zona/area terbatas, tengah malam (01.00–09.00), Unlimited/FUP, atau reguler
+  24 jam, plus satu penjelasan untuk tiap kategori lain (pulsa/transfer, game,
+  e-wallet, voucher, voucher inject termasuk catatan zona, token PLN, tagihan PLN).
+  Karena diturunkan saat render dari data produk terbaru, keterangan ikut berubah
+  begitu sinkron mengganti nama atau `desc` seller. Kategori `data` juga merangkum
+  kuota / masa aktif / jaringan dari nama + keterangan supplier; keterangan asli
+  supplier tetap ditampilkan utuh di bawahnya (`white-space: pre-line`).
 - `allow_dot: true` dikirim otomatis bila `customer_no` berisi titik (aturan resmi
   Digiflazz supaya seller non-Jabber tidak menolak).
 - Daftar harga dibatasi frekuensinya; balasan limit berupa `data: {rc, message}`,
