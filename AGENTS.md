@@ -122,11 +122,16 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `POST /admin/deposits/{id}/cancel`, `GET /admin/transactions?status=&q=`,
   `POST /admin/transactions/{id}/check`, `POST /admin/transactions/{id}/refund`
   (tandai refund manual sudah dikirim),
-  `GET /admin/users?q=`, `GET /admin/products?category=&q=`,
-  `PATCH /admin/products/{id}` `{price?,retailPrice?,active?}` (harga publik tidak
-  boleh di bawah harga reseller),
+  `GET /admin/users?q=`, `GET /admin/products?category=&q=` (tiap baris memuat
+  `costPrice`/`sellerName`/`maxCostPrice`/`costSyncedAt`),
+  `PATCH /admin/products/{id}` `{price?,retailPrice?,maxCostPrice?,active?}` (harga
+  publik tidak boleh di bawah harga reseller; `maxCostPrice` = batas harga modal,
+  `0`/`null` = tanpa batas),
   `POST /admin/products/bulk-price` `{category,operator?,mode:percent|amount,value}`
-  (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk).
+  (menggeser harga reseller + publik sekaligus, `{updated}` = jumlah produk),
+  `POST /admin/products/sync-digiflazz` → `{products,active,skipped,deactivated}`:
+  tarik harga modal terbaru dari Digiflazz (harga jual admin tidak ditimpa). 422
+  bila kredensial kosong, 502 bila Digiflazz menolak (mis. limit pricelist).
   Konten beranda pengguna: `GET /admin/dashboard` (banner, promo, pengaturan,
   pratinjau peringkat), `POST /admin/banners`, `PATCH|DELETE /admin/banners/{id}`,
   `POST /admin/promos`, `PATCH|DELETE /admin/promos/{id}`,
@@ -295,8 +300,15 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   pembelian. Lihat "Konten beranda pengguna".
 
 - **Harga** (`web/src/components/admin/AdminProducts.jsx`) — daftar produk per
-  kategori, harga reseller (`products.price`), harga publik
-  (`products.retail_price`), selisih %, dan status tayang. Satu produk diubah
+  kategori, harga **modal** (`products.cost_price`, dari Digiflazz), harga reseller
+  (`products.price`), harga publik (`products.retail_price`), selisih %, provider
+  (`seller_name`), dan status tayang. Kartu "Harga modal Digiflazz" punya tombol
+  **Ambil harga terbaru** (`POST /admin/products/sync-digiflazz`) yang memperbarui
+  modal + provider tanpa menyentuh harga jual yang sudah diatur admin. Sheet "Ubah
+  harga" juga mengisi **Harga max modal** (`max_cost_price`) — batas harga modal
+  yang mau dibayar; dikirim ke Digiflazz sebagai `max_price` sehingga transaksi
+  ditolak (dan saldo pembeli dikembalikan) bila harga supplier menembus batas itu.
+  Satu produk diubah
   lewat sheet "Ubah harga"; satu kategori bisa digeser massal (persen atau
   rupiah) di kartu "Ubah harga massal". Produk nonaktif (`active = false`)
   hilang dari katalog pengguna, jadi AdminController menolak harga publik di
@@ -395,12 +407,20 @@ Transaksi produk nyata dikirim ke buyer API Digiflazz setelah dibayar.
   `md5(username+apiKey+ref_id)`). `ref_id` = `transactions.order_number`, jadi
   memanggil topup ulang dengan ref_id yang sama berarti **cek status** (perilaku
   resmi Digiflazz).
-- `php artisan digiflazz:sync-products` — impor produk `is_demo = false` untuk
+- `app/Services/DigiflazzProductSync.php` (dipakai `php artisan digiflazz:sync-products`
+  dan `POST /admin/products/sync-digiflazz`) — impor produk `is_demo = false` untuk
   kategori Pulsa, Data, PLN token, E-Money, Games, Voucher. Pascabayar, masa aktif,
   TV, dan eSIM dilewati. Voucher Telkomsel (produk inject) masuk kategori
-  `voucher_inject`, bukan `voucher` — lihat `categoryFor()`. Harga reseller = harga supplier + margin, harga publik
-  +5%, keduanya dibulatkan ke atas per Rp100. SKU yang hilang dari daftar
-  dinonaktifkan (tidak dihapus) agar riwayat transaksi tetap utuh.
+  `voucher_inject`, bukan `voucher` — lihat `categoryFor()`. Tiap produk menyimpan
+  **harga modal** (`cost_price`), provider (`seller_name`), dan `cost_synced_at`.
+  Harga reseller = harga supplier + margin, harga publik +5%, keduanya dibulatkan
+  ke atas per Rp100 — **hanya untuk produk baru**: harga jual produk yang sudah ada
+  dipertahankan supaya sinkron tidak menghapus harga yang diatur admin di konsol.
+  SKU yang hilang dari daftar dinonaktifkan (tidak dihapus) agar riwayat transaksi
+  tetap utuh.
+- `products.max_cost_price` (diisi admin) dikirim sebagai `max_price` saat topup
+  (`TransactionFulfillment`), jadi harga supplier yang melonjak melewati batas itu
+  membuat transaksi ditolak dan dana pembeli dikembalikan lewat jalur refund biasa.
 - **Isi `customer_no` mengikuti produk Digiflazz** (satu kolom teks; formatnya
   ditentukan seller lewat `desc` daftar harga): pulsa/data/e-wallet = nomor HP;
   token PLN = ID pelanggan/nomor meter; game = ID game/User ID, sebagian produk

@@ -37,8 +37,11 @@ class DigiflazzClient
         // Saat limit pengecekan daftar harga tercapai, Digiflazz membalas
         // `data: { rc, message }` — jangan dianggap daftar produk kosong.
         if (! is_array($rows) || isset($rows['message'])) {
-            $message = is_array($rows) ? ($rows['message'] ?? '') : '';
-            throw new RuntimeException(trim('Daftar harga Digiflazz tidak dikenali. '.$message));
+            // Pesan Digiflazz biasanya sudah jelas (mis. limit pengecekan
+            // pricelist) — teruskan apa adanya supaya admin tahu harus menunggu.
+            $message = is_array($rows) ? trim((string) ($rows['message'] ?? '')) : '';
+
+            throw new RuntimeException($message !== '' ? $message : 'Daftar harga Digiflazz tidak dikenali.');
         }
 
         return array_values(array_filter($rows, 'is_array'));

@@ -50,7 +50,12 @@ class TransactionFulfillment
         }
 
         try {
-            $result = $this->digiflazz->topup($row->order_number, $row->sku, $row->customer_number);
+            $result = $this->digiflazz->topup(
+                $row->order_number,
+                $row->sku,
+                $row->customer_number,
+                $row->max_cost_price !== null ? (int) $row->max_cost_price : null,
+            );
         } catch (\Throwable $exception) {
             Log::warning('Pengiriman ke Digiflazz gagal: '.$exception->getMessage(), [
                 'order_number' => $row->order_number,
@@ -192,6 +197,8 @@ class TransactionFulfillment
                 'transactions.supplier_status',
                 'products.sku',
                 'products.is_demo',
+                // Batas harga modal yang mau dibayar → `max_price` Digiflazz.
+                'products.max_cost_price',
             ]);
     }
 

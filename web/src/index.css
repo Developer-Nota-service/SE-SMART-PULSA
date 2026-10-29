@@ -2495,9 +2495,16 @@ button.inline-link {
 
 .admin-price {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Modal · Reseller · Publik · Selisih — dua kolom di layar sempit. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 12px 0;
+}
+
+@media (min-width: 520px) {
+  .admin-price {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .admin-price__label {

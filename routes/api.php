@@ -51,6 +51,8 @@ Route::prefix('v1')->group(function () {
         Route::post('deposits/{id}/cancel', [AdminController::class, 'cancelDeposit']);
         Route::get('products', [AdminController::class, 'products']);
         Route::post('products/bulk-price', [AdminController::class, 'bulkPrice']);
+        // Tarik harga modal terbaru dari Digiflazz (harga jual admin tetap).
+        Route::post('products/sync-digiflazz', [AdminController::class, 'syncDigiflazz']);
         Route::patch('products/{id}', [AdminController::class, 'updateProduct']);
 
         // Konten beranda pengguna: banner, promo, dan peringkat pembelian.

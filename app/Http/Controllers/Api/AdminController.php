@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\DigiflazzProductSync;
 use App\Services\MidtransPaymentStatus;
 use App\Services\MidtransService;
 use App\Services\TransactionFulfillment;
@@ -645,7 +646,10 @@ class AdminController extends Controller
             ->orderBy('sort_order')
             ->orderBy('price')
             ->limit(500)
-            ->get(['id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'active', 'is_demo']);
+            ->get([
+                'id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price',
+                'cost_price', 'seller_name', 'max_cost_price', 'cost_synced_at', 'active', 'is_demo',
+            ]);
 
         return response()->json(['data' => $rows->map([self::class, 'serializeAdminProduct'])->all()]);
     }
@@ -670,6 +674,8 @@ class AdminController extends Controller
         $data = $request->validate([
             'price' => ['sometimes', 'integer', 'min:0'],
             'retailPrice' => ['sometimes', 'integer', 'min:0'],
+            // Batas harga modal yang mau dibayar ke Digiflazz (0/kosong = tanpa batas).
+            'maxCostPrice' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'active' => ['sometimes', 'boolean'],
         ]);
 
@@ -683,15 +689,24 @@ class AdminController extends Controller
             ], 422);
         }
 
+        // 0/kosong = tanpa batas, simpan NULL supaya tidak dianggap batas Rp0.
+        $maxCost = array_key_exists('maxCostPrice', $data)
+            ? ((int) $data['maxCostPrice'] > 0 ? (int) $data['maxCostPrice'] : null)
+            : ($product->max_cost_price !== null ? (int) $product->max_cost_price : null);
+
         DB::table('products')->where('id', (int) $id)->update([
             'price' => $price,
             'retail_price' => $retail,
+            'max_cost_price' => $maxCost,
             'active' => array_key_exists('active', $data) ? (bool) $data['active'] : (bool) $product->active,
         ]);
 
         $row = DB::table('products')
             ->where('id', (int) $id)
-            ->first(['id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price', 'active', 'is_demo']);
+            ->first([
+                'id', 'sku', 'category', 'operator', 'name', 'price', 'retail_price',
+                'cost_price', 'seller_name', 'max_cost_price', 'cost_synced_at', 'active', 'is_demo',
+            ]);
 
         return response()->json(['data' => self::serializeAdminProduct($row)]);
     }
@@ -755,6 +770,46 @@ class AdminController extends Controller
         $next = $mode === 'percent' ? $price * (1 + $value / 100) : $price + $value;
 
         return max(0, (int) round($next));
+    }
+
+    /**
+     * Tarik daftar harga terbaru dari Digiflazz: memperbarui harga modal
+     * (`cost_price`) dan provider tiap produk. Harga jual yang sudah diatur admin
+     * tidak ditimpa (lihat `DigiflazzProductSync`).
+     */
+    public function syncDigiflazz(Request $request, DigiflazzProductSync $sync): JsonResponse
+    {
+        if (! $sync->isConfigured()) {
+            return response()->json([
+                'message' => 'Digiflazz belum dikonfigurasi: isi DIGIFLAZZ_USERNAME dan DIGIFLAZZ_API_KEY.',
+            ], 422);
+        }
+
+        // Daftar harga bisa besar; jangan biarkan batas waktu PHP memutusnya.
+        @set_time_limit(120);
+
+        try {
+            $result = $sync->sync();
+        } catch (\Throwable $exception) {
+            Log::warning('Sinkron harga Digiflazz gagal: '.$exception->getMessage());
+
+            return response()->json([
+                'message' => 'Gagal menarik harga dari Digiflazz: '.$exception->getMessage(),
+            ], 502);
+        }
+
+        $admin = $request->attributes->get('authUser');
+
+        if ($admin !== null) {
+            DB::table('audit_logs')->insert([
+                'user_id' => $admin->id,
+                'action' => 'admin.products.sync_digiflazz',
+                'detail' => json_encode($result),
+                'created_at' => now(),
+            ]);
+        }
+
+        return response()->json(['data' => $result]);
     }
 
     /** Baris deposit beserta pemiliknya, untuk serialisasi tanggapan admin. */
@@ -863,6 +918,11 @@ class AdminController extends Controller
             'price' => (int) $row->price,
             // Harga publik kosong (0) berarti mengikuti harga reseller.
             'retailPrice' => (int) ($row->retail_price ?: $row->price),
+            // Harga modal supplier; null untuk produk demo.
+            'costPrice' => $row->cost_price !== null ? (int) $row->cost_price : null,
+            'sellerName' => $row->seller_name,
+            'maxCostPrice' => $row->max_cost_price !== null ? (int) $row->max_cost_price : null,
+            'costSyncedAt' => $row->cost_synced_at,
             'active' => (bool) $row->active,
             'isDemo' => (bool) $row->is_demo,
         ];

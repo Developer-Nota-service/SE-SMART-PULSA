@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api.js'
-import { CATEGORIES, categoryLabel, rupiah } from '../../lib/format.js'
+import { CATEGORIES, categoryLabel, dateTime, rupiah } from '../../lib/format.js'
 import { CloseIcon } from '../Icons.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../StateViews.jsx'
 
@@ -8,6 +8,10 @@ const FILTERS = [{ key: '', label: 'Semua' }, ...CATEGORIES]
 
 const marginPercent = (row) =>
   row.price > 0 ? Math.round(((row.retailPrice - row.price) / row.price) * 100) : 0
+
+/** Margin harga reseller di atas harga modal supplier (null untuk produk demo). */
+const marginOverCost = (row) =>
+  row.costPrice > 0 ? Math.round(((row.price - row.costPrice) / row.costPrice) * 100) : null
 
 /**
  * Halaman "Harga" konsol admin: harga reseller (`price`) dan harga publik
@@ -27,6 +31,9 @@ export default function AdminProducts() {
   const [bulkValue, setBulkValue] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkError, setBulkError] = useState('')
+
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncError, setSyncError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -63,6 +70,23 @@ export default function AdminProducts() {
     }
   }
 
+  const syncPrices = async () => {
+    setSyncBusy(true)
+    setSyncError('')
+    setNotice('')
+    try {
+      const result = await api.adminSyncDigiflazz()
+      setNotice(
+        `Harga modal ${result.products} produk diperbarui dari Digiflazz (${result.active} aktif).`,
+      )
+      await load()
+    } catch (requestError) {
+      setSyncError(requestError.message)
+    } finally {
+      setSyncBusy(false)
+    }
+  }
+
   return (
     <>
       <div className="section-head">
@@ -92,6 +116,27 @@ export default function AdminProducts() {
           onChange={(event) => setSearch(event.target.value)}
         />
       </label>
+
+      <div className="card admin-card">
+        <p className="admin-card__title">Harga modal Digiflazz</p>
+        <p className="admin-card__sub">
+          Tarik harga modal dan provider terbaru dari Digiflazz. Harga jual yang sudah Anda atur
+          tidak berubah — hanya produk baru yang dihitung otomatis dari margin.
+        </p>
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
+          disabled={syncBusy}
+          onClick={syncPrices}
+        >
+          {syncBusy ? 'Menarik harga…' : 'Ambil harga terbaru'}
+        </button>
+        {syncError ? (
+          <p className="field__error" role="alert">
+            {syncError}
+          </p>
+        ) : null}
+      </div>
 
       {category ? (
         <div className="card admin-card">
@@ -165,6 +210,12 @@ export default function AdminProducts() {
 
               <div className="admin-price">
                 <div>
+                  <span className="admin-price__label">Modal</span>
+                  <span className="admin-price__value">
+                    {row.costPrice ? rupiah(row.costPrice) : '–'}
+                  </span>
+                </div>
+                <div>
                   <span className="admin-price__label">Reseller</span>
                   <span className="admin-price__value">{rupiah(row.price)}</span>
                 </div>
@@ -177,6 +228,18 @@ export default function AdminProducts() {
                   <span className="admin-price__value">{marginPercent(row)}%</span>
                 </div>
               </div>
+
+              {row.costPrice ? (
+                <p className="admin-card__sub">
+                  {row.sellerName ? `${row.sellerName} · ` : ''}
+                  margin modal {marginOverCost(row)}%
+                  {row.maxCostPrice ? ` · harga max ${rupiah(row.maxCostPrice)}` : ''}
+                  {row.maxCostPrice && row.maxCostPrice < row.costPrice
+                    ? ' (di bawah modal — transaksi akan ditolak Digiflazz)'
+                    : ''}
+                  {row.costSyncedAt ? ` · modal diperbarui ${dateTime(row.costSyncedAt)}` : ''}
+                </p>
+              ) : null}
 
               <button
                 type="button"
@@ -208,6 +271,9 @@ export default function AdminProducts() {
 function PriceSheet({ product, onClose, onSaved }) {
   const [price, setPrice] = useState(String(product.price))
   const [retailPrice, setRetailPrice] = useState(String(product.retailPrice))
+  const [maxCostPrice, setMaxCostPrice] = useState(
+    product.maxCostPrice ? String(product.maxCostPrice) : '',
+  )
   const [active, setActive] = useState(product.active)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -233,6 +299,7 @@ function PriceSheet({ product, onClose, onSaved }) {
       await api.adminUpdateProduct(product.id, {
         price: Number(price),
         retailPrice: Number(retailPrice),
+        maxCostPrice: maxCostPrice ? Number(maxCostPrice) : null,
         active,
       })
       onSaved()
@@ -287,6 +354,23 @@ function PriceSheet({ product, onClose, onSaved }) {
             onChange={(event) => setRetailPrice(event.target.value.replace(/\D/g, ''))}
           />
         </label>
+
+        {product.costPrice ? (
+          <label className="field">
+            <span className="field__label">Harga max modal (Rp) — opsional</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="Tanpa batas"
+              value={maxCostPrice}
+              onChange={(event) => setMaxCostPrice(event.target.value.replace(/\D/g, ''))}
+            />
+            <span className="field__hint">
+              Modal Digiflazz sekarang {rupiah(product.costPrice)}. Bila harga modal naik melewati
+              angka ini, transaksi ditolak Digiflazz dan saldo pembeli dikembalikan.
+            </span>
+          </label>
+        ) : null}
 
         <label className="admin-toggle">
           <input

@@ -206,6 +206,9 @@ export const api = {
     request(`/admin/products/${id}`, { method: 'PATCH', body }),
   adminBulkPrice: (body) =>
     request('/admin/products/bulk-price', { method: 'POST', body }),
+  // Tarik harga modal terbaru dari Digiflazz; harga jual admin tidak ditimpa.
+  adminSyncDigiflazz: () =>
+    request('/admin/products/sync-digiflazz', { method: 'POST', body: {} }),
   adminCheckTransaction: (id) =>
     request(`/admin/transactions/${id}/check`, { method: 'POST', body: {} }),
 
