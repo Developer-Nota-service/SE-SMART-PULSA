@@ -35,7 +35,74 @@ export const CATEGORIES = [
   { key: 'ewallet', label: 'E-Wallet', icon: 'wallet' },
   { key: 'game', label: 'Top Up Game', icon: 'game' },
   { key: 'voucher', label: 'Voucher Digital', icon: 'ticket' },
+  { key: 'voucher_inject', label: 'Voucher Inject', icon: 'inject' },
 ]
+
+// Urutan provider populer di menu; sisanya menyusul (terbesar dulu).
+export const PROVIDER_ORDER = ['Telkomsel', 'Indosat/IM3', 'XL', 'Axis', 'by.U', 'Smartfren']
+
+// Nama tampil resmi per operator (kunci huruf kecil).
+export const PROVIDER_NAMES = {
+  telkomsel: 'Telkomsel',
+  indosat: 'Indosat/IM3',
+  im3: 'Indosat/IM3',
+  xl: 'XL',
+  axis: 'Axis',
+  'by.u': 'by.U',
+  smartfren: 'Smartfren',
+  tri: 'Tri',
+}
+
+// Nama operator dari supplier tidak seragam (TELKOMSEL vs Telkomsel); katalog
+// pengguna dan filter operator konsol admin memakai label yang sama.
+export const providerLabel = (name) =>
+  PROVIDER_NAMES[String(name || '').toLowerCase()] || name || 'Lainnya'
+
+export const providerRank = (label) => {
+  const index = PROVIDER_ORDER.indexOf(label)
+  return index === -1 ? PROVIDER_ORDER.length : index
+}
+
+// Voucher biasa dan voucher inject sama-sama dikirim sebagai kode ke email pembeli.
+export const isVoucherCategory = (key) => key === 'voucher' || key === 'voucher_inject'
+
+// Voucher inject bukan voucher siap pakai: kodenya harus dimasukkan sendiri ke
+// voucher kosong, jadi pembeli wajib menyiapkan dan menyebutkan nomor voucher itu.
+export const VOUCHER_INJECT_NOTE =
+  'Voucher ini untuk di-inject ke voucher kosong Telkomsel, bukan voucher siap pakai. ' +
+  'Siapkan voucher kosong terlebih dahulu, lalu isi nomor voucher kosong itu saat membeli. ' +
+  'Kesalahan pengetikan nomor voucher bukan tanggung jawab kami.'
+
+// Konfirmasi terakhir sebelum membeli. Kesalahan isi tujuan bukan tanggung jawab
+// pengelola, dan transaksi yang sudah diproses tidak bisa dibatalkan.
+export const PURCHASE_DISCLAIMER =
+  'Periksa kembali nomor, ID, atau email tujuan sebelum melanjutkan. Kesalahan pengisian ' +
+  'nomor atau data lain akibat kelalaian pembeli bukan tanggung jawab kami, dan transaksi ' +
+  'yang sudah diproses tidak dapat dibatalkan atau diubah.'
+
+// Keterangan pengembalian dana untuk transaksi yang gagal di supplier.
+export const refundLabel = (order) => {
+  if (order.paymentMethod === 'balance') return 'Saldo sudah dikembalikan'
+  switch (order.refundStatus) {
+    case 'midtrans':
+      return 'Dana dikembalikan ke metode pembayaran'
+    case 'balance':
+      return 'Dana dikembalikan ke saldo aplikasi'
+    case 'manual':
+      return 'Dana dikirim manual ke rekening pengguna'
+    case 'failed':
+      return 'Belum berhasil — hubungi admin'
+    default:
+      return 'Sedang diproses'
+  }
+}
+
+// Digiflazz memakai satu kolom `customer_no`; isinya ditentukan seller per
+// produk (`instruction`). Untuk game, format paling umum: Mobile Legends =
+// User ID + Zone ID digabung, Genshin/Honkai = UID|Server.
+export const GAME_INPUT_HINT =
+  'Isi sesuai petunjuk produk di atas. Mobile Legends: gabungkan User ID + Zone ID ' +
+  'tanpa pemisah. Genshin Impact / Honkai: tulis UID|Server.'
 
 export const categoryLabel = (key) =>
   CATEGORIES.find((category) => category.key === key)?.label || 'Lainnya'
@@ -43,7 +110,9 @@ export const categoryLabel = (key) =>
 const STATUS = {
   success: { label: 'Berhasil', tone: 'success' },
   pending: { label: 'Menunggu', tone: 'pending' },
+  processing: { label: 'Diproses', tone: 'pending' },
   failed: { label: 'Gagal', tone: 'danger' },
+  rejected: { label: 'Ditolak', tone: 'danger' },
   paid: { label: 'Berhasil', tone: 'success' },
   expired: { label: 'Kedaluwarsa', tone: 'muted' },
   canceled: { label: 'Dibatalkan', tone: 'muted' },
@@ -61,6 +130,8 @@ export const targetLabel = (category) => {
       return 'ID game / User ID'
     case 'voucher':
       return 'Email penerima voucher'
+    case 'voucher_inject':
+      return 'Nomor voucher kosong'
     case 'ewallet':
       return 'Nomor HP akun e-wallet'
     default:

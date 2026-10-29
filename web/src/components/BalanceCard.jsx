@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom'
 import { rupiah } from '../lib/format.js'
 
 export default function BalanceCard({ account, compact = false }) {
+  const isPersonal = account?.accountType === 'personal'
+
   return (
     <section className={`balance-card${compact ? ' balance-card--compact' : ''}`}>
       <span className="balance-card__label">Saldo aktif</span>
@@ -13,9 +15,11 @@ export default function BalanceCard({ account, compact = false }) {
       </span>
 
       <div className="balance-card__actions">
-        <Link to="/saldo" className="btn btn--light">
-          Isi Saldo
-        </Link>
+        {isPersonal ? null : (
+          <Link to="/saldo" className="btn btn--light">
+            Isi Saldo
+          </Link>
+        )}
         <Link to="/transaksi" className="btn btn--ghost-light">
           Riwayat
         </Link>

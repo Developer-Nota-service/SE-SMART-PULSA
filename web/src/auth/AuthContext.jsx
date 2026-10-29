@@ -6,18 +6,24 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined)
   const [lastLoginAt, setLastLoginAt] = useState(null)
+  const [lastLogin, setLastLogin] = useState(null)
+
+  // Simpan hasil /me (profil + info login terakhir) secara konsisten.
+  const applySession = useCallback((data) => {
+    setUser(data.user)
+    setLastLoginAt(data.lastLoginAt ?? null)
+    setLastLogin(data.lastLogin ?? null)
+    return data.user
+  }, [])
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.me()
-      setUser(data.user)
-      setLastLoginAt(data.lastLoginAt ?? null)
-      return data.user
+      return applySession(await api.me())
     } catch (error) {
       setUser(null)
       return null
     }
-  }, [])
+  }, [applySession])
 
   useEffect(() => {
     refresh()
@@ -29,19 +35,29 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('sesp:unauthorized', onUnauthorized)
   }, [])
 
-  const login = useCallback(async (email, password) => {
-    await api.login(email, password)
-    // Re-read the profile so lastLoginAt reflects the login that just happened.
-    const data = await api.me()
-    setUser(data.user)
-    setLastLoginAt(data.lastLoginAt ?? null)
-    return data.user
-  }, [])
+  const login = useCallback(
+    async (email, password) => {
+      await api.login(email, password)
+      // Re-read the profile so lastLogin reflects the login that just happened.
+      return applySession(await api.me())
+    },
+    [applySession],
+  )
 
-  const register = useCallback(async (payload) => {
-    const data = await api.register(payload)
-    setUser(data.user)
-    return data.user
+  // Registrasi berhenti di tahap verifikasi OTP; sesi baru dibuat setelah kode benar.
+  const register = useCallback(async (payload) => api.register(payload), [])
+
+  const verifyOtp = useCallback(
+    async (email, code) => {
+      await api.verifyOtp(email, code)
+      return applySession(await api.me())
+    },
+    [applySession],
+  )
+
+  const resendOtp = useCallback(async (email) => {
+    const data = await api.resendOtp(email)
+    return data.verification
   }, [])
 
   const logout = useCallback(async () => {
@@ -50,6 +66,7 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null)
       setLastLoginAt(null)
+      setLastLogin(null)
     }
   }, [])
 
@@ -58,8 +75,19 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, lastLoginAt, login, register, logout, refresh, updateBalance }),
-    [user, lastLoginAt, login, register, logout, refresh, updateBalance],
+    () => ({
+      user,
+      lastLoginAt,
+      lastLogin,
+      login,
+      register,
+      verifyOtp,
+      resendOtp,
+      logout,
+      refresh,
+      updateBalance,
+    }),
+    [user, lastLoginAt, lastLogin, login, register, verifyOtp, resendOtp, logout, refresh, updateBalance],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

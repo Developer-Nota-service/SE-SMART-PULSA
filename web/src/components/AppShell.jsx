@@ -1,5 +1,6 @@
 import { Link, Outlet } from 'react-router-dom'
 import BottomNav from './BottomNav.jsx'
+import NotificationBell from './NotificationBell.jsx'
 
 export default function AppShell() {
   return (
@@ -12,7 +13,9 @@ export default function AppShell() {
             <span className="topbar__sub">PPOB · Pulsa, Data &amp; Tagihan</span>
           </span>
         </Link>
-        <span className="badge badge--demo">DEMO</span>
+        <div className="topbar__actions">
+          <NotificationBell />
+        </div>
       </header>
 
       <main className="content">

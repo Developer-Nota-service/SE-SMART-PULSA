@@ -26,6 +26,9 @@ export default defineConfig(({ command }) => ({
       '/api': {
         target: process.env.VITE_API_PROXY || 'http://laravel:8000',
         changeOrigin: true,
+        // Teruskan IP klien asli (X-Forwarded-For) ke Laravel supaya info
+        // "terakhir masuk" di profil menunjukkan IP/lokasi pengguna, bukan proxy.
+        xfwd: true,
       },
     },
   },

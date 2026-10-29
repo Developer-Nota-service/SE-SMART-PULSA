@@ -42,6 +42,8 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
+    # Tag eksplisit supaya service `scheduler` memakai image dev yang sama.
+    image: se-smart-pulsa-laravel-dev
     restart: on-failure
     working_dir: /app
     command:
@@ -55,6 +57,10 @@ services:
         exec php artisan serve --host=0.0.0.0 --port=8000
     volumes:
       - .:/app
+    # Default sandbox dulu, kredensial asli dari dashboard selalu menang.
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -71,6 +77,11 @@ services:
       QUEUE_CONNECTION: sync
       LOG_CHANNEL: stderr
       PORT: "8000"
+      # Halaman balik setelah pembayaran Midtrans di preview sandbox.
+      MIDTRANS_FINISH_URL: https://3000-${BASE44_PUBLIC_HOST_SUFFIX}/transaksi
+      # Bare pass-through: OtpService hanya menampilkan kode OTP di respons
+      # ketika nilainya "1" dan FONNTE_TOKEN belum diisi (sandbox).
+      BASE44_PREVIEW_MODE:
     depends_on:
       db:
         condition: service_healthy
@@ -86,6 +97,49 @@ services:
       base44.project: "SE-SMART PULSA"
       base44.kind: "api"
       base44.port: "8000"
+
+  # Penjadwal Laravel: `digiflazz:sync-products` tiap 30 menit supaya produk baru
+  # (dan kode produk yang berubah) di Digiflazz otomatis masuk katalog.
+  scheduler:
+    image: se-smart-pulsa-laravel-dev
+    restart: on-failure
+    working_dir: /app
+    command:
+      - sh
+      - -ec
+      - |
+        [ -f vendor/autoload.php ] || composer install --no-interaction --prefer-dist
+        php artisan config:clear >/dev/null
+        exec php artisan schedule:work
+    volumes:
+      - .:/app
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      APP_ENV: local
+      APP_KEY: base64:lOZh+tWXYdiU7ZRfijeTwOqveUUVjd6HDaWs+MDJZag=
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: pulsa_laravel
+      DB_USERNAME: pulsa
+      DB_PASSWORD: pulsa_dev_only
+      CACHE_STORE: file
+      LOG_CHANNEL: stderr
+    depends_on:
+      laravel:
+        condition: service_healthy
+    healthcheck:
+      # Bukti framework + DB siap: daftar jadwal dibaca ulang tiap menit.
+      test: ["CMD-SHELL", "php artisan schedule:list >/dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+    labels:
+      base44.project: "SE-SMART PULSA"
+      base44.kind: "worker"
 
   web:
     image: node:22-alpine

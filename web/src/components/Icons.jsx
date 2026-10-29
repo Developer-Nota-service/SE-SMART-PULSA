@@ -16,6 +16,13 @@ export const HomeIcon = (p) => (
   </svg>
 )
 
+export const MegaphoneIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 10.5v3a1.5 1.5 0 0 0 1.5 1.5H8l8 4V5l-8 4H5.5A1.5 1.5 0 0 0 4 10.5z" />
+    <path d="M8 15v3.5a1.5 1.5 0 0 0 1.5 1.5h1A1.5 1.5 0 0 0 12 18.5V16" />
+  </svg>
+)
+
 export const HistoryIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M4 12a8 8 0 1 0 2.6-5.9" />
@@ -36,6 +43,15 @@ export const UserIcon = (p) => (
   <svg {...base} {...p}>
     <circle cx="12" cy="8.5" r="3.5" />
     <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" />
+  </svg>
+)
+
+export const KeyIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="8" cy="15" r="3.5" />
+    <path d="M10.5 12.5 19 4" />
+    <path d="M16 7l2 2" />
+    <path d="M13.5 9.5l2 2" />
   </svg>
 )
 
@@ -82,6 +98,21 @@ export const TicketIcon = (p) => (
   </svg>
 )
 
+export const InjectIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M12 4.5v8" />
+    <path d="m8.6 9.4 3.4 3.4 3.4-3.4" />
+    <path d="M4.5 15v2.5A2 2 0 0 0 6.5 19.5h11a2 2 0 0 0 2-2V15" />
+  </svg>
+)
+
+export const BellIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M6.5 10.5a5.5 5.5 0 0 1 11 0c0 2.9.8 4.5 1.5 5.4H5c.7-.9 1.5-2.5 1.5-5.4z" />
+    <path d="M10 19a2 2 0 0 0 4 0" />
+  </svg>
+)
+
 export const ChevronRightIcon = (p) => (
   <svg {...base} {...p}>
     <path d="m9.5 6 6 6-6 6" />
@@ -98,6 +129,13 @@ export const CopyIcon = (p) => (
 export const CheckIcon = (p) => (
   <svg {...base} strokeWidth={2.4} {...p}>
     <path d="m5 12.5 4.5 4.5L19 7" />
+  </svg>
+)
+
+export const CameraIcon = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 8.5h3l1.4-2h7.2l1.4 2h3v9.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+    <circle cx="12" cy="13" r="3.2" />
   </svg>
 )
 

@@ -1,10 +1,15 @@
 import { useEffect } from 'react'
-import { categoryLabel, dateTime, rupiah } from '../lib/format.js'
+import { useAuth } from '../auth/AuthContext.jsx'
+import { categoryLabel, dateTime, refundLabel, rupiah } from '../lib/format.js'
 import CopyButton from './CopyButton.jsx'
+import ReceiptActions from './ReceiptActions.jsx'
+import SellPriceEditor from './SellPriceEditor.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import { CloseIcon } from './Icons.jsx'
 
-export default function OrderDetailSheet({ order, onClose }) {
+export default function OrderDetailSheet({ order, onClose, onUpdate }) {
+  const { user } = useAuth()
+
   useEffect(() => {
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -55,6 +60,32 @@ export default function OrderDetailSheet({ order, onClose }) {
             <span className="row__label">Nomor tujuan</span>
             <span className="row__value">{order.customerNumber}</span>
           </div>
+          {order.voucherNumber ? (
+            <div className="row">
+              <span className="row__label">Voucher kosong di-inject</span>
+              <span className="row__value">{order.voucherNumber}</span>
+            </div>
+          ) : null}
+          {order.serialNumber ? (
+            <div className="row">
+              <span className="row__label">Nomor seri</span>
+              <span className="row__value">
+                {order.serialNumber} <CopyButton value={order.serialNumber} />
+              </span>
+            </div>
+          ) : null}
+          {order.supplierMessage && order.status !== 'success' ? (
+            <div className="row">
+              <span className="row__label">Keterangan</span>
+              <span className="row__value">{order.supplierMessage}</span>
+            </div>
+          ) : null}
+          {order.status === 'failed' && order.supplierStatus === 'failed' ? (
+            <div className="row">
+              <span className="row__label">Pengembalian dana</span>
+              <span className="row__value">{refundLabel(order)}</span>
+            </div>
+          ) : null}
           <div className="row">
             <span className="row__label">Waktu</span>
             <span className="row__value">{dateTime(order.createdAt)}</span>
@@ -65,15 +96,41 @@ export default function OrderDetailSheet({ order, onClose }) {
               <StatusBadge status={order.status} />
             </span>
           </div>
+          {order.discountAmount > 0 ? (
+            <div className="row">
+              <span className="row__label">
+                Potongan promo{order.promoCode ? ` (${order.promoCode})` : ''}
+              </span>
+              <span className="row__value">−{rupiah(order.discountAmount)}</span>
+            </div>
+          ) : null}
+          {order.feeAmount > 0 ? (
+            <div className="row">
+              <span className="row__label">Biaya layanan</span>
+              <span className="row__value">+{rupiah(order.feeAmount)}</span>
+            </div>
+          ) : null}
           <div className="row row--total">
             <span className="row__label">Total bayar</span>
-            <span className="row__value">{rupiah(order.amount)}</span>
+            <span className="row__value">{rupiah(order.amount + (order.feeAmount || 0))}</span>
           </div>
+          {order.sellPrice !== null && order.sellPrice !== undefined ? (
+            <div className="row">
+              <span className="row__label">Harga jual di struk</span>
+              <span className="row__value">{rupiah(order.sellPrice)}</span>
+            </div>
+          ) : null}
         </div>
 
-        <p className="note note--muted">
-          Pesanan ini memakai produk DEMO. Tidak ada pengiriman pulsa/token nyata.
-        </p>
+        <ReceiptActions order={order} seller={user} />
+
+        <SellPriceEditor order={order} onChange={onUpdate} />
+
+        {order.status === 'pending' ? (
+          <p className="note note--muted">
+            Pesanan sedang diproses penyedia. Nomor seri muncul di sini setelah selesai.
+          </p>
+        ) : null}
       </div>
     </div>
   )

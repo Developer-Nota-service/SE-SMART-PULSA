@@ -3,13 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\Pricing;
+use App\Support\ProductAvailability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CatalogController extends Controller
 {
-    public const CATEGORIES = ['pulsa', 'data', 'pln_token', 'pln_bill', 'ewallet', 'game', 'voucher'];
+    public const CATEGORIES = ['pulsa', 'data', 'pln_token', 'pln_bill', 'ewallet', 'game', 'voucher', 'voucher_inject'];
 
     public function index(Request $request): JsonResponse
     {
@@ -23,7 +25,7 @@ class CatalogController extends Controller
         }
 
         $rows = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'cost_price', 'max_cost_price', 'is_demo')
             ->where('active', true)
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->orderBy('category')
@@ -32,17 +34,21 @@ class CatalogController extends Controller
             ->orderBy('price')
             ->get();
 
-        return response()->json(['data' => $rows->map([self::class, 'serializeProduct'])->all()]);
+        $accountType = self::accountType($request);
+
+        return response()->json([
+            'data' => $rows->map(fn (object $row) => self::serializeProduct($row, $accountType))->all(),
+        ]);
     }
 
-    public function show(string $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         if (! ctype_digit($id)) {
             return response()->json(['message' => 'Produk tidak valid.'], 422);
         }
 
         $product = DB::table('products')
-            ->select('id', 'sku', 'category', 'operator', 'name', 'price', 'is_demo')
+            ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'cost_price', 'max_cost_price', 'is_demo')
             ->where('id', (int) $id)
             ->where('active', true)
             ->first();
@@ -51,10 +57,15 @@ class CatalogController extends Controller
             return response()->json(['message' => 'Produk tidak ditemukan.'], 404);
         }
 
-        return response()->json(['data' => self::serializeProduct($product)]);
+        return response()->json(['data' => self::serializeProduct($product, self::accountType($request))]);
     }
 
-    public static function serializeProduct(object $row): array
+    private static function accountType(Request $request): string
+    {
+        return (string) ($request->attributes->get('authUser')->account_type ?? 'reseller');
+    }
+
+    public static function serializeProduct(object $row, string $accountType = 'reseller'): array
     {
         return [
             'id' => (int) $row->id,
@@ -62,8 +73,16 @@ class CatalogController extends Controller
             'category' => $row->category,
             'operator' => $row->operator,
             'name' => $row->name,
-            'price' => (int) $row->price,
+            // Petunjuk input dari seller Digiflazz untuk produk ini (bisa null).
+            'instruction' => $row->instruction ?? null,
+            // `price` adalah harga yang berlaku untuk tipe akun peminta;
+            // `retailPrice` tetap harga publik sebagai pembanding.
+            'price' => Pricing::unitPrice((int) $row->price, (int) $row->retail_price, $accountType),
+            'retailPrice' => (int) ($row->retail_price ?: $row->price),
             'isDemo' => (bool) $row->is_demo,
+            // Harga modal supplier melewati batas admin → tampil "sedang
+            // gangguan" dan tidak bisa dibeli sampai harganya turun.
+            'disturbed' => ProductAvailability::isDisturbed($row),
         ];
     }
 }

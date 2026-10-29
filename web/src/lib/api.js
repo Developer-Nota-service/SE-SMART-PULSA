@@ -26,11 +26,12 @@ function setToken(value) {
 }
 
 export class ApiError extends Error {
-  constructor(message, status, errors) {
+  constructor(message, status, errors, data) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.errors = errors || {}
+    this.data = data || null
   }
 }
 
@@ -58,7 +59,7 @@ function normalizeUser(payload) {
   return { ...payload, user: { ...payload.user, balance: balance ?? 0 } }
 }
 
-async function request(path, { method = 'GET', body, headers } = {}) {
+async function request(path, { method = 'GET', body, form, headers } = {}) {
   let response
   try {
     response = await fetch(`${BASE_URL}${path}`, {
@@ -67,10 +68,11 @@ async function request(path, { method = 'GET', body, headers } = {}) {
       headers: {
         Accept: 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // FormData mengatur Content-Type (boundary) sendiri.
         ...(body ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: form || (body ? JSON.stringify(body) : undefined),
     })
   } catch (error) {
     throw new ApiError('Tidak dapat terhubung ke server. Periksa koneksi Anda.', 0)
@@ -96,6 +98,7 @@ async function request(path, { method = 'GET', body, headers } = {}) {
       payload?.message || 'Terjadi kesalahan pada server.',
       response.status,
       payload?.errors,
+      payload?.data,
     )
   }
 
@@ -108,13 +111,30 @@ export const api = {
     if (data?.token) setToken(data.token)
     return data
   },
-  register: async (payload) => {
-    // Laravel requires password_confirmation; the form only asks for one password.
+  // Registrasi tidak langsung membuat sesi: akun harus diverifikasi lewat OTP
+  // WhatsApp dulu, jadi responsnya hanya berisi data verifikasi.
+  register: (payload) =>
+    request('/register', {
+      method: 'POST',
+      // Laravel requires password_confirmation; the form only asks for one password.
+      body: { ...payload, password_confirmation: payload.password },
+    }),
+  verifyOtp: async (email, code) => {
     const data = normalizeUser(
-      await request('/register', {
-        method: 'POST',
-        body: { ...payload, password_confirmation: payload.password },
-      }),
+      await request('/verify-otp', { method: 'POST', body: { email, code } }),
+    )
+    if (data?.token) setToken(data.token)
+    return data
+  },
+  resendOtp: (email) => request('/resend-otp', { method: 'POST', body: { email } }),
+  // Lupa sandi: kode WhatsApp → email akun + token reset → sandi baru.
+  requestPasswordReset: (phone) =>
+    request('/password/forgot', { method: 'POST', body: { phone } }),
+  verifyPasswordReset: (phone, code) =>
+    request('/password/verify', { method: 'POST', body: { phone, code } }),
+  resetPassword: async (resetToken, password) => {
+    const data = normalizeUser(
+      await request('/password/reset', { method: 'POST', body: { resetToken, password } }),
     )
     if (data?.token) setToken(data.token)
     return data
@@ -128,19 +148,98 @@ export const api = {
     }
   },
 
+  // Konten beranda: banner, promo aktif, peringkat pembelian otomatis.
+  dashboard: () => request('/dashboard'),
+
   products: (params) => request(`/products${query(params)}`),
   product: (id) => request(`/products/${id}`),
 
+  // Pemberitahuan akun: transaksi gagal + status refund, status penarikan.
+  notifications: () => request('/notifications'),
+  markNotificationsRead: () => request('/notifications/read', { method: 'POST', body: {} }),
+
   transactions: (params) => request(`/transactions${query(params)}`),
   transaction: (id) => request(`/transactions/${id}`),
+  // Harga jual di struk (khusus reseller); null = pakai total bayar.
+  updateSellPrice: (id, sellPrice) =>
+    request(`/transactions/${id}/sell-price`, { method: 'PATCH', body: { sellPrice } }),
   purchase: (payload, idempotencyKey) =>
     request('/transactions', {
       method: 'POST',
       body: payload,
       headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     }),
+  directPurchase: (payload) => request('/transactions/direct', { method: 'POST', body: payload }),
+  // Cek kode promo di halaman beli; server mengembalikan potongan & total akhir.
+  validatePromo: (payload) => request('/promos/validate', { method: 'POST', body: payload }),
+
+  updateName: (name) => request('/profile', { method: 'PATCH', body: { name } }),
+  requestContactChange: (payload) => request('/profile/contact', { method: 'POST', body: payload }),
+  verifyContactChange: (channel, code) =>
+    request('/profile/contact/verify', { method: 'POST', body: { channel, code } }),
+  updateAccountType: (accountType) =>
+    request('/profile/account-type', { method: 'PATCH', body: { accountType } }),
+  uploadAvatar: (file) => {
+    const form = new FormData()
+    form.append('avatar', file)
+    return request('/profile/avatar', { method: 'POST', form })
+  },
 
   balanceEntries: () => request('/balance/entries'),
   deposits: () => request('/deposits'),
-  createDeposit: (amount) => request('/deposits', { method: 'POST', body: { amount } }),
+  // Metode Midtrans + tarif biaya layanan (config midtrans_fees di server).
+  paymentMethods: () => request('/payments/methods'),
+  createDeposit: (amount, method) => request('/deposits', { method: 'POST', body: { amount, method } }),
+
+  // Penarikan saldo: daftar bank/e-wallet dan pengajuan.
+  withdrawalChannels: () => request('/withdrawals/channels'),
+  withdrawals: () => request('/withdrawals'),
+  createWithdrawal: (payload) => request('/withdrawals', { method: 'POST', body: payload }),
+
+  // Konsol admin (hanya akun ber-role admin).
+  adminOverview: () => request('/admin/overview'),
+  adminWithdrawals: (params) => request(`/admin/withdrawals${query(params)}`),
+  adminWithdrawalAction: (id, action, note) =>
+    request(`/admin/withdrawals/${id}`, { method: 'POST', body: { action, note } }),
+  adminDeposits: (params) => request(`/admin/deposits${query(params)}`),
+  adminDepositSync: (id) => request(`/admin/deposits/${id}/sync`, { method: 'POST', body: {} }),
+  adminDepositCancel: (id) => request(`/admin/deposits/${id}/cancel`, { method: 'POST', body: {} }),
+  adminTransactions: (params) => request(`/admin/transactions${query(params)}`),
+  adminMarkRefundPaid: (id, note) =>
+    request(`/admin/transactions/${id}/refund`, { method: 'POST', body: { note } }),
+  adminUsers: (params) => request(`/admin/users${query(params)}`),
+  // Kredensial integrasi (API key): nilai dikirim tersamarkan; simpan butuh password admin.
+  adminIntegrations: () => request('/admin/integrations'),
+  adminSaveIntegrations: (body) =>
+    request('/admin/integrations', { method: 'PATCH', body }),
+  adminProducts: (params) => request(`/admin/products${query(params)}`),
+  adminUpdateProduct: (id, body) =>
+    request(`/admin/products/${id}`, { method: 'PATCH', body }),
+  adminBulkPrice: (body) =>
+    request('/admin/products/bulk-price', { method: 'POST', body }),
+  // Tarik harga modal terbaru dari Digiflazz; harga jual admin tidak ditimpa.
+  adminSyncDigiflazz: () =>
+    request('/admin/products/sync-digiflazz', { method: 'POST', body: {} }),
+  adminCheckTransaction: (id) =>
+    request(`/admin/transactions/${id}/check`, { method: 'POST', body: {} }),
+
+  // Pengaturan beranda pengguna: banner, promo, peringkat pembelian.
+  adminDashboard: () => request('/admin/dashboard'),
+  adminCreateBanner: (form) => request('/admin/banners', { method: 'POST', form }),
+  // Simpan banner lengkap dengan gambar (multipart) — PATCH tidak membaca file.
+  adminSaveBanner: (id, form) => request(`/admin/banners/${id}`, { method: 'POST', form }),
+  adminUpdateBanner: (id, body) => request(`/admin/banners/${id}`, { method: 'PATCH', body }),
+  adminDeleteBanner: (id) => request(`/admin/banners/${id}`, { method: 'DELETE' }),
+  adminCreatePromo: (body) => request('/admin/promos', { method: 'POST', body }),
+  adminUpdatePromo: (id, body) => request(`/admin/promos/${id}`, { method: 'PATCH', body }),
+  adminDeletePromo: (id) => request(`/admin/promos/${id}`, { method: 'DELETE' }),
+  adminUpdateDashboardSettings: (body) =>
+    request('/admin/dashboard-settings', { method: 'PATCH', body }),
+
+  // Sinkronkan pesanan pending dengan status resmi Midtrans (cadangan webhook).
+  syncPayments: (orderNumber) =>
+    request('/midtrans/sync', {
+      method: 'POST',
+      body: orderNumber ? { orderNumber } : {},
+    }),
 }

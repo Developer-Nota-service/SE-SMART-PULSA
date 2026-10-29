@@ -45,18 +45,84 @@ class DatabaseSeeder extends Seeder
         ['Spotify', 'Voucher Spotify Premium 1 Bulan', 55000],
     ];
 
+    /** Akun admin pemilik aplikasi (satu-satunya akun ber-role admin). */
+    private const OWNER = [
+        'name' => 'Muhammad Yusuf Rifaldi',
+        'email' => 'muhammadyusufrifaldi@gmail.com',
+        'phone' => '081346043318',
+    ];
+
+    /** Akun admin demo lama yang sandinya tertulis di dokumentasi publik. */
+    private const LEGACY_ADMIN_EMAIL = 'admin@sesmartpulsa.id';
+
     public function run(): void
     {
         $demoId = $this->seedUsers();
-        $this->seedProducts();
-        $this->seedDemoHistory($demoId);
+
+        // Produksi bebas data demo: katalognya hanya produk Digiflazz hasil
+        // `digiflazz:sync-products`, bukan produk simulasi.
+        if (! app()->environment('production')) {
+            $this->seedProducts();
+            $this->seedDemoHistory($demoId);
+        }
+
+        $this->seedDashboardContent();
+    }
+
+    /** Banner + promo awal beranda; hanya diisi saat tabelnya masih kosong. */
+    private function seedDashboardContent(): void
+    {
+        if (DB::table('banners')->count() === 0) {
+            DB::table('banners')->insert([
+                [
+                    'title' => 'Transaksi pulsa lebih hemat',
+                    'subtitle' => 'Harga reseller untuk saldo, harga publik untuk pembayaran langsung.',
+                    'tone' => 'navy',
+                    'active' => true,
+                    'sort_order' => 0,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+                [
+                    'title' => 'Isi saldo kapan saja',
+                    'subtitle' => 'Deposit otomatis lewat Midtrans, saldo langsung masuk setelah dibayar.',
+                    'tone' => 'blue',
+                    'active' => true,
+                    'sort_order' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+            ]);
+        }
+
+        if (DB::table('promos')->count() === 0) {
+            DB::table('promos')->insert([
+                'title' => 'Peringkat pembelian bulan ini',
+                'description' => 'Transaksi sukses terbanyak tampil di beranda. Ayo kejar posisi teratas!',
+                'code' => '',
+                'badge' => 'Baru',
+                'valid_until' => null,
+                'active' => true,
+                'sort_order' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     private function seedUsers(): int
     {
+        // Produksi: akun demo bersandi publik tidak boleh dibuat sama sekali —
+        // katalog memuat produk supplier asli, jadi saldo demo bisa dipakai
+        // membeli SKU nyata. Akun admin pemilik tetap dibuat.
+        if (app()->environment('production')) {
+            $this->seedOwnerAdmin();
+
+            return 0;
+        }
+
         $accounts = [
             ['name' => 'Budi Santoso', 'email' => 'demo@sesmartpulsa.id', 'phone' => '081234567890', 'password' => 'demo12345', 'role' => 'user'],
-            ['name' => 'Admin SE SMART', 'email' => 'admin@sesmartpulsa.id', 'phone' => '081200000000', 'password' => 'admin12345', 'role' => 'admin'],
         ];
 
         foreach ($accounts as $account) {
@@ -70,22 +136,76 @@ class DatabaseSeeder extends Seeder
                     'password_hash' => Hash::make($account['password']),
                     'role' => $account['role'],
                     'balance' => 0,
+                    'email_verified_at' => now(),
+                    'phone_verified_at' => now(),
                     'created_at' => now(),
                 ]);
             }
         }
 
+        // Akun demo dianggap sudah terverifikasi supaya tetap bisa masuk tanpa OTP.
+        DB::table('users')
+            ->whereIn('email', array_column($accounts, 'email'))
+            ->whereNull('email_verified_at')
+            ->update(['email_verified_at' => now(), 'phone_verified_at' => now()]);
+
+        $this->seedOwnerAdmin();
+
         return (int) DB::table('users')->where('email', 'demo@sesmartpulsa.id')->value('id');
     }
 
+    /**
+     * Akun admin milik pemilik aplikasi. Dibuat sekali saja dan tanpa sandi
+     * default: sandinya diatur pemilik lewat tautan email
+     * `php artisan admin:password-link <email>`. Seed berikutnya tidak
+     * menyentuh akun ini supaya sandi yang sudah dibuat tidak pernah ditimpa.
+     */
+    private function seedOwnerAdmin(): void
+    {
+        $exists = DB::table('users')->where('email', self::OWNER['email'])->exists();
+
+        if (! $exists) {
+            DB::table('users')->insert([
+                'name' => self::OWNER['name'],
+                'email' => self::OWNER['email'],
+                'phone' => self::OWNER['phone'],
+                'password_hash' => Hash::make(bin2hex(random_bytes(32))),
+                'role' => 'admin',
+                'balance' => 0,
+                'email_verified_at' => now(),
+                'phone_verified_at' => now(),
+                'created_at' => now(),
+            ]);
+        }
+
+        // Admin demo lama punya sandi yang tertulis di dokumentasi publik, jadi
+        // tidak boleh lagi memegang akses admin.
+        DB::table('users')
+            ->where('email', self::LEGACY_ADMIN_EMAIL)
+            ->where('role', 'admin')
+            ->update(['role' => 'user']);
+    }
+
+    /** Katalog simulasi (is_demo = true) hanya untuk sandbox/preview. */
     private function seedProducts(): void
     {
         foreach ($this->buildProducts() as $product) {
+            $product['retail_price'] = $this->retailPrice((int) $product['price']);
+
             DB::table('products')->updateOrInsert(
                 ['sku' => $product['sku']],
                 $product + ['active' => true, 'is_demo' => true],
             );
         }
+    }
+
+    /**
+     * Harga publik untuk pembayaran langsung via Midtrans: 5% di atas harga
+     * saldo/reseller, dibulatkan ke atas per Rp100.
+     */
+    private function retailPrice(int $price): int
+    {
+        return (int) (ceil($price * 1.05 / 100) * 100);
     }
 
     /**

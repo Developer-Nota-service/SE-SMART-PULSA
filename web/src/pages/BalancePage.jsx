@@ -1,35 +1,35 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../auth/AuthContext.jsx'
 import BalanceCard from '../components/BalanceCard.jsx'
-import CopyButton from '../components/CopyButton.jsx'
+import DepositForm from '../components/DepositForm.jsx'
+import WithdrawForm from '../components/WithdrawForm.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { ArrowInIcon, ArrowOutIcon } from '../components/Icons.jsx'
 import { api } from '../lib/api.js'
 import { dateTime, rupiah } from '../lib/format.js'
-
-const MIN = 10000
-const MAX = 2000000
-const PRESETS = [20000, 50000, 100000, 250000, 500000]
+import usePaymentSync from '../lib/usePaymentSync.js'
 
 export default function BalancePage() {
-  const { user } = useAuth()
+  const { user, updateBalance } = useAuth()
+  const isPersonal = user?.accountType === 'personal'
   const [deposits, setDeposits] = useState([])
+  const [withdrawals, setWithdrawals] = useState([])
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [amount, setAmount] = useState('50000')
-  const [fieldError, setFieldError] = useState('')
-  const [submitError, setSubmitError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [created, setCreated] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [depositList, entryList] = await Promise.all([api.deposits(), api.balanceEntries()])
+      const [depositList, withdrawalList, entryList] = await Promise.all([
+        api.deposits(),
+        api.withdrawals(),
+        api.balanceEntries(),
+      ])
       setDeposits(depositList)
+      setWithdrawals(withdrawalList)
       setEntries(entryList)
     } catch (requestError) {
       setError(requestError.message)
@@ -42,120 +42,71 @@ export default function BalancePage() {
     load()
   }, [load])
 
-  const numericAmount = Number(String(amount).replace(/\D/g, '')) || 0
-
-  async function submit(event) {
-    event.preventDefault()
-    setFieldError('')
-    setSubmitError('')
-
-    if (numericAmount < MIN || numericAmount > MAX) {
-      setFieldError(`Nominal deposit harus antara ${rupiah(MIN)} dan ${rupiah(MAX)}.`)
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const deposit = await api.createDeposit(numericAmount)
-      setCreated(deposit)
-      setAmount('50000')
-      load()
-    } catch (requestError) {
-      if (requestError.errors?.amount) setFieldError(requestError.errors.amount[0])
-      else setSubmitError(requestError.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
+  // Setelah kembali dari Midtrans, pastikan deposit yang sudah lunas tercatat.
+  usePaymentSync(load)
 
   return (
     <div className="stack">
       <BalanceCard account={user} compact />
 
-      <section className="card">
+      {isPersonal ? (
+        <section className="card">
+          <h2 className="section-title">Saldo pengembalian dana</h2>
+          <p className="section-hint">
+            Transaksi akun pribadi dibayar langsung lewat Midtrans. Bila transaksi gagal di
+            supplier dan Midtrans tidak bisa mengembalikan dananya, nominalnya otomatis masuk ke
+            saldo ini dan bisa ditarik ke rekening/e-wallet tujuan. Isi saldo hanya tersedia untuk
+            akun reseller.
+          </p>
+        </section>
+      ) : (
+        <DepositForm onCreated={load} />
+      )}
+
+      <WithdrawForm balance={user?.balance} onCreated={(balance) => {
+        updateBalance(balance)
+        load()
+      }} />
+
+      <section>
         <div className="section-head">
-          <h2 className="section-title">Isi saldo</h2>
-          <span className="section-hint">Min {rupiah(MIN)}</span>
+          <h2 className="section-title">Riwayat penarikan</h2>
+          <span className="section-hint">{withdrawals.length} pengajuan</span>
         </div>
 
-        <form onSubmit={submit} noValidate>
-          <label className="field">
-            <span className="field__label">Nominal deposit</span>
-            <input
-              className="input input--amount"
-              inputMode="numeric"
-              value={amount}
-              onChange={(event) => {
-                setAmount(event.target.value.replace(/\D/g, '').slice(0, 7))
-                setFieldError('')
-                setCreated(null)
-              }}
-              placeholder="50000"
-            />
-            <span className="field__hint">
-              {numericAmount > 0 ? rupiah(numericAmount) : 'Masukkan nominal'} · maksimal{' '}
-              {rupiah(MAX)}
-            </span>
-            {fieldError ? <span className="field__error">{fieldError}</span> : null}
-          </label>
-
-          <div className="chips">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className={`chip${numericAmount === preset ? ' is-active' : ''}`}
-                onClick={() => {
-                  setAmount(String(preset))
-                  setFieldError('')
-                  setCreated(null)
-                }}
-              >
-                {rupiah(preset)}
-              </button>
-            ))}
-          </div>
-
-          {submitError ? (
-            <p className="form-message" role="alert">
-              {submitError}
-            </p>
-          ) : null}
-
-          <button type="submit" className="btn btn--primary btn--block" disabled={submitting}>
-            {submitting ? 'Membuat pesanan…' : 'Buat pesanan deposit'}
-          </button>
-        </form>
-
-        {created ? (
-          <div className="deposit-result">
-            <span className="badge badge--demo badge--xs">DEMO</span>
-            <p className="deposit-result__title">Pesanan deposit dibuat</p>
-            <div className="detail-order">
-              <span className="detail-order__label">Nomor pesanan</span>
-              <div className="detail-order__number">
-                <span>{created.orderNumber}</span>
-                <CopyButton value={created.orderNumber} />
-              </div>
-            </div>
-            <div className="rows">
-              <div className="row">
-                <span className="row__label">Nominal</span>
-                <span className="row__value">{rupiah(created.amount)}</span>
-              </div>
-              <div className="row">
-                <span className="row__label">Status</span>
-                <span className="row__value">
-                  <StatusBadge status={created.status} />
+        {loading ? (
+          <LoadingState label="Memuat penarikan…" />
+        ) : withdrawals.length === 0 ? (
+          <EmptyState
+            title="Belum ada penarikan"
+            description="Pengajuan tarik saldo akan tercatat di sini."
+          />
+        ) : (
+          <div className="tx-list">
+            {withdrawals.map((withdrawal) => (
+              <div key={withdrawal.id} className="tx">
+                <span className="tx__icon tx__icon--debit">
+                  <ArrowOutIcon />
+                </span>
+                <span className="tx__body">
+                  <span className="tx__name">
+                    Tarik saldo ke {withdrawal.providerName}
+                  </span>
+                  <span className="tx__meta">
+                    {withdrawal.accountNumber} · {withdrawal.verifiedHolder || withdrawal.accountHolder}
+                  </span>
+                  <span className="tx__time">
+                    {dateTime(withdrawal.createdAt)} · {withdrawal.reference}
+                  </span>
+                </span>
+                <span className="tx__right">
+                  <span className="tx__amount">−{rupiah(withdrawal.amount)}</span>
+                  <StatusBadge status={withdrawal.status} />
                 </span>
               </div>
-            </div>
-            <p className="note note--muted">
-              Saldo belum bertambah. Pembayaran Midtrans belum diaktifkan pada tahap ini — saldo
-              hanya dikreditkan setelah backend memverifikasi notifikasi pembayaran yang sah.
-            </p>
+            ))}
           </div>
-        ) : null}
+        )}
       </section>
 
       <section>
@@ -169,7 +120,14 @@ export default function BalancePage() {
         ) : error ? (
           <ErrorState message={error} onRetry={load} />
         ) : deposits.length === 0 ? (
-          <EmptyState title="Belum ada deposit" description="Buat pesanan deposit pertama Anda." />
+          <EmptyState
+            title="Belum ada deposit"
+            description={
+              isPersonal
+                ? 'Akun pribadi tidak membuat deposit; saldo hanya dari pengembalian dana.'
+                : 'Buat pesanan deposit pertama Anda.'
+            }
+          />
         ) : (
           <div className="tx-list">
             {deposits.map((deposit) => (

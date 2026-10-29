@@ -3,7 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\MidtransService;
+use App\Services\TransactionFulfillment;
 use App\Support\OrderNumber;
+use App\Support\PaymentFee;
+use App\Support\Pricing;
+use App\Support\ProductAvailability;
+use App\Support\PromoCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,15 +22,35 @@ class TransactionController extends Controller
         'transactions.id',
         'transactions.order_number',
         'transactions.customer_number',
+        'transactions.voucher_number',
         'transactions.amount',
+        'transactions.fee_amount',
+        'transactions.payment_channel',
+        'transactions.promo_code',
+        'transactions.discount_amount',
+        'transactions.sell_price',
         'transactions.status',
+        'transactions.payment_method',
+        'transactions.paid_at',
         'transactions.created_at',
+        'transactions.supplier_status',
+        'transactions.supplier_sn',
+        'transactions.supplier_message',
+        'transactions.refund_status',
+        'transactions.refund_message',
+        'transactions.refunded_at',
         'products.id as product_id',
         'products.name as product_name',
         'products.category',
         'products.operator',
         'products.is_demo',
     ];
+
+    public function __construct(
+        private readonly MidtransService $midtrans,
+        private readonly TransactionFulfillment $fulfillment,
+    ) {
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -80,24 +106,151 @@ class TransactionController extends Controller
     }
 
     /**
+     * Harga jual yang tampil di struk reseller (cetak thermal / gambar WhatsApp).
+     * Struk hanya memuat harga ini — total bayar di aplikasi (harga modal) tidak
+     * ikut tercetak, jadi pembeli di konter tidak melihat harga dari penyedia.
+     * Nilai `null`/kosong mengembalikan struk ke total bayar.
+     */
+    public function updateSellPrice(Request $request, string $id): JsonResponse
+    {
+        if (! ctype_digit($id)) {
+            return response()->json(['message' => 'Transaksi tidak valid.'], 422);
+        }
+
+        $user = $request->attributes->get('authUser');
+
+        $raw = $request->input('sellPrice');
+        $sellPrice = null;
+
+        if ($raw !== null && $raw !== '') {
+            if (! is_numeric($raw) || (int) $raw < 0 || (int) $raw > 1_000_000_000) {
+                return response()->json([
+                    'message' => 'Harga jual tidak valid.',
+                    'errors' => [
+                        'sellPrice' => ['Harga jual harus angka 0 - 1.000.000.000, atau dikosongkan.'],
+                    ],
+                ], 422);
+            }
+
+            $sellPrice = (int) $raw;
+        }
+
+        $owned = DB::table('transactions')
+            ->where('id', (int) $id)
+            ->where('user_id', $user->id)
+            ->exists();
+
+        if (! $owned) {
+            return response()->json(['message' => 'Transaksi tidak ditemukan.'], 404);
+        }
+
+        DB::table('transactions')->where('id', (int) $id)->update(['sell_price' => $sellPrice]);
+
+        $row = DB::table('transactions')
+            ->join('products', 'products.id', '=', 'transactions.product_id')
+            ->where('transactions.id', (int) $id)
+            ->first(self::SELECT_COLUMNS);
+
+        return response()->json(['data' => self::serialize($row)]);
+    }
+
+    /**
+     * Cek kode promo dari halaman beli supaya pembeli melihat potongannya
+     * sebelum menekan tombol bayar. Nominal dihitung ulang saat transaksi.
+     */
+    public function validatePromo(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('authUser');
+        $code = $this->promoCode($request->input('code'));
+
+        $product = DB::table('products')
+            ->where('id', (int) $request->input('productId'))
+            ->where('active', true)
+            ->first(['id', 'price', 'retail_price']);
+
+        if (! $product) {
+            return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        if ($code === '') {
+            return response()->json([
+                'message' => 'Masukkan kode promo.',
+                'errors' => ['promoCode' => ['Masukkan kode promo terlebih dahulu.']],
+            ], 422);
+        }
+
+        $promo = PromoCode::find($code);
+
+        if ($promo === null) {
+            return response()->json([
+                'message' => 'Kode promo tidak berlaku.',
+                'errors' => ['promoCode' => ['Kode promo tidak valid, tidak aktif, atau sudah kedaluwarsa.']],
+            ], 422);
+        }
+
+        $price = Pricing::unitPrice(
+            (int) $product->price,
+            (int) $product->retail_price,
+            (string) ($user->account_type ?? 'reseller'),
+        );
+
+        return response()->json(['data' => ['price' => $price] + PromoCode::apply($promo, $price)]);
+    }
+
+    /**
      * Price, balance and status are decided here; the client only names the
      * product and the destination number.
      */
     public function store(Request $request): JsonResponse
     {
         $user = $request->attributes->get('authUser');
+
+        // Jalur saldo hanya untuk reseller; akun pribadi selalu lewat Midtrans.
+        if (self::isPersonal($user)) {
+            return response()->json([
+                'message' => 'Akun pribadi tidak memakai saldo. Selesaikan transaksi lewat Midtrans.',
+                'errors' => ['paymentMethod' => ['Pembayaran saldo hanya untuk akun reseller.']],
+            ], 422);
+        }
+
         $productId = $request->input('productId');
         $customerNumber = trim((string) $request->input('customerNumber'));
+        $voucherNumber = $this->voucherNumber($request->input('voucherNumber'));
+        $promoCode = $this->promoCode($request->input('promoCode'));
         $idempotencyKey = $request->header('Idempotency-Key') ?: null;
 
         if (! is_numeric($productId) || (int) $productId != $productId) {
             return response()->json(['message' => 'Produk tidak valid.'], 422);
         }
 
-        if (! preg_match('/^\d{6,16}$/', $customerNumber)) {
+        $productCategory = $this->productCategory($productId);
+
+        if ($productCategory === null) {
+            return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        // Voucher dikirim ke email penerima; voucher inject memakai nomor voucher
+        // kosong sebagai tujuan karena itulah data yang dibutuhkan supplier.
+        $destinationError = $this->destinationError($productCategory, $customerNumber);
+
+        if ($destinationError !== null) {
             return response()->json([
-                'message' => 'Nomor tujuan harus 6-16 digit angka.',
-                'errors' => ['customerNumber' => ['Nomor tujuan harus 6-16 digit angka.']],
+                'message' => $destinationError,
+                'errors' => ['customerNumber' => [$destinationError]],
+            ], 422);
+        }
+
+        // Voucher inject: nomor voucher kosong adalah tujuan transaksinya.
+        if ($productCategory === 'voucher_inject' && $voucherNumber === '') {
+            $voucherNumber = $customerNumber;
+        }
+
+        $voucherError = $this->voucherNumberError($productCategory, $voucherNumber);
+
+        if ($voucherError !== null) {
+            return response()->json([
+                'message' => $voucherError,
+                'errors' => ['voucherNumber' => [$voucherError]],
             ], 422);
         }
 
@@ -109,24 +262,55 @@ class TransactionController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($user, $productId, $customerNumber, $idempotencyKey) {
+            $result = DB::transaction(function () use ($user, $productId, $customerNumber, $voucherNumber, $promoCode, $idempotencyKey) {
                 $locked = DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
                 abort_if($locked === null, 404, 'Pengguna tidak ditemukan.');
 
                 $product = DB::table('products')
                     ->where('id', (int) $productId)
                     ->where('active', true)
-                    ->first(['id', 'name', 'price', 'category', 'operator', 'is_demo']);
+                    ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo', 'cost_price', 'max_cost_price']);
 
                 if (! $product) {
                     return response()->json(['message' => 'Produk tidak tersedia.'], 404);
                 }
 
+                // Harga seller melewati harga max admin → jangan potong saldo.
+                if (ProductAvailability::isDisturbed($product)) {
+                    return response()->json([
+                        'message' => ProductAvailability::DISTURBED_MESSAGE,
+                        'errors' => ['productId' => [ProductAvailability::DISTURBED_MESSAGE]],
+                    ], 422);
+                }
+
+                // Harga mengikuti tipe akun (reseller/pribadi) dan selalu
+                // ditentukan server.
+                $price = Pricing::unitPrice(
+                    (int) $product->price,
+                    (int) $product->retail_price,
+                    (string) ($locked->account_type ?? 'reseller'),
+                );
+
+                // Kode promo (opsional) memotong persentase dari harga yang
+                // berlaku; kode tidak sah membatalkan transaksi, bukan diabaikan
+                // diam-diam supaya pembeli tidak tertagih harga penuh.
+                $promo = $promoCode === '' ? null : PromoCode::find($promoCode);
+
+                if ($promoCode !== '' && $promo === null) {
+                    return response()->json([
+                        'message' => 'Kode promo tidak berlaku.',
+                        'errors' => ['promoCode' => ['Kode promo tidak valid, tidak aktif, atau sudah kedaluwarsa.']],
+                    ], 422);
+                }
+
+                $applied = $promo ? PromoCode::apply($promo, $price) : null;
+                $amount = $applied['total'] ?? $price;
+
                 // Atomic charge: the balance check runs in SQL so BIGINT never
                 // reaches a floating point comparison.
                 $charged = DB::update(
                     'UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?',
-                    [$product->price, $user->id, $product->price],
+                    [$amount, $user->id, $amount],
                 );
 
                 if ($charged === 0) {
@@ -135,49 +319,41 @@ class TransactionController extends Controller
 
                 $balance = (int) DB::table('users')->where('id', $user->id)->value('balance');
 
-                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $idempotencyKey) {
+                $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $idempotencyKey, $amount, $applied) {
                     $id = DB::table('transactions')->insertGetId([
                         'user_id' => $user->id,
                         'product_id' => $product->id,
                         'order_number' => $orderNumber,
                         'customer_number' => $customerNumber,
-                        'amount' => $product->price,
-                        'status' => 'success',
+                        'voucher_number' => $voucherNumber ?: null,
+                        'amount' => $amount,
+                        'promo_code' => $applied['code'] ?? null,
+                        'discount_amount' => $applied['discount'] ?? 0,
+                        // Produk nyata (supplier) selesai setelah Digiflazz menjawab;
+                        // produk demo langsung sukses seperti sebelumnya.
+                        'status' => $product->is_demo ? 'success' : 'pending',
                         'idempotency_key' => $idempotencyKey,
                         'created_at' => now(),
                     ]);
 
-                    return DB::table('transactions')->find($id, ['id', 'order_number', 'customer_number', 'amount', 'status', 'created_at']);
+                    return DB::table('transactions')->find($id, ['id', 'order_number', 'customer_number', 'voucher_number', 'amount', 'promo_code', 'discount_amount', 'status', 'created_at']);
                 });
 
                 DB::table('balance_entries')->insert([
                     'user_id' => $user->id,
                     'direction' => 'debit',
-                    'amount' => $product->price,
+                    'amount' => $amount,
                     'balance_after' => $balance,
                     'reference' => $transaction->order_number,
                     'description' => $product->name,
                     'created_at' => now(),
                 ]);
 
-                return response()->json([
-                    'data' => [
-                        'transaction' => self::serialize((object) [
-                            'id' => $transaction->id,
-                            'order_number' => $transaction->order_number,
-                            'customer_number' => $transaction->customer_number,
-                            'amount' => $transaction->amount,
-                            'status' => $transaction->status,
-                            'created_at' => $transaction->created_at,
-                            'product_id' => $product->id,
-                            'product_name' => $product->name,
-                            'category' => $product->category,
-                            'operator' => $product->operator,
-                            'is_demo' => $product->is_demo,
-                        ]),
-                        'balance' => $balance,
-                    ],
-                ], 201);
+                return [
+                    'transaction' => $transaction,
+                    'product' => $product,
+                    'balance' => $balance,
+                ];
             });
         } catch (\Illuminate\Database\UniqueConstraintViolationException $error) {
             if (str_contains($error->getMessage(), 'idempotency')) {
@@ -186,6 +362,300 @@ class TransactionController extends Controller
 
             throw $error;
         }
+
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        // Dikirim ke supplier setelah transaksi DB commit, supaya panggilan HTTP
+        // tidak menahan lock saldo.
+        $this->fulfillment->fulfill((int) $result['transaction']->id);
+
+        $fresh = DB::table('transactions')->where('id', $result['transaction']->id)->first([
+            'status',
+            'supplier_status',
+            'supplier_sn',
+            'supplier_message',
+        ]);
+
+        $transaction = $result['transaction'];
+        $product = $result['product'];
+
+        return response()->json([
+            'data' => [
+                'transaction' => self::serialize((object) [
+                    'id' => $transaction->id,
+                    'order_number' => $transaction->order_number,
+                    'customer_number' => $transaction->customer_number,
+                    'voucher_number' => $transaction->voucher_number,
+                    'amount' => $transaction->amount,
+                    'promo_code' => $transaction->promo_code,
+                    'discount_amount' => $transaction->discount_amount,
+                    'status' => $fresh->status ?? $transaction->status,
+                    'payment_method' => 'balance',
+                    'paid_at' => null,
+                    'created_at' => $transaction->created_at,
+                    'supplier_status' => $fresh->supplier_status ?? null,
+                    'supplier_sn' => $fresh->supplier_sn ?? null,
+                    'supplier_message' => $fresh->supplier_message ?? null,
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'category' => $product->category,
+                    'operator' => $product->operator,
+                    'is_demo' => $product->is_demo,
+                ]),
+                'balance' => $result['balance'],
+            ],
+        ], 201);
+    }
+
+    /**
+     * Alur bayar langsung: Midtrans menagih harga tipe akun, saldo tidak dipotong.
+     */
+    public function direct(Request $request): JsonResponse
+    {
+        $user = $request->attributes->get('authUser');
+
+        // Reseller wajib mengisi saldo dan bertransaksi memakai saldo.
+        if (! self::isPersonal($user)) {
+            return response()->json([
+                'message' => 'Akun reseller bertransaksi memakai saldo. Silakan isi saldo terlebih dahulu.',
+                'errors' => ['paymentMethod' => ['Bayar langsung hanya untuk akun pribadi.']],
+            ], 422);
+        }
+
+        $productId = $request->input('productId');
+        $customerNumber = trim((string) $request->input('customerNumber'));
+        $voucherNumber = $this->voucherNumber($request->input('voucherNumber'));
+        $promoCode = $this->promoCode($request->input('promoCode'));
+
+        if (! is_numeric($productId) || (int) $productId != $productId) {
+            return response()->json(['message' => 'Produk tidak valid.'], 422);
+        }
+
+        $product = DB::table('products')
+            ->where('id', (int) $productId)
+            ->where('active', true)
+            ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo', 'cost_price', 'max_cost_price']);
+
+        if (! $product) {
+            return response()->json(['message' => 'Produk tidak tersedia.'], 404);
+        }
+
+        // Harga seller melewati harga max admin → jangan buat tagihan Midtrans.
+        if (ProductAvailability::isDisturbed($product)) {
+            return response()->json([
+                'message' => ProductAvailability::DISTURBED_MESSAGE,
+                'errors' => ['productId' => [ProductAvailability::DISTURBED_MESSAGE]],
+            ], 422);
+        }
+
+        $destinationError = $this->destinationError($product->category, $customerNumber);
+
+        if ($destinationError !== null) {
+            return response()->json([
+                'message' => $destinationError,
+                'errors' => ['customerNumber' => [$destinationError]],
+            ], 422);
+        }
+
+        // Voucher inject: nomor voucher kosong adalah tujuan transaksinya.
+        if ($product->category === 'voucher_inject' && $voucherNumber === '') {
+            $voucherNumber = $customerNumber;
+        }
+
+        $voucherError = $this->voucherNumberError($product->category, $voucherNumber);
+
+        if ($voucherError !== null) {
+            return response()->json([
+                'message' => $voucherError,
+                'errors' => ['voucherNumber' => [$voucherError]],
+            ], 422);
+        }
+
+        $price = Pricing::unitPrice(
+            (int) $product->price,
+            (int) $product->retail_price,
+            (string) ($user->account_type ?? 'reseller'),
+        );
+
+        // Promo memotong harga publik yang ditagih Midtrans; kode tidak sah
+        // ditolak sebelum tagihan dibuat.
+        $promo = $promoCode === '' ? null : PromoCode::find($promoCode);
+
+        if ($promoCode !== '' && $promo === null) {
+            return response()->json([
+                'message' => 'Kode promo tidak berlaku.',
+                'errors' => ['promoCode' => ['Kode promo tidak valid, tidak aktif, atau sudah kedaluwarsa.']],
+            ], 422);
+        }
+
+        $applied = $promo ? PromoCode::apply($promo, $price) : null;
+        $amount = $applied['total'] ?? $price;
+
+        // Biaya layanan Midtrans mengikuti metode yang dipilih pengguna dan
+        // ditagihkan di atas harga (dihitung server, bukan dari browser).
+        $channel = trim((string) $request->input('method'));
+
+        if ($channel === '' || ! PaymentFee::exists($channel)) {
+            return response()->json([
+                'message' => 'Pilih metode pembayaran terlebih dahulu.',
+                'errors' => ['method' => ['Metode pembayaran tidak dikenal.']],
+            ], 422);
+        }
+
+        $fee = PaymentFee::fee((int) $amount, $channel);
+
+        $transaction = OrderNumber::withUnique('TRX', function (string $orderNumber) use ($user, $product, $customerNumber, $voucherNumber, $amount, $applied, $fee, $channel) {
+            $id = DB::table('transactions')->insertGetId([
+                'user_id' => $user->id,
+                'product_id' => $product->id,
+                'order_number' => $orderNumber,
+                'customer_number' => $customerNumber,
+                'voucher_number' => $voucherNumber ?: null,
+                'amount' => $amount,
+                'fee_amount' => $fee,
+                'payment_channel' => $channel,
+                'promo_code' => $applied['code'] ?? null,
+                'discount_amount' => $applied['discount'] ?? 0,
+                'status' => 'pending',
+                'payment_method' => 'midtrans',
+                'idempotency_key' => null,
+                'created_at' => now(),
+            ]);
+
+            return DB::table('transactions')->find($id, [
+                'id',
+                'order_number',
+                'customer_number',
+                'voucher_number',
+                'amount',
+                'fee_amount',
+                'payment_channel',
+                'promo_code',
+                'discount_amount',
+                'status',
+                'payment_method',
+                'paid_at',
+                'created_at',
+            ]);
+        });
+
+        try {
+            $payment = $this->midtrans->createSnapPayment(
+                $transaction->order_number,
+                $amount,
+                $product->name,
+                ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone],
+                [
+                    'fee' => (int) $transaction->fee_amount,
+                    'enabled_payments' => PaymentFee::enabledPayments($channel),
+                ],
+            );
+        } catch (\Throwable $error) {
+            // Belum ada tagihan yang sah; jangan tinggalkan pesanan pending.
+            DB::table('transactions')->where('id', $transaction->id)->delete();
+
+            // 422 (bukan 5xx): gateway dev/preview mengganti body 5xx dengan
+            // halaman statusnya sendiri sehingga pesan asli hilang.
+            return response()->json(['message' => $error->getMessage()], 422);
+        }
+
+        return response()->json([
+            'data' => [
+                'transaction' => self::serialize((object) [
+                    'id' => $transaction->id,
+                    'order_number' => $transaction->order_number,
+                    'customer_number' => $transaction->customer_number,
+                    'voucher_number' => $transaction->voucher_number,
+                    'amount' => $transaction->amount,
+                    'fee_amount' => $transaction->fee_amount,
+                    'payment_channel' => $transaction->payment_channel,
+                    'promo_code' => $transaction->promo_code,
+                    'discount_amount' => $transaction->discount_amount,
+                    'status' => $transaction->status,
+                    'payment_method' => $transaction->payment_method,
+                    'paid_at' => $transaction->paid_at,
+                    'created_at' => $transaction->created_at,
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'category' => $product->category,
+                    'operator' => $product->operator,
+                    'is_demo' => $product->is_demo,
+                ]),
+                'payment' => $payment,
+            ],
+        ], 201);
+    }
+
+    private static function isPersonal(object $user): bool
+    {
+        return (string) ($user->account_type ?? 'reseller') === 'personal';
+    }
+
+    private function productCategory(mixed $productId): ?string
+    {
+        return DB::table('products')
+            ->where('id', (int) $productId)
+            ->where('active', true)
+            ->value('category');
+    }
+
+    private function destinationError(string $category, string $customerNumber): ?string
+    {
+        // Voucher inject diisi nomor voucher kosong (dikirim ke supplier sebagai
+        // customer_no), bukan email penerima.
+        if ($category === 'voucher_inject') {
+            return preg_match('/^\d{8,20}$/', $customerNumber)
+                ? null
+                : 'Nomor voucher kosong harus 8-20 digit angka.';
+        }
+
+        if ($category === 'voucher') {
+            return filter_var($customerNumber, FILTER_VALIDATE_EMAIL) === false
+                ? 'Email penerima voucher tidak valid.'
+                : null;
+        }
+
+        // Game top up memakai ID game / User ID / username, dan sebagian produk
+        // meminta gabungan ID + Zone/Server (mis. "UID|Server"), jadi bukan angka.
+        if ($category === 'game') {
+            return preg_match('/^[A-Za-z0-9|.()_#\[\] -]{3,60}$/', $customerNumber)
+                ? null
+                : 'ID game harus 3-60 karakter sesuai petunjuk produk.';
+        }
+
+        // Token PLN memakai ID pelanggan / nomor meter (bukan nomor HP).
+        if ($category === 'pln_token') {
+            return preg_match('/^\d{6,20}$/', $customerNumber)
+                ? null
+                : 'ID pelanggan/meter harus 6-20 digit angka.';
+        }
+
+        return preg_match('/^\d{6,16}$/', $customerNumber) ? null : 'Nomor tujuan harus 6-16 digit angka.';
+    }
+
+    /** Kode promo disimpan/dibandingkan dalam huruf besar, maksimal 24 karakter. */
+    private function promoCode(mixed $value): string
+    {
+        return mb_substr(PromoCode::normalize($value), 0, 24);
+    }
+
+    /** Nomor voucher kosong hanya berisi angka; spasi/pemisah dibuang. */
+    private function voucherNumber(mixed $value): string
+    {
+        return preg_replace('/\D/', '', (string) $value) ?? '';
+    }
+
+    private function voucherNumberError(string $category, string $voucherNumber): ?string
+    {
+        if ($category !== 'voucher_inject') {
+            return null;
+        }
+
+        return preg_match('/^\d{8,20}$/', $voucherNumber)
+            ? null
+            : 'Nomor voucher kosong wajib diisi 8-20 digit angka.';
     }
 
     private function findByKey(int $userId, string $key): ?object
@@ -203,8 +673,23 @@ class TransactionController extends Controller
             'id' => (int) $row->id,
             'orderNumber' => $row->order_number,
             'customerNumber' => $row->customer_number,
+            'voucherNumber' => $row->voucher_number ?? null,
             'amount' => (int) $row->amount,
+            'feeAmount' => (int) ($row->fee_amount ?? 0),
+            'total' => (int) $row->amount + (int) ($row->fee_amount ?? 0),
+            'paymentChannel' => $row->payment_channel ?? null,
+            'promoCode' => $row->promo_code ?? null,
+            'discountAmount' => (int) ($row->discount_amount ?? 0),
+            'sellPrice' => isset($row->sell_price) ? (int) $row->sell_price : null,
             'status' => $row->status,
+            'paymentMethod' => $row->payment_method ?? 'balance',
+            'paidAt' => $row->paid_at ?? null,
+            'serialNumber' => $row->supplier_sn ?? null,
+            'supplierStatus' => $row->supplier_status ?? null,
+            'supplierMessage' => $row->supplier_message ?? null,
+            'refundStatus' => $row->refund_status ?? null,
+            'refundMessage' => $row->refund_message ?? null,
+            'refundedAt' => $row->refunded_at ?? null,
             'createdAt' => $row->created_at,
             'product' => [
                 'id' => (int) $row->product_id,

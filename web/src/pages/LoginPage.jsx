@@ -2,20 +2,33 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { ShieldIcon } from '../components/Icons.jsx'
-
-const DEMO = { email: 'demo@sesmartpulsa.id', password: 'demo12345' }
+import OtpVerification from '../components/OtpVerification.jsx'
+import PasswordReset from '../components/PasswordReset.jsx'
 
 export default function LoginPage() {
   const { user, login, register } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [mode, setMode] = useState('login')
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' })
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    accountType: 'personal',
+  })
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Terisi setelah pendaftaran / login akun belum verifikasi: tampilkan langkah OTP.
+  const [verification, setVerification] = useState(null)
+  // Tautan "atur sandi" dari email admin: /login?resetToken=...
+  const resetToken = new URLSearchParams(location.search).get('resetToken') || ''
+  // Alur lupa sandi: verifikasi nomor WhatsApp lalu atur sandi baru.
+  const [resetting, setResetting] = useState(Boolean(resetToken))
 
-  if (user) return <Navigate to={location.state?.from || '/'} replace />
+  // Tautan "atur sandi" harus tetap terbuka walau browser ini masih punya sesi.
+  if (user && !resetToken) return <Navigate to={location.state?.from || '/'} replace />
 
   const update = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -30,14 +43,29 @@ export default function LoginPage() {
     setErrors({})
     try {
       if (mode === 'login') {
-        await login(form.email.trim(), form.password)
+        try {
+          await login(form.email.trim(), form.password)
+        } catch (error) {
+          // Akun belum terverifikasi: server sudah mengirim kode OTP baru.
+          if (error.data?.verification) {
+            setVerification(error.data.verification)
+            setMessage(error.message)
+            return
+          }
+          throw error
+        }
       } else {
-        await register({
+        // Pendaftaran baru selesai setelah kode OTP WhatsApp diverifikasi.
+        const data = await register({
           name: form.name.trim(),
           email: form.email.trim(),
           phone: form.phone.replace(/\D/g, ''),
           password: form.password,
+          accountType: form.accountType,
         })
+        setVerification(data.verification)
+        setMessage(data.message || '')
+        return
       }
       navigate(location.state?.from || '/', { replace: true })
     } catch (error) {
@@ -59,7 +87,27 @@ export default function LoginPage() {
       </div>
 
       <div className="auth__card">
-        <div className="segmented" role="tablist" aria-label="Pilih mode">
+        {verification ? (
+          <OtpVerification
+            email={form.email.trim()}
+            initial={verification}
+            onCancel={() => {
+              setVerification(null)
+              setMessage('')
+            }}
+          />
+        ) : resetting ? (
+          <PasswordReset
+            initialToken={resetToken}
+            onCancel={() => {
+              setResetting(false)
+              setMessage('')
+              setErrors({})
+            }}
+          />
+        ) : (
+          <>
+            <div className="segmented" role="tablist" aria-label="Pilih mode">
           <button
             type="button"
             role="tab"
@@ -124,6 +172,48 @@ export default function LoginPage() {
             </label>
           ) : null}
 
+          {mode === 'register' ? (
+            <div className="field">
+              <span className="field__label">Akun ini dipakai untuk apa?</span>
+              <div className="pay-options" role="radiogroup" aria-label="Tipe akun">
+                <label
+                  className={`pay-option${form.accountType === 'reseller' ? ' is-active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="account_type"
+                    value="reseller"
+                    checked={form.accountType === 'reseller'}
+                    onChange={() => setForm((current) => ({ ...current, accountType: 'reseller' }))}
+                  />
+                  <span className="pay-option__body">
+                    <span className="pay-option__title">Jual kembali</span>
+                    <span className="pay-option__meta">Akun reseller · harga khusus, bayar pakai saldo</span>
+                  </span>
+                </label>
+
+                <label
+                  className={`pay-option${form.accountType === 'personal' ? ' is-active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="account_type"
+                    value="personal"
+                    checked={form.accountType === 'personal'}
+                    onChange={() => setForm((current) => ({ ...current, accountType: 'personal' }))}
+                  />
+                  <span className="pay-option__body">
+                    <span className="pay-option__title">Pemakaian pribadi</span>
+                    <span className="pay-option__meta">Akun pribadi · harga publik, bayar via Midtrans</span>
+                  </span>
+                </label>
+              </div>
+              {errors.accountType ? (
+                <span className="field__error">{errors.accountType[0]}</span>
+              ) : null}
+            </div>
+          ) : null}
+
           <label className="field">
             <span className="field__label">Password</span>
             <input
@@ -137,6 +227,22 @@ export default function LoginPage() {
             {errors.password ? <span className="field__error">{errors.password[0]}</span> : null}
           </label>
 
+          {mode === 'login' ? (
+            <div className="auth__helper">
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setResetting(true)
+                  setMessage('')
+                  setErrors({})
+                }}
+              >
+                Lupa sandi atau email?
+              </button>
+            </div>
+          ) : null}
+
           {message ? (
             <p className="form-message" role="alert">
               {message}
@@ -148,28 +254,11 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="demo-box">
-          <span className="badge badge--demo badge--xs">DEMO</span>
-          <p>
-            Akun demo: <strong>{DEMO.email}</strong> · password <strong>{DEMO.password}</strong>
-          </p>
-          <button
-            type="button"
-            className="btn btn--outline btn--sm"
-            onClick={() => {
-              setMode('login')
-              setForm({ name: '', email: DEMO.email, phone: '', password: DEMO.password })
-              setMessage('')
-              setErrors({})
-            }}
-          >
-            Isi akun demo
-          </button>
-        </div>
+          </>
+        )}
 
         <p className="auth__note">
-          <ShieldIcon /> Autentikasi tahap 1 memakai backend demo lokal. Verifikasi akhir tetap di
-          server.
+          <ShieldIcon /> Akun baru wajib diverifikasi lewat kode OTP WhatsApp sebelum bisa masuk.
         </p>
       </div>
     </div>

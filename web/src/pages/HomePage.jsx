@@ -3,16 +3,18 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import BalanceCard from '../components/BalanceCard.jsx'
 import CategoryGrid from '../components/CategoryGrid.jsx'
-import ProductCard from '../components/ProductCard.jsx'
+import HomeBanners from '../components/HomeBanners.jsx'
+import HomeLeaderboard from '../components/HomeLeaderboard.jsx'
+import HomePromos from '../components/HomePromos.jsx'
 import TransactionItem from '../components/TransactionItem.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
-import { categoryLabel } from '../lib/format.js'
 
+// Beranda menampilkan konten yang diatur admin (banner, promo, peringkat),
+// kategori, dan transaksi terbaru; daftar produk muncul di halaman kategori.
 export default function HomePage() {
   const { user } = useAuth()
-  const [category, setCategory] = useState('pulsa')
-  const [products, setProducts] = useState([])
+  const [dashboard, setDashboard] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -21,18 +23,15 @@ export default function HomePage() {
     setLoading(true)
     setError('')
     try {
-      const [productList, txList] = await Promise.all([
-        api.products({ category }),
-        api.transactions(),
-      ])
-      setProducts(productList)
+      const [content, txList] = await Promise.all([api.dashboard(), api.transactions()])
+      setDashboard(content)
       setTransactions(txList.slice(0, 3))
     } catch (requestError) {
       setError(requestError.message)
     } finally {
       setLoading(false)
     }
-  }, [category])
+  }, [])
 
   useEffect(() => {
     load()
@@ -42,37 +41,19 @@ export default function HomePage() {
     <div className="stack">
       <BalanceCard account={user} />
 
+      <HomeBanners banners={dashboard?.banners} />
+
       <section>
         <div className="section-head">
           <h2 className="section-title">Kategori</h2>
           <span className="section-hint">7 layanan</span>
         </div>
-        <CategoryGrid value={category} onChange={setCategory} />
+        <CategoryGrid />
       </section>
 
-      <section>
-        <div className="section-head">
-          <h2 className="section-title">Produk populer</h2>
-          <span className="section-hint">{categoryLabel(category)}</span>
-        </div>
+      <HomePromos promos={dashboard?.promos} />
 
-        {loading ? (
-          <LoadingState label="Memuat produk…" />
-        ) : error ? (
-          <ErrorState message={error} onRetry={load} />
-        ) : products.length === 0 ? (
-          <EmptyState
-            title="Belum ada produk"
-            description="Produk untuk kategori ini belum tersedia."
-          />
-        ) : (
-          <div className="product-grid">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        )}
-      </section>
+      <HomeLeaderboard leaderboard={dashboard?.leaderboard} />
 
       <section>
         <div className="section-head">
@@ -82,7 +63,11 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {loading ? null : transactions.length === 0 ? (
+        {loading ? (
+          <LoadingState label="Memuat transaksi…" />
+        ) : error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : transactions.length === 0 ? (
           <EmptyState
             title="Belum ada transaksi"
             description="Transaksi yang Anda lakukan akan muncul di sini."
