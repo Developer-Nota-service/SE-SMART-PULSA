@@ -46,6 +46,15 @@ export const UserIcon = (p) => (
   </svg>
 )
 
+export const KeyIcon = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="8" cy="15" r="3.5" />
+    <path d="M10.5 12.5 19 4" />
+    <path d="M16 7l2 2" />
+    <path d="M13.5 9.5l2 2" />
+  </svg>
+)
+
 export const SignalIcon = (p) => (
   <svg {...base} {...p}>
     <path d="M4 17h1.8v3H4zM9 13h1.8v7H9zM14 9h1.8v11H14zM19 5h1.8v15H19z" fill="currentColor" stroke="none" />

@@ -208,6 +208,10 @@ export const api = {
   adminMarkRefundPaid: (id, note) =>
     request(`/admin/transactions/${id}/refund`, { method: 'POST', body: { note } }),
   adminUsers: (params) => request(`/admin/users${query(params)}`),
+  // Kredensial integrasi (API key): nilai dikirim tersamarkan; simpan butuh password admin.
+  adminIntegrations: () => request('/admin/integrations'),
+  adminSaveIntegrations: (body) =>
+    request('/admin/integrations', { method: 'PATCH', body }),
   adminProducts: (params) => request(`/admin/products${query(params)}`),
   adminUpdateProduct: (id, body) =>
     request(`/admin/products/${id}`, { method: 'PATCH', body }),

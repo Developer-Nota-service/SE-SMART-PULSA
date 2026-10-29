@@ -175,7 +175,16 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `PATCH /admin/dashboard-settings`
   `{leaderboardEnabled?,leaderboardLimit?,leaderboardPeriodDays?,leaderboardAccountType?}`
   (`leaderboardAccountType`: `all|reseller|personal`).
-  Semua butuh `role = admin` (middleware `admin.only`).
+  Kredensial integrasi (API key): `GET /admin/integrations` →
+  `{groups: [{key,label,description,fields:[{key,label,type,hint,options,
+  configured,source,value}]}]}` (`source`: `dashboard`|`env`|`unset`; nilai
+  rahasia hanya dikirim sebagai `••••••` + 4 karakter terakhir). `PATCH
+  /admin/integrations` `{password, values}` → `{changed, settings}`; `values`
+  berisi `KUNCI: nilai`, `null` menghapus nilai tersimpan (kembali ke env), dan
+  string kosong diabaikan. Wajib password admin yang sedang masuk (diverifikasi
+  ulang di server) dan dibatasi 8 permintaan/menit (`throttle:admin-integrations`).
+  Semua butuh `role = admin` (middleware `admin.only`; grup admin juga dibatasi
+  `throttle:120,1`).
 - `GET /admin/overview` juga mengirim `salesDaily` (7 hari terakhir: `date`,
   `orders`, `revenue` transaksi sukses) dan `counts.salesToday` /
   `salesWeek` beserta jumlah pesanannya. Hari dihitung pada zona
@@ -355,9 +364,10 @@ Dijaga `app/Http/Middleware/EnsureAdmin.php` (alias `admin.only`).
 **Tata letak terpisah dari akun pengguna.** `/admin` tidak memakai `AppShell`
 (beranda, saldo, dan navigasi belanja tidak tampil) — `AdminGate` di `App.jsx`
 memeriksa `role`, dan `AdminPage.jsx` adalah shell sendiri (header navy, strip
-identitas, nav 6 tab). Rutenya `/admin` (Ringkasan), `/admin/beranda`,
+identitas, nav 7 tab). Rutenya `/admin` (Ringkasan), `/admin/beranda`,
 `/admin/harga`, `/admin/transaksi`,
-`/admin/keuangan?tab=deposit|penarikan`, `/admin/pengguna`; tautan dari ringkasan
+`/admin/keuangan?tab=deposit|penarikan`, `/admin/pengguna`, `/admin/integrasi`;
+tautan dari ringkasan
 membawa status di query
 (`/admin/transaksi?status=failed`) sehingga antrean langsung terbuka. Admin
 tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
@@ -395,6 +405,11 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   hilang dari katalog pengguna, jadi AdminController menolak harga publik di
   bawah harga reseller agar akun pribadi tidak membayar lebih murah.
 
+- **Integrasi** (`web/src/components/admin/AdminIntegrations.jsx`) — semua API
+  key yang dipakai aplikasi (Digiflazz, Midtrans, Fonnte, email SMTP/Kirisan)
+  bisa dilihat statusnya dan diganti dari dashboard. Nilai lama tampil
+  tersamarkan; setiap simpan wajib password admin. Lihat "Kredensial integrasi
+  (API key lewat dashboard)".
 - **Penarikan** — `pending → processing → paid`; `pending|processing → rejected`.
   Status final tidak bisa diubah (409), jadi saldo tidak bisa kembali dua kali.
   Tolak menambah saldo pengguna secara atomik + satu baris `balance_entries`
@@ -410,6 +425,29 @@ tetap bisa masuk ke aplikasi pengguna lewat tombol "Ke aplikasi".
   `stale` (+ `ageMinutes`) supaya gampang ditindak.
 - Akun admin: akun pribadi pemilik (`muhammadyusufrifaldi@gmail.com`, role `admin`).
   Tidak ada akun admin kedua; jangan menyeed ulang akun dengan sandi publik.
+
+## Kredensial integrasi (API key lewat dashboard)
+
+Admin dapat mengganti kredensial pihak ketiga dari tab **Integrasi** tanpa
+menyentuh `.env` atau me-restart container.
+
+- Katalog field ada di `config/integrations.php` (`key` env → path `config`).
+  Menambah kredensial baru = tambah satu entri di sana; UI dan API mengikuti.
+- `app/Services/IntegrationSettings.php` menyimpan nilai di tabel
+  `integration_credentials` lalu menimpanya ke `config()` saat boot
+  (`AppServiceProvider::boot()`), jadi seluruh service yang membaca `config()`
+  ikut memakai nilai baru. Nilai tersimpan dibaca lewat cache 5 menit (dihapus
+  saat admin menyimpan) supaya container `scheduler` juga melihat perubahan.
+- Nilai dienkripsi dengan cast `encrypted` (APP_KEY). Jangan pernah mengembalikan
+  nilai asli dari API atau menaruhnya di log/audit — audit hanya mencatat nama
+  kunci (`admin.integration.update`).
+- `null` menghapus nilai tersimpan sehingga kembali ke env (dashboard secrets);
+  string kosong berarti "tidak diubah".
+- Perubahan wajib password admin (`Hash::check` ke `users.password_hash`) dan
+  endpoint memakai limiter bernama `admin-integrations` (8/menit) — limiter ini
+  sengaja terpisah karena `throttle:8,1` biasa berbagi kunci dengan
+  `throttle:120,1` grup admin sehingga kuota cepat habis. Grup admin sendiri
+  `throttle:120,1`.
 
 ## Konten beranda pengguna
 
@@ -651,6 +689,10 @@ pembeli di konter:
   `verification.devCode` yang dibatasi preview mode.
 - `COOKIE_SECURE=1` untuk deployment HTTPS. Cookie `sesp_session` dikecualikan dari
   `EncryptCookies` (token acak, bukan payload terenkripsi).
+- Kredensial integrasi hanya dikirim tersamarkan, disimpan terenkripsi
+  (`integration_credentials`), dan diubah hanya dengan password admin. Jangan
+  menambahkan endpoint yang mengembalikan nilai asli atau menerima nilai baru
+  tanpa verifikasi ulang password.
 
 ## Deploy
 

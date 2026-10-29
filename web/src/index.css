@@ -2287,7 +2287,62 @@ button.inline-link {
 }
 
 .admin-nav {
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.admin-nav .nav-item span {
+  font-size: 9.5px;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- integrasi / API key ---------- */
+.integration-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.integration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.integration-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.integration-field__current {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.integration-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.integration-reset {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.integration-save {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .admin-grid {

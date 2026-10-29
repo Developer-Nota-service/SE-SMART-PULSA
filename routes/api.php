@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\DigiflazzWebhookController;
+use App\Http\Controllers\Api\IntegrationSettingsController;
 use App\Http\Controllers\Api\MidtransController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentController;
@@ -60,7 +61,8 @@ Route::prefix('v1')->group(function () {
     Route::get('payments/methods', [PaymentController::class, 'methods']);
 
     // Konsol admin: pantau & selesaikan deposit, transaksi, dan penarikan.
-    Route::middleware(['session.token', 'admin.only'])->prefix('admin')->group(function () {
+    // Batas 120 permintaan/menit per IP menahan penyalahgunaan sesi admin.
+    Route::middleware(['session.token', 'admin.only', 'throttle:120,1'])->prefix('admin')->group(function () {
         Route::get('overview', [AdminController::class, 'overview']);
         Route::get('withdrawals', [AdminController::class, 'withdrawals']);
         Route::post('withdrawals/{id}', [AdminController::class, 'updateWithdrawal']);
@@ -87,6 +89,11 @@ Route::prefix('v1')->group(function () {
         Route::post('transactions/{id}/check', [AdminController::class, 'checkTransaction']);
         Route::post('transactions/{id}/refund', [AdminController::class, 'markRefundPaid']);
         Route::get('users', [AdminController::class, 'users']);
+        // Kredensial integrasi (API key). Perubahan wajib password admin dan
+        // dibatasi 8 percobaan/menit untuk menahan tebak password.
+        Route::get('integrations', [IntegrationSettingsController::class, 'index']);
+        Route::patch('integrations', [IntegrationSettingsController::class, 'update'])
+            ->middleware('throttle:admin-integrations');
     });
 
     Route::middleware('session.token')->group(function () {

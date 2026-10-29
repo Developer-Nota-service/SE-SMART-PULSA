@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext.jsx'
 import {
   HistoryIcon,
   HomeIcon,
+  KeyIcon,
   MegaphoneIcon,
   TicketIcon,
   UserIcon,
@@ -10,6 +11,7 @@ import {
 } from '../components/Icons.jsx'
 import AdminDashboard from '../components/admin/AdminDashboard.jsx'
 import AdminFinance from '../components/admin/AdminFinance.jsx'
+import AdminIntegrations from '../components/admin/AdminIntegrations.jsx'
 import AdminOverview from '../components/admin/AdminOverview.jsx'
 import AdminProducts from '../components/admin/AdminProducts.jsx'
 import AdminTransactions from '../components/admin/AdminTransactions.jsx'
@@ -22,6 +24,7 @@ const TABS = [
   { to: '/admin/transaksi', label: 'Transaksi', Icon: HistoryIcon },
   { to: '/admin/keuangan', label: 'Keuangan', Icon: WalletIcon },
   { to: '/admin/pengguna', label: 'Pengguna', Icon: UserIcon },
+  { to: '/admin/integrasi', label: 'Integrasi', Icon: KeyIcon },
 ]
 
 /**
@@ -69,6 +72,7 @@ export default function AdminPage() {
           <Route path="transaksi" element={<AdminTransactions />} />
           <Route path="keuangan" element={<AdminFinance />} />
           <Route path="pengguna" element={<AdminUsers />} />
+          <Route path="integrasi" element={<AdminIntegrations />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
       </main>
