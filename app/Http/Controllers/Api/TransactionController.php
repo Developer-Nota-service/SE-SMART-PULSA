@@ -269,6 +269,7 @@ class TransactionController extends Controller
                 $product = DB::table('products')
                     ->where('id', (int) $productId)
                     ->where('active', true)
+                    ->when(app()->environment('production'), fn ($query) => $query->where('is_demo', false))
                     ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo', 'cost_price', 'max_cost_price']);
 
                 if (! $product) {
@@ -436,6 +437,7 @@ class TransactionController extends Controller
         $product = DB::table('products')
             ->where('id', (int) $productId)
             ->where('active', true)
+            ->when(app()->environment('production'), fn ($query) => $query->where('is_demo', false))
             ->first(['id', 'name', 'price', 'retail_price', 'category', 'operator', 'is_demo', 'cost_price', 'max_cost_price']);
 
         if (! $product) {
@@ -598,6 +600,7 @@ class TransactionController extends Controller
         return DB::table('products')
             ->where('id', (int) $productId)
             ->where('active', true)
+            ->when(app()->environment('production'), fn ($query) => $query->where('is_demo', false))
             ->value('category');
     }
 
