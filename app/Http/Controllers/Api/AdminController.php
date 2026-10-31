@@ -52,7 +52,7 @@ class AdminController extends Controller
     public function overview(): JsonResponse
     {
         $staleBefore = now()->subMinutes(self::STALE_DEPOSIT_MINUTES);
-        $today = now()->startOfDay();
+        $today = Carbon::now(self::REPORT_TIMEZONE)->startOfDay()->utc();
 
         $depositsPending = DB::table('deposits')->where('status', 'pending');
         $withdrawalsPending = DB::table('withdrawals')->where('status', 'pending');
