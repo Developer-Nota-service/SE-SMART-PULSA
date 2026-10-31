@@ -392,7 +392,7 @@ class AuthController extends Controller
         ]);
 
         DB::table('password_reset_tokens')->where('user_id', $user->id)->delete();
-        DB::table('sessions')->where('user_id', $user->id)->delete();
+        DB::table('auth_sessions')->where('user_id', $user->id)->delete();
 
         $this->writeAudit((int) $user->id, 'auth.password_reset');
 
@@ -437,7 +437,7 @@ class AuthController extends Controller
         $token = $request->attributes->get('sessionToken') ?: $request->cookie(AuthenticateSessionToken::COOKIE);
 
         if ($token) {
-            DB::table('sessions')->where('token', $token)->delete();
+            DB::table('auth_sessions')->where('token_hash', hash('sha256', $token))->delete();
         }
 
         return response()->json(['data' => ['ok' => true]])->withoutCookie(AuthenticateSessionToken::COOKIE);
@@ -451,8 +451,8 @@ class AuthController extends Controller
     {
         $token = bin2hex(random_bytes(32));
 
-        DB::table('sessions')->insert([
-            'token' => $token,
+        DB::table('auth_sessions')->insert([
+            'token_hash' => hash('sha256', $token),
             'user_id' => $user->id,
             'created_at' => now(),
             'expires_at' => now()->addDays(self::SESSION_DAYS),
