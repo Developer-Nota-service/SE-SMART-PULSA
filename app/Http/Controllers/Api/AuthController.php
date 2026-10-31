@@ -182,7 +182,7 @@ class AuthController extends Controller
 
         $this->writeAudit($user->id, 'auth.login', LoginContext::capture($request));
 
-        return $this->sessionResponse($user);
+        return $this->sessionResponse($request, $user);
     }
 
     /**
@@ -227,7 +227,7 @@ class AuthController extends Controller
 
         $this->writeAudit((int) $user->id, 'auth.verified');
 
-        return $this->sessionResponse(DB::table('users')->find($user->id));
+        return $this->sessionResponse($request, DB::table('users')->find($user->id));
     }
 
     /**
@@ -447,7 +447,7 @@ class AuthController extends Controller
      * Issues a session token and returns it both as an httpOnly cookie and in the
      * body, so cookie-based and Bearer-based clients both work.
      */
-    private function sessionResponse(object $user, int $status = 200): JsonResponse
+    private function sessionResponse(Request $request, object $user, int $status = 200): JsonResponse
     {
         $token = bin2hex(random_bytes(32));
 
@@ -468,8 +468,16 @@ class AuthController extends Controller
             sameSite: 'lax',
         );
 
+        $data = ['user' => self::publicUser($user)];
+
+        // Browser clients use the HttpOnly cookie. Native/API clients may opt in
+        // to receiving the raw Bearer token explicitly.
+        if ($request->header('X-Return-Bearer-Token') === '1') {
+            $data['token'] = $token;
+        }
+
         return response()
-            ->json(['data' => ['user' => self::publicUser($user), 'token' => $token]], $status)
+            ->json(['data' => $data], $status)
             ->withCookie($cookie);
     }
 
