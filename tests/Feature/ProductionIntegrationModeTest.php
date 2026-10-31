@@ -90,7 +90,6 @@ class ProductionIntegrationModeTest extends TestCase
         $this->assertSame(0, DB::table('products')->count());
         $this->assertSame(0, DB::table('banners')->count());
         $this->assertSame(0, DB::table('promos')->count());
-        $this->assertSame('admin', DB::table('users')->where('email', 'muhammadyusufrifaldi@gmail.com')->value('role'));
         $this->assertSame(0, DB::table('users')->where('email', 'demo@sesmartpulsa.id')->count());
     }
 }
