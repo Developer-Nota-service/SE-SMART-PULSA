@@ -434,7 +434,7 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $token = $request->attributes->get('sessionToken') ?: $request->cookie(AuthenticateSessionToken::COOKIE);
+        $token = $request->bearerToken() ?: $request->cookie(AuthenticateSessionToken::COOKIE);
 
         if ($token) {
             DB::table('auth_sessions')->where('token_hash', hash('sha256', $token))->delete();
@@ -463,7 +463,7 @@ class AuthController extends Controller
             value: $token,
             minutes: self::SESSION_DAYS * 24 * 60,
             path: '/',
-            secure: env('COOKIE_SECURE') === '1',
+            secure: app()->environment('production') || (bool) config('session.secure'),
             httpOnly: true,
             sameSite: 'lax',
         );
