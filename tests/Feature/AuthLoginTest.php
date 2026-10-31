@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\AuthenticateSessionToken;
+use Illuminate\Http\Request;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
