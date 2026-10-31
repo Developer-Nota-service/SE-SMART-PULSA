@@ -27,6 +27,36 @@ class AuthLoginTest extends TestCase
             ->assertJsonPath('errors.password.0', 'Password wajib diisi.');
     }
 
+    public function test_browser_login_uses_http_only_cookie_without_returning_bearer_token(): void
+    {
+        $this->createAuthTables();
+
+        DB::table('users')->insert([
+            'name' => 'Browser User',
+            'email' => 'browser@example.test',
+            'phone' => '081234567892',
+            'password_hash' => Hash::make('correct-password'),
+            'role' => 'user',
+            'account_type' => 'personal',
+            'balance' => 0,
+            'email_verified_at' => now(),
+            'phone_verified_at' => now(),
+            'avatar_path' => null,
+        ]);
+
+        $response = $this->postJson('/api/v1/login', [
+            'email' => 'browser@example.test',
+            'password' => 'correct-password',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonMissingPath('data.token')
+            ->assertCookie('sesp_session');
+
+        $this->assertSame(1, DB::table('auth_sessions')->count());
+        $this->assertSame(64, strlen((string) DB::table('auth_sessions')->value('token_hash')));
+    }
+
     public function test_hashed_bearer_session_authenticates_without_storing_raw_token(): void
     {
         $this->createAuthTables();
@@ -91,7 +121,7 @@ class AuthLoginTest extends TestCase
 
     private function createAuthTables(): void
     {
-        Schema::dropIfExists('audit_logs');
+        Schema::dropIfExists('login_attempts');\n        Schema::dropIfExists('audit_logs');
         Schema::dropIfExists('auth_sessions');
         Schema::dropIfExists('users');
 
@@ -113,6 +143,13 @@ class AuthLoginTest extends TestCase
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->timestamp('created_at');
             $table->timestamp('expires_at');
+        });
+
+        Schema::create('login_attempts', function (Blueprint $table): void {
+            $table->id();
+            $table->string('identifier');
+            $table->boolean('succeeded');
+            $table->timestamp('attempted_at');
         });
 
         Schema::create('audit_logs', function (Blueprint $table): void {
