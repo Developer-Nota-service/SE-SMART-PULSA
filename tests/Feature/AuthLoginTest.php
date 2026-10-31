@@ -122,7 +122,8 @@ class AuthLoginTest extends TestCase
 
     private function createAuthTables(): void
     {
-        Schema::dropIfExists('login_attempts');\n        Schema::dropIfExists('audit_logs');
+        Schema::dropIfExists('login_attempts');
+        Schema::dropIfExists('audit_logs');
         Schema::dropIfExists('auth_sessions');
         Schema::dropIfExists('users');
 
