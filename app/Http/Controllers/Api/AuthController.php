@@ -444,8 +444,8 @@ class AuthController extends Controller
     }
 
     /**
-     * Issues a session token and returns it both as an httpOnly cookie and in the
-     * body, so cookie-based and Bearer-based clients both work.
+     * Issues a random session token, stores only its SHA-256 hash, and sets an
+     * HttpOnly cookie. Native clients may explicitly opt in to a Bearer token.
      */
     private function sessionResponse(Request $request, object $user, int $status = 200): JsonResponse
     {
