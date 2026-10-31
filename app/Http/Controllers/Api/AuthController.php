@@ -396,7 +396,7 @@ class AuthController extends Controller
 
         $this->writeAudit((int) $user->id, 'auth.password_reset');
 
-        return $this->sessionResponse(DB::table('users')->find($user->id));
+        return $this->sessionResponse($request, DB::table('users')->find($user->id));
     }
 
     /**
