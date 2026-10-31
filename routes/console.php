@@ -10,8 +10,7 @@ Artisan::command('inspire', function () {
 
 // Produk baru di Digiflazz (dan kode produk yang berubah) otomatis masuk ke
 // katalog tanpa admin menekan "Ambil harga terbaru". Dijalankan oleh service
-// `scheduler` di docker-compose.base44.yml (`php artisan schedule:work`); di
-// produksi cukup cron `php artisan schedule:run` tiap menit.
+// cron server menjalankan `php artisan schedule:run` tiap menit.
 Schedule::command('digiflazz:sync-products')
     ->everyThirtyMinutes()
     // Kunci dilepas 10 menit setelah mulai, bukan 24 jam, supaya tarikan yang
