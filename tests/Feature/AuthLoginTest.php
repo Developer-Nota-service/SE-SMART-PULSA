@@ -131,6 +131,7 @@ class AuthLoginTest extends TestCase
             $table->string('name');
             $table->string('email');
             $table->string('phone');
+            $table->string('password_hash')->nullable();
             $table->string('role');
             $table->string('account_type');
             $table->bigInteger('balance')->default(0);
