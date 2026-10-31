@@ -15,6 +15,14 @@ jalankan `npm --prefix web ci` lalu `npm --prefix web run build`.
 - `routes/api.php` + `app/Http/Controllers/Api/*` — kontrak API v1.
 - `app/Http/Middleware/AuthenticateSessionToken.php` — token cookie `sesp_session`
   atau `Authorization: Bearer`.
+- Token sesi disimpan sebagai SHA-256 di `auth_sessions.token_hash`; token mentah
+  tidak disimpan di database. Migrasi `2026_10_31_000001` menghapus sesi lama,
+  sehingga semua pengguna harus masuk kembali setelah deploy.
+- Browser memakai cookie HttpOnly dan tidak menerima token di JSON. Klien native
+  yang memang membutuhkan Bearer token harus mengirim `X-Return-Bearer-Token: 1`
+  saat login/verifikasi OTP/reset password; simpan token dengan aman di perangkat.
+- Permintaan mutasi yang hanya memakai cookie wajib mengirim `Origin` same-origin;
+  klien Bearer tidak bergantung pada cookie/CSRF.
 - `database/migrations/*` — skema; `database/seeders/DatabaseSeeder.php` — akun admin
   pemilik + banner/promo awal (idempotent, aman dijalankan setiap boot). Katalog,
   akun, dan riwayat demo hanya di-seed saat **bukan** `APP_ENV=production`.
@@ -35,7 +43,7 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `PATCH /profile/account-type` (tanpa mendaftar ulang).
   Mendaftar ulang dengan email yang belum terverifikasi memperbarui data dan
   mengirim kode baru (bukan membuat akun kedua).
-- `POST /verify-otp` `{email,code}` → 200 (+ `token`, cookie `sesp_session`) setelah
+- `POST /verify-otp` `{email,code}` → 200 + cookie `sesp_session` setelah
   kode benar; sekaligus menandai `email_verified_at` + `phone_verified_at`.
 - `POST /resend-otp` `{email}` → 200 `{ verification }` (jeda 60 detik antar kode).
 - `POST /password/forgot` `{phone}` → 200 `{ verification }`: kirim kode OTP WhatsApp
@@ -46,7 +54,7 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   sesi reset 15 menit (hash token di tabel `password_reset_tokens`).
 - `POST /password/reset` `{resetToken,password}` → 200 (+ sesi masuk): sandi baru
   disimpan, sesi lama akun diputus, token reset dihapus.
-- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body.
+- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (HttpOnly, Secure di production, SameSite=Lax). Token hanya disertakan di body bila header `X-Return-Bearer-Token: 1` dikirim klien native.
   Akun yang belum terverifikasi dijawab **403** `{ data: { needsVerification: true,
   email, verification } }` dan kode OTP baru dikirim.
 - `GET /me` → `{ user, lastLoginAt, lastLogin }` (`user.emailVerified`,

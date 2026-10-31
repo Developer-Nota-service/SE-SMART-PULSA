@@ -182,7 +182,7 @@ class AuthController extends Controller
 
         $this->writeAudit($user->id, 'auth.login', LoginContext::capture($request));
 
-        return $this->sessionResponse($user);
+        return $this->sessionResponse($request, $user);
     }
 
     /**
@@ -227,7 +227,7 @@ class AuthController extends Controller
 
         $this->writeAudit((int) $user->id, 'auth.verified');
 
-        return $this->sessionResponse(DB::table('users')->find($user->id));
+        return $this->sessionResponse($request, DB::table('users')->find($user->id));
     }
 
     /**
@@ -392,11 +392,11 @@ class AuthController extends Controller
         ]);
 
         DB::table('password_reset_tokens')->where('user_id', $user->id)->delete();
-        DB::table('sessions')->where('user_id', $user->id)->delete();
+        DB::table('auth_sessions')->where('user_id', $user->id)->delete();
 
         $this->writeAudit((int) $user->id, 'auth.password_reset');
 
-        return $this->sessionResponse(DB::table('users')->find($user->id));
+        return $this->sessionResponse($request, DB::table('users')->find($user->id));
     }
 
     /**
@@ -434,25 +434,25 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $token = $request->attributes->get('sessionToken') ?: $request->cookie(AuthenticateSessionToken::COOKIE);
+        $token = $request->bearerToken() ?: $request->cookie(AuthenticateSessionToken::COOKIE);
 
         if ($token) {
-            DB::table('sessions')->where('token', $token)->delete();
+            DB::table('auth_sessions')->where('token_hash', hash('sha256', $token))->delete();
         }
 
         return response()->json(['data' => ['ok' => true]])->withoutCookie(AuthenticateSessionToken::COOKIE);
     }
 
     /**
-     * Issues a session token and returns it both as an httpOnly cookie and in the
-     * body, so cookie-based and Bearer-based clients both work.
+     * Issues a random session token, stores only its SHA-256 hash, and sets an
+     * HttpOnly cookie. Native clients may explicitly opt in to a Bearer token.
      */
-    private function sessionResponse(object $user, int $status = 200): JsonResponse
+    private function sessionResponse(Request $request, object $user, int $status = 200): JsonResponse
     {
         $token = bin2hex(random_bytes(32));
 
-        DB::table('sessions')->insert([
-            'token' => $token,
+        DB::table('auth_sessions')->insert([
+            'token_hash' => hash('sha256', $token),
             'user_id' => $user->id,
             'created_at' => now(),
             'expires_at' => now()->addDays(self::SESSION_DAYS),
@@ -463,13 +463,21 @@ class AuthController extends Controller
             value: $token,
             minutes: self::SESSION_DAYS * 24 * 60,
             path: '/',
-            secure: env('COOKIE_SECURE') === '1',
+            secure: app()->environment('production') || (bool) config('session.secure'),
             httpOnly: true,
             sameSite: 'lax',
         );
 
+        $data = ['user' => self::publicUser($user)];
+
+        // Browser clients use the HttpOnly cookie. Native/API clients may opt in
+        // to receiving the raw Bearer token explicitly.
+        if ($request->header('X-Return-Bearer-Token') === '1') {
+            $data['token'] = $token;
+        }
+
         return response()
-            ->json(['data' => ['user' => self::publicUser($user), 'token' => $token]], $status)
+            ->json(['data' => $data], $status)
             ->withCookie($cookie);
     }
 

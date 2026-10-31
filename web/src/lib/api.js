@@ -1,29 +1,8 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/+$/, '')
 
-// The Laravel backend authenticates with a Bearer token, the local demo API with
-// an httpOnly cookie. Both flows are supported: the token is only kept when the
-// backend actually returns one.
-const TOKEN_KEY = 'sesp_token'
-
-function readToken() {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY)
-  } catch (error) {
-    return null
-  }
-}
-
-let token = readToken()
-
-function setToken(value) {
-  token = value || null
-  try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token)
-    else sessionStorage.removeItem(TOKEN_KEY)
-  } catch (error) {
-    // Storage can be unavailable (private mode); the in-memory token still works.
-  }
-}
+// Browser authentication uses the HttpOnly sesp_session cookie.
+// Remove the legacy JS-readable token once after upgrading.
+try { sessionStorage.removeItem('sesp_token') } catch (error) {}
 
 export class ApiError extends Error {
   constructor(message, status, errors, data) {
@@ -67,7 +46,6 @@ async function request(path, { method = 'GET', body, form, headers } = {}) {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         // FormData mengatur Content-Type (boundary) sendiri.
         ...(body ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
@@ -79,7 +57,6 @@ async function request(path, { method = 'GET', body, form, headers } = {}) {
   }
 
   if (response.status === 401) {
-    setToken(null)
     window.dispatchEvent(new Event('sesp:unauthorized'))
   }
 
@@ -106,11 +83,8 @@ async function request(path, { method = 'GET', body, form, headers } = {}) {
 }
 
 export const api = {
-  login: async (email, password) => {
-    const data = normalizeUser(await request('/login', { method: 'POST', body: { email, password } }))
-    if (data?.token) setToken(data.token)
-    return data
-  },
+  login: async (email, password) =>
+    normalizeUser(await request('/login', { method: 'POST', body: { email, password } })),
   // Registrasi tidak langsung membuat sesi: akun harus diverifikasi lewat OTP
   // WhatsApp dulu, jadi responsnya hanya berisi data verifikasi.
   register: (payload) =>
@@ -119,34 +93,18 @@ export const api = {
       // Laravel requires password_confirmation; the form only asks for one password.
       body: { ...payload, password_confirmation: payload.password },
     }),
-  verifyOtp: async (email, code) => {
-    const data = normalizeUser(
-      await request('/verify-otp', { method: 'POST', body: { email, code } }),
-    )
-    if (data?.token) setToken(data.token)
-    return data
-  },
+  verifyOtp: async (email, code) =>
+    normalizeUser(await request('/verify-otp', { method: 'POST', body: { email, code } })),
   resendOtp: (email) => request('/resend-otp', { method: 'POST', body: { email } }),
   // Lupa sandi: kode WhatsApp → email akun + token reset → sandi baru.
   requestPasswordReset: (phone) =>
     request('/password/forgot', { method: 'POST', body: { phone } }),
   verifyPasswordReset: (phone, code) =>
     request('/password/verify', { method: 'POST', body: { phone, code } }),
-  resetPassword: async (resetToken, password) => {
-    const data = normalizeUser(
-      await request('/password/reset', { method: 'POST', body: { resetToken, password } }),
-    )
-    if (data?.token) setToken(data.token)
-    return data
-  },
+  resetPassword: async (resetToken, password) =>
+    normalizeUser(await request('/password/reset', { method: 'POST', body: { resetToken, password } })),
   me: async () => normalizeUser(await request('/me')),
-  logout: async () => {
-    try {
-      return await request('/logout', { method: 'POST' })
-    } finally {
-      setToken(null)
-    }
-  },
+  logout: () => request('/logout', { method: 'POST' }),
 
   // Konten beranda: banner, promo aktif, peringkat pembelian otomatis.
   dashboard: () => request('/dashboard'),
