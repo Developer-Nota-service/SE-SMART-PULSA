@@ -1,2 +1,12 @@
-# SE-SMART-PULSA
-Memudahkan mu dalam bertransaksi ppob
+# SE SMART PULSA
+
+Aplikasi PPOB berbasis Laravel 13 + React dengan PostgreSQL, integrasi Digiflazz
+dan Midtrans.
+
+## Dokumentasi
+- [Panduan deployment Ubuntu VPS](docs/DEPLOY-VPS-UBUNTU.md)
+- [Panduan deployment satu domain](docs/DEPLOY-SATU-DOMAIN.md)
+
+Jangan commit file environment atau kredensial produksi. Gunakan
+`.env.production.example` sebagai template; simpan semua nilai rahasia hanya
+di server.

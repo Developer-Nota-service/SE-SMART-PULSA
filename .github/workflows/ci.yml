@@ -3,6 +3,10 @@ name: CI
 on:
   push:
     branches:
+      - main
+      - "deploy/**"
+      - "feature/**"
+      - "fix/**"
       - "audit/**"
   pull_request:
     branches:
@@ -12,33 +16,28 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   backend:
-    name: Laravel tests and style
+    name: Laravel tests, syntax and style
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
-          extensions: bcmath, curl, gd, intl, mbstring, pdo_sqlite, xml, zip
+          extensions: bcmath, curl, gd, intl, mbstring, pdo_pgsql, pdo_sqlite, pgsql, xml, zip
           coverage: none
-
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
-
       - name: Check PHP syntax
         run: find app bootstrap config database routes tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
-
       - name: Verify admin API routes
         run: php artisan route:list --path=api/v1/admin
-
       - name: Run Laravel tests
         run: php artisan test
 
@@ -48,16 +47,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-
       - name: Install frontend dependencies
         run: npm ci --prefix web
-
       - name: Build frontend
         run: npm run build --prefix web
