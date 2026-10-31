@@ -281,8 +281,8 @@ nominal dengan pesanan, lalu:
   diabaikan karena status terminal tidak diproses lagi.
 
 Daftarkan URL notifikasi di Dashboard Midtrans (Settings > Payment > Notification
-URL) ke `https://<domain>/api/v1/midtrans/notification`. Di sandbox Base44 URL-nya
-`https://3000-$BASE44_PUBLIC_HOST_SUFFIX/api/v1/midtrans/notification` dan **berubah
+URL) ke `https://<domain>/api/v1/midtrans/notification`. Pada lingkungan preview URL-nya
+URL preview yang diinjeksi platform dan **berubah
 setiap sandbox dibuat ulang** — kalau notifikasi berhenti masuk setelah sandbox
 baru, perbarui URL di dashboard Midtrans.
 
@@ -335,8 +335,7 @@ lewat menu Penarikan.
 
 Env (`config/services.php → midtrans`): `MIDTRANS_SERVER_KEY`,
 `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION`, `MIDTRANS_FINISH_URL`. Di sandbox
-nilainya berasal dari `.env.base44-defaults` (placeholder) lalu
-`/run/base44/app.env` (nilai asli menang). Placeholder sengaja ditolak saat
+nilainya harus diatur melalui environment variable server. Placeholder sengaja ditolak saat
 `APP_ENV=production`, jadi produksi wajib mengisi Server Key asli.
 
 ## Konsol admin (`/admin`)
@@ -760,7 +759,7 @@ Uji webhook Midtrans dengan key placeholder sandbox (signature dihitung dari
 `MIDTRANS_SERVER_KEY` yang sama):
 
 ```bash
-ORDER=DEP-20261027-0001; AMOUNT=50000.00; KEY=SB-Mid-server-BASE44DEVPLACEHOLDER
+ORDER=DEP-20261027-0001; AMOUNT=50000.00; KEY=<MIDTRANS_SERVER_KEY_SANDBOX>
 SIG=$(printf '%s' "${ORDER}200${AMOUNT}${KEY}" | sha512sum | cut -d' ' -f1)
 curl -s -X POST localhost:3000/api/v1/midtrans/notification \
   -H 'Content-Type: application/json' \
