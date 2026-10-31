@@ -42,6 +42,14 @@ class ProductionIntegrationModeTest extends TestCase
         );
     }
 
+    public function test_midtrans_amount_comparison_is_exact_and_rejects_fractional_cents(): void
+    {
+        $this->assertTrue(MidtransPaymentStatus::amountMatches('2000000.00', 2000000));
+        $this->assertTrue(MidtransPaymentStatus::amountMatches('50000.0', 50000));
+        $this->assertFalse(MidtransPaymentStatus::amountMatches('2000000.01', 2000000));
+        $this->assertFalse(MidtransPaymentStatus::amountMatches('2e6', 2000000));
+    }
+
     public function test_production_rejects_midtrans_sandbox_credentials(): void
     {
         config([
