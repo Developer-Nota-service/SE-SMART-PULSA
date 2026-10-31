@@ -61,7 +61,7 @@ class MidtransPaymentStatus
 
     public static function amountMatches(string $grossAmount, int $amount): bool
     {
-        if ($amount < 0 || ! preg_match('/^\\d+(?:\\.\\d{1,2})?$/', $grossAmount)) {
+        if ($amount < 0 || ! preg_match('/^\d+(?:\.\d{1,2})?$/', $grossAmount)) {
             return false;
         }
 
