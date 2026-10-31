@@ -1,6 +1,6 @@
 # Deployment SE SMART PULSA ke VPS Ubuntu 24.04
 
-Panduan untuk deployment langsung (tanpa Docker): PHP 8.3-FPM, PostgreSQL 16,
+Panduan untuk deployment langsung (tanpa Docker): PHP 8.4-FPM, PostgreSQL 16,
 Redis, Nginx, Supervisor, Node.js 22. DNS domain harus mengarah ke VPS; port
 80/443 terbuka. Jangan publikasikan PostgreSQL 5432 atau Redis 6379.
 
@@ -69,7 +69,7 @@ sudo cp deploy/nginx/se-smart-pulsa.conf /etc/nginx/sites-available/se-smart-pul
 sudo nano /etc/nginx/sites-available/se-smart-pulsa
 sudo ln -s /etc/nginx/sites-available/se-smart-pulsa /etc/nginx/sites-enabled/se-smart-pulsa
 sudo nginx -t
-sudo systemctl enable --now php8.3-fpm
+sudo systemctl enable --now php8.4-fpm
 sudo systemctl reload nginx
 ```
 
@@ -147,7 +147,7 @@ npm run build --prefix web
 php artisan migrate --force
 php artisan optimize
 sudo supervisorctl restart se-smart-pulsa-worker:*
-sudo systemctl reload php8.3-fpm
+sudo systemctl reload php8.4-fpm
 sudo systemctl reload nginx
 ```
 
