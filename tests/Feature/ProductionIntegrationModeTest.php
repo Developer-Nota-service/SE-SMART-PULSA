@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\DigiflazzClient;
 use App\Services\IntegrationSettings;
+use App\Services\MidtransPaymentStatus;
 use App\Services\MidtransService;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
