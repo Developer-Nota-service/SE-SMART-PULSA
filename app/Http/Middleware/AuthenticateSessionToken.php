@@ -23,10 +23,10 @@ class AuthenticateSessionToken
             return response()->json(['message' => 'Sesi tidak ditemukan. Silakan masuk.'], 401);
         }
 
-        $user = DB::table('sessions')
-            ->join('users', 'users.id', '=', 'sessions.user_id')
-            ->where('sessions.token', $token)
-            ->where('sessions.expires_at', '>', now())
+        $user = DB::table('auth_sessions')
+            ->join('users', 'users.id', '=', 'auth_sessions.user_id')
+            ->where('auth_sessions.token_hash', hash('sha256', $token))
+            ->where('auth_sessions.expires_at', '>', now())
             ->select('users.id', 'users.name', 'users.email', 'users.phone', 'users.role', 'users.account_type', 'users.balance', 'users.email_verified_at', 'users.phone_verified_at', 'users.avatar_path')
             ->first();
 
@@ -35,7 +35,7 @@ class AuthenticateSessionToken
         }
 
         $request->attributes->set('authUser', $user);
-        $request->attributes->set('sessionToken', $token);
+        $request->attributes->set('sessionTokenHash', hash('sha256', $token));
 
         return $next($request);
     }
