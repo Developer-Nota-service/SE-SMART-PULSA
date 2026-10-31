@@ -22,7 +22,14 @@ class MidtransService
             return false;
         }
 
-        return ! ($key === self::PLACEHOLDER_KEY && app()->environment('production'));
+        if (! app()->environment('production')) {
+            return true;
+        }
+
+        // Server produksi hanya boleh memakai endpoint live dan Live Server Key.
+        return (bool) config('services.midtrans.is_production')
+            && ! str_starts_with($key, 'SB-')
+            && $key !== self::PLACEHOLDER_KEY;
     }
 
     /**
