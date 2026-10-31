@@ -15,6 +15,14 @@ jalankan `npm --prefix web ci` lalu `npm --prefix web run build`.
 - `routes/api.php` + `app/Http/Controllers/Api/*` — kontrak API v1.
 - `app/Http/Middleware/AuthenticateSessionToken.php` — token cookie `sesp_session`
   atau `Authorization: Bearer`.
+- Token sesi disimpan sebagai SHA-256 di `auth_sessions.token_hash`; token mentah
+  tidak disimpan di database. Migrasi `2026_10_31_000001` menghapus sesi lama,
+  sehingga semua pengguna harus masuk kembali setelah deploy.
+- Browser memakai cookie HttpOnly dan tidak menerima token di JSON. Klien native
+  yang memang membutuhkan Bearer token harus mengirim `X-Return-Bearer-Token: 1`
+  saat login/verifikasi OTP/reset password; simpan token dengan aman di perangkat.
+- Permintaan mutasi yang hanya memakai cookie wajib mengirim `Origin` same-origin;
+  klien Bearer tidak bergantung pada cookie/CSRF.
 - `database/migrations/*` — skema; `database/seeders/DatabaseSeeder.php` — akun admin
   pemilik + banner/promo awal (idempotent, aman dijalankan setiap boot). Katalog,
   akun, dan riwayat demo hanya di-seed saat **bukan** `APP_ENV=production`.
