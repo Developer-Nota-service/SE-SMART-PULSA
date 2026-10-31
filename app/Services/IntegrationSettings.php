@@ -171,6 +171,16 @@ class IntegrationSettings
                 }
 
                 $text = $normalized ? '1' : '0';
+
+                if (app()->environment('production') && $key === 'DIGIFLAZZ_TESTING' && $normalized) {
+                    $errors["values.$key"] = ['Mode development Digiflazz tidak boleh diaktifkan di server produksi.'];
+                    continue;
+                }
+
+                if (app()->environment('production') && $key === 'MIDTRANS_IS_PRODUCTION' && ! $normalized) {
+                    $errors["values.$key"] = ['Mode sandbox Midtrans tidak boleh diaktifkan di server produksi.'];
+                    continue;
+                }
             }
 
             if ($field['type'] === 'select' && ! array_key_exists($text, $field['options'] ?? [])) {
