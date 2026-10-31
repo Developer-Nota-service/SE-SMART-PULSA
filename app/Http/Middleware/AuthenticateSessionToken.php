@@ -17,10 +17,29 @@ class AuthenticateSessionToken
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->bearerToken() ?: $request->cookie(self::COOKIE);
+        $bearerToken = $request->bearerToken();
+        $cookieToken = $request->cookie(self::COOKIE);
+        $token = $bearerToken ?: $cookieToken;
 
         if (! $token) {
             return response()->json(['message' => 'Sesi tidak ditemukan. Silakan masuk.'], 401);
+        }
+
+        // Cookie is ambient browser authority. For unsafe cookie-authenticated
+        // requests, require a same-origin Origin header to prevent CSRF.
+        if (! $bearerToken && $cookieToken && ! $request->isMethodSafe()) {
+            $origin = $request->headers->get('Origin');
+            $originHost = is_string($origin) ? parse_url($origin, PHP_URL_HOST) : null;
+            $originScheme = is_string($origin) ? parse_url($origin, PHP_URL_SCHEME) : null;
+
+            if (
+                ! is_string($originHost)
+                || ! is_string($originScheme)
+                || ! hash_equals(strtolower($request->getHost()), strtolower($originHost))
+                || ! hash_equals(strtolower($request->getScheme()), strtolower($originScheme))
+            ) {
+                return response()->json(['message' => 'Permintaan lintas asal ditolak.'], 403);
+            }
         }
 
         $user = DB::table('auth_sessions')
