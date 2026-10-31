@@ -78,4 +78,15 @@ class ProductionIntegrationModeTest extends TestCase
             'MIDTRANS_IS_PRODUCTION' => '0',
         ], 1);
     }
+
+    public function test_production_seeder_does_not_create_demo_catalog_or_sample_dashboard_content(): void
+    {
+        $this->seed();
+
+        $this->assertSame(0, DB::table('products')->count());
+        $this->assertSame(0, DB::table('banners')->count());
+        $this->assertSame(0, DB::table('promos')->count());
+        $this->assertSame('admin', DB::table('users')->where('email', 'muhammadyusufrifaldi@gmail.com')->value('role'));
+        $this->assertSame(0, DB::table('users')->where('email', 'demo@sesmartpulsa.id')->count());
+    }
 }
