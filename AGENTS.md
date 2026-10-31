@@ -43,7 +43,7 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   `PATCH /profile/account-type` (tanpa mendaftar ulang).
   Mendaftar ulang dengan email yang belum terverifikasi memperbarui data dan
   mengirim kode baru (bukan membuat akun kedua).
-- `POST /verify-otp` `{email,code}` → 200 (+ `token`, cookie `sesp_session`) setelah
+- `POST /verify-otp` `{email,code}` → 200 + cookie `sesp_session` setelah
   kode benar; sekaligus menandai `email_verified_at` + `phone_verified_at`.
 - `POST /resend-otp` `{email}` → 200 `{ verification }` (jeda 60 detik antar kode).
 - `POST /password/forgot` `{phone}` → 200 `{ verification }`: kirim kode OTP WhatsApp
@@ -54,7 +54,7 @@ Semua di bawah `/api/v1`. Respons sukses `{ "data": ... }`; error
   sesi reset 15 menit (hash token di tabel `password_reset_tokens`).
 - `POST /password/reset` `{resetToken,password}` → 200 (+ sesi masuk): sandi baru
   disimpan, sesi lama akun diputus, token reset dihapus.
-- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (httpOnly, SameSite=Lax) + `token` di body.
+- `POST /login` `{email,password}` → 200, set cookie `sesp_session` (HttpOnly, Secure di production, SameSite=Lax). Token hanya disertakan di body bila header `X-Return-Bearer-Token: 1` dikirim klien native.
   Akun yang belum terverifikasi dijawab **403** `{ data: { needsVerification: true,
   email, verification } }` dan kode OTP baru dikirim.
 - `GET /me` → `{ user, lastLoginAt, lastLogin }` (`user.emailVerified`,
