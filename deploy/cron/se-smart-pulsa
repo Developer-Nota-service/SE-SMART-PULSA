@@ -1,0 +1,5 @@
+# Laravel Scheduler setiap menit.
+* * * * * www-data cd /var/www/se-smart-pulsa && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
+
+# Backup PostgreSQL 02:15. Aktifkan setelah pgpass disiapkan dan backup off-server tersedia.
+# 15 2 * * * postgres /var/www/se-smart-pulsa/docker/backup-db.sh >> /var/log/se-smart-pulsa-backup.log 2>&1
