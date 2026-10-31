@@ -31,12 +31,15 @@ class AuthenticateSessionToken
             $origin = $request->headers->get('Origin');
             $originHost = is_string($origin) ? parse_url($origin, PHP_URL_HOST) : null;
             $originScheme = is_string($origin) ? parse_url($origin, PHP_URL_SCHEME) : null;
+            $originPort = is_string($origin) ? parse_url($origin, PHP_URL_PORT) : null;
+            $expectedPort = $originPort ?? ($originScheme === 'https' ? 443 : 80);
 
             if (
                 ! is_string($originHost)
                 || ! is_string($originScheme)
                 || ! hash_equals(strtolower($request->getHost()), strtolower($originHost))
                 || ! hash_equals(strtolower($request->getScheme()), strtolower($originScheme))
+                || (int) $expectedPort !== $request->getPort()
             ) {
                 return response()->json(['message' => 'Permintaan lintas asal ditolak.'], 403);
             }
