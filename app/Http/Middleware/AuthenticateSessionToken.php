@@ -17,7 +17,7 @@ class AuthenticateSessionToken
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->cookie(self::COOKIE) ?: $request->bearerToken();
+        $token = $request->bearerToken() ?: $request->cookie(self::COOKIE);
 
         if (! $token) {
             return response()->json(['message' => 'Sesi tidak ditemukan. Silakan masuk.'], 401);
