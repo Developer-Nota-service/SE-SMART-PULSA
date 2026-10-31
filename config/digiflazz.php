@@ -21,7 +21,7 @@ return [
     'webhook_secret' => env('DIGIFLAZZ_WEBHOOK_SECRET'),
 
     'testing' => filter_var(
-        env('DIGIFLAZZ_TESTING', app()->environment('production') ? false : true),
+        env('DIGIFLAZZ_TESTING', env('APP_ENV', 'production') === 'production' ? false : true),
         FILTER_VALIDATE_BOOL,
     ),
 
