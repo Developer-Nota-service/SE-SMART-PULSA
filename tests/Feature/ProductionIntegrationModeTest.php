@@ -6,13 +6,17 @@ use App\Services\DigiflazzClient;
 use App\Services\IntegrationSettings;
 use App\Services\MidtransPaymentStatus;
 use App\Services\MidtransService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ProductionIntegrationModeTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
