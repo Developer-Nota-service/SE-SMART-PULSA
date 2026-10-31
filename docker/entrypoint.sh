@@ -2,8 +2,8 @@
 # Entrypoint image produksi (Apache + PHP 8.4).
 #
 # Tugasnya: siapkan database Postgres yang masih kosong (database baru di
-# hosting) sebelum Apache melayani request — migrasi skema, isi data demo
-# (idempotent), lalu cache konfigurasi. Tanpa ini container hasil Dockerfile
+# hosting) sebelum Apache melayani request — migrasi skema, jalankan seeder
+# yang aman untuk environment (tanpa akun/katalog/konten demo di produksi), lalu cache konfigurasi. Tanpa ini container hasil Dockerfile
 # jalan dengan tabel kosong dan setiap request /api/v1 gagal 500.
 set -e
 
@@ -25,7 +25,7 @@ while :; do
     sleep 2
 done
 
-# Seeder idempotent (users/products/riwayat demo) — aman dijalankan setiap boot.
+# Seeder idempotent; data simulasi hanya dibuat di environment non-produksi.
 php artisan db:seed --force --no-interaction
 
 php artisan optimize --no-interaction
