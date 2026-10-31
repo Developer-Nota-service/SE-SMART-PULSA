@@ -4,36 +4,11 @@ PPOB app (produksi memakai produk Digiflazz; data demo hanya ada di sandbox).
 **Backend Laravel 13 (PHP 8.4) + Postgres**, frontend React (Vite)
 di `web/`. Satu domain: Laravel melayani API `/api/v1` dan React hasil build di `/app`.
 
-## Menjalankan (sandbox/base44)
+## Menjalankan aplikasi
 
-`docker-compose.base44.yml` menjalankan semuanya dari source:
-
-- `web` — Vite dev server, host port **3000** → 5173 (entry preview).
-- `laravel` — `php artisan serve` di 8000; otomatis `migrate` + `db:seed` saat start.
-  Migrasi hanya dijalankan saat container start: setelah menambah file migrasi baru,
-  `docker compose -f docker-compose.base44.yml restart laravel` (kalau tidak, query ke
-  kolom baru gagal dengan `column ... does not exist`).
-- `db` — Postgres 16, volume `pgdata`. Data backend Node lama tetap ada di database
-  `pulsa`; Laravel memakai database sendiri `pulsa_laravel` (dibuat `dbsetup`).
-- `dbsetup` — one-shot: `CREATE DATABASE pulsa_laravel` bila belum ada.
-- `scheduler` — image dev Laravel yang sama, `php artisan schedule:work` (sinkron
-  produk Digiflazz tiap 30 menit). Tidak melayani port; healthcheck-nya
-  `php artisan schedule:list`.
-
-Browser hanya bicara ke port 3000; Vite mem-proxy `/api` → `http://laravel:8000`
-(single origin, cookie sesi terkirim).
-
-**Jangan membuat file `.env` di root container Laravel.** Compose sudah mengirim
-environment (`APP_KEY`, `DB_*`, `SESSION_DRIVER`); `php artisan serve` mewariskan env
-terbatas ke built-in server sehingga `.env` akan menang dan memutus koneksi DB.
-`.env` di repo di-*ignore* git, jangan dibuat ulang.
-
-Setelah mengubah `composer.json`/`package.json`, restart service terkait:
-
-```bash
-docker compose -f docker-compose.base44.yml restart laravel   # composer
-docker compose -f docker-compose.base44.yml restart web       # npm
-```
+Jalankan Laravel melalui konfigurasi deployment VPS/Docker. Setelah mengubah
+`composer.json`, jalankan `composer install`; setelah mengubah `web/package.json`,
+jalankan `npm --prefix web ci` lalu `npm --prefix web run build`.
 
 ## Struktur
 
@@ -223,8 +198,7 @@ tertulis di dokumentasi publik.
 ## Sandi admin (tautan email)
 
 ```bash
-docker compose -f docker-compose.base44.yml exec -T laravel \
-  php artisan admin:password-link muhammadyusufrifaldi@gmail.com --url=<alamat publik>
+php artisan admin:password-link muhammadyusufrifaldi@gmail.com --url=<alamat publik>
 ```
 
 `app/Console/Commands/SendAdminPasswordLink.php` membuat token sekali pakai (hash di
@@ -273,7 +247,7 @@ Akun baru tidak bisa dipakai sebelum nomor WhatsApp-nya terbukti aktif. Alurnya:
   `Authorization: <FONNTE_TOKEN>`, form `target` (format `62...`) + `message`.
 - `config/fonnte.php` → `FONNTE_TOKEN`, `FONNTE_API_URL`. Token berasal dari
   dashboard Fonnte (Device > Token) dan dikirim platform lewat
-  `/run/base44/app.env`; **jangan** menaruhnya di compose `environment:`.
+  environment variable rahasia di server.
 - Satu nomor terverifikasi hanya boleh dipakai satu akun (registrasi kedua ditolak
   422 `phone`).
 - Sandbox: bila pengiriman gagal **dan** `BASE44_PREVIEW_MODE=1`, respons berisi
@@ -769,8 +743,7 @@ Digiflazz, dan validasi login.
 ## Verifikasi
 
 ```bash
-docker compose -f docker-compose.base44.yml ps
-curl -s -o /dev/null -w "%{http_code}\n" localhost:3000/api/v1/me        # 401 tanpa sesi
+curl -s -o /dev/null -w "%{http_code}\n" https://<domain>/api/v1/me        # 401 tanpa sesi
 curl -s -c /tmp/c -X POST localhost:3000/api/v1/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@sesmartpulsa.id","password":"demo12345"}'
@@ -798,8 +771,7 @@ Build produksi React + cek halaman yang dilayani Laravel:
 
 ```bash
 npm run build                       # → public/app
-docker compose -f docker-compose.base44.yml exec -T web \
-  node -e "fetch('http://laravel:8000/app').then(r=>console.log(r.status))"
+curl -I https://<domain>/app
 ```
 
 Catatan: `php artisan serve` (dev) hanya melayani `/app` dan `/app/`;
