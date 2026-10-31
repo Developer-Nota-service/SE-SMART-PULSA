@@ -114,7 +114,7 @@ class AuthLoginTest extends TestCase
             'expires_at' => now()->addDay(),
         ]);
 
-        $this->withCookie('sesp_session', $token)
+        $this->withUnencryptedCookie('sesp_session', $token)
             ->postJson('/api/v1/notifications/read', [])
             ->assertForbidden()
             ->assertJsonPath('message', 'Permintaan lintas asal ditolak.');
