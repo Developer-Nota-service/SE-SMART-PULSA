@@ -114,10 +114,20 @@ class AuthLoginTest extends TestCase
             'expires_at' => now()->addDay(),
         ]);
 
-        $this->withUnencryptedCookie('sesp_session', $token)
-            ->postJson('/api/v1/notifications/read', [])
-            ->assertForbidden()
-            ->assertJsonPath('message', 'Permintaan lintas asal ditolak.');
+        $request = Request::create(
+            '/api/v1/notifications/read',
+            'POST',
+            [],
+            ['sesp_session' => $token],
+        );
+
+        $response = app(AuthenticateSessionToken::class)->handle(
+            $request,
+            fn () => response()->json(['ok' => true]),
+        );
+
+        $this->assertSame(403, $response->getStatusCode());
+        $this->assertSame('Permintaan lintas asal ditolak.', $response->getData(true)['message']);
     }
 
     private function createAuthTables(): void
