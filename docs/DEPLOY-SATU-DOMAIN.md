@@ -92,6 +92,8 @@ DIGIFLAZZ_MARGIN_PERCENT=5
 > (`npm run build`) juga tidak menampilkan kotak kredensial demo. Akun admin
 > pemilik tetap dibuat, tanpa sandi default (lihat "Sandi admin").
 >
+> Produk simulasi lama (`products.is_demo = true`) otomatis dinonaktifkan oleh migrasi produksi; barisnya dipertahankan agar riwayat transaksi lama tetap utuh. Katalog dan endpoint pembelian produksi juga menolak produk simulasi.
+>
 > Bila database lama ikut dipakai di produksi, akun demo yang sudah ada tetap
 > ada (seeder tidak menghapusnya). Netralkan sekali sebelum go-live:
 > `UPDATE users SET password_hash = encode(gen_random_bytes(32), 'hex'), balance = 0 WHERE email = 'demo@sesmartpulsa.id';`

@@ -66,7 +66,11 @@ class DatabaseSeeder extends Seeder
             $this->seedDemoHistory($demoId);
         }
 
-        $this->seedDashboardContent();
+        // Jangan isi konten contoh di database produksi. Admin membuat banner/promo
+        // yang benar setelah kredensial dan katalog supplier siap.
+        if (! app()->environment('production')) {
+            $this->seedDashboardContent();
+        }
     }
 
     /** Banner + promo awal beranda; hanya diisi saat tabelnya masih kosong. */

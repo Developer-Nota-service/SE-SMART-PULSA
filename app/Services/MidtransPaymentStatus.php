@@ -61,7 +61,14 @@ class MidtransPaymentStatus
 
     public static function amountMatches(string $grossAmount, int $amount): bool
     {
-        return abs((float) $grossAmount - $amount) < 0.01;
+        if ($amount < 0 || ! preg_match('/^\d+(?:\.\d{1,2})?$/', $grossAmount)) {
+            return false;
+        }
+
+        [$whole, $fraction] = array_pad(explode('.', $grossAmount, 2), 2, '');
+
+        return (string) (int) $whole === (string) $amount
+            && rtrim($fraction, '0') === '';
     }
 
     private function applyDepositStatus(object $deposit, string $transactionStatus, bool $paid): void

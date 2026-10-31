@@ -27,6 +27,7 @@ class CatalogController extends Controller
         $rows = DB::table('products')
             ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'cost_price', 'max_cost_price', 'is_demo')
             ->where('active', true)
+            ->when(app()->environment('production'), fn ($query) => $query->where('is_demo', false))
             ->when($category !== '', fn ($query) => $query->where('category', $category))
             ->orderBy('category')
             ->orderBy('operator')
@@ -51,6 +52,7 @@ class CatalogController extends Controller
             ->select('id', 'sku', 'category', 'operator', 'name', 'instruction', 'price', 'retail_price', 'cost_price', 'max_cost_price', 'is_demo')
             ->where('id', (int) $id)
             ->where('active', true)
+            ->when(app()->environment('production'), fn ($query) => $query->where('is_demo', false))
             ->first();
 
         if (! $product) {

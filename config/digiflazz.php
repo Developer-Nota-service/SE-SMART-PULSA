@@ -7,11 +7,8 @@ return [
     | Digiflazz (buyer API)
     |--------------------------------------------------------------------------
     |
-    | Kredensial diisi dari dashboard Base44 (tab Secrets), bukan di repo:
-    | DIGIFLAZZ_USERNAME, DIGIFLAZZ_API_KEY, DIGIFLAZZ_WEBHOOK_SECRET.
-    |
-    | testing=true memakai mode development Digiflazz (transaksi disimulasikan).
-    | Set DIGIFLAZZ_TESTING=false saat go-live.
+    | Kredensial diisi melalui environment atau konsol admin.
+    | Mode development hanya aktif secara default di luar produksi.
     |
     */
 
@@ -23,7 +20,10 @@ return [
 
     'webhook_secret' => env('DIGIFLAZZ_WEBHOOK_SECRET'),
 
-    'testing' => filter_var(env('DIGIFLAZZ_TESTING', true), FILTER_VALIDATE_BOOL),
+    'testing' => filter_var(
+        env('DIGIFLAZZ_TESTING', env('APP_ENV', 'production') === 'production' ? false : true),
+        FILTER_VALIDATE_BOOL,
+    ),
 
     // Margin harga reseller di atas harga supplier (persen), dibulatkan per Rp100.
     'margin_percent' => (float) env('DIGIFLAZZ_MARGIN_PERCENT', 5),

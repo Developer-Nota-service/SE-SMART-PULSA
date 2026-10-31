@@ -63,7 +63,9 @@ class DigiflazzClient
             'sign' => md5($this->username().$this->apiKey().$refId),
         ];
 
-        if (config('digiflazz.testing')) {
+        // Mode testing tidak pernah dikirim ke supplier dari server produksi,
+        // sekalipun ada nilai lama yang tersimpan di pengaturan integrasi.
+        if (config('digiflazz.testing') && ! app()->environment('production')) {
             $payload['testing'] = true;
         }
 
