@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 class DatabaseSeeder extends Seeder
 {
@@ -43,13 +44,6 @@ class DatabaseSeeder extends Seeder
         ['Steam', 'Voucher Steam Wallet Rp60.000', 62000],
         ['Netflix', 'Voucher Netflix 1 Bulan', 54000],
         ['Spotify', 'Voucher Spotify Premium 1 Bulan', 55000],
-    ];
-
-    /** Akun admin pemilik aplikasi (satu-satunya akun ber-role admin). */
-    private const OWNER = [
-        'name' => 'Muhammad Yusuf Rifaldi',
-        'email' => 'muhammadyusufrifaldi@gmail.com',
-        'phone' => '081346043318',
     ];
 
     /** Akun admin demo lama yang sandinya tertulis di dokumentasi publik. */
@@ -166,13 +160,22 @@ class DatabaseSeeder extends Seeder
      */
     private function seedOwnerAdmin(): void
     {
-        $exists = DB::table('users')->where('email', self::OWNER['email'])->exists();
+        $owner = (array) config('app.owner_admin', []);
+        $name = trim((string) ($owner['name'] ?? ''));
+        $email = strtolower(trim((string) ($owner['email'] ?? '')));
+        $phone = trim((string) ($owner['phone'] ?? ''));
+
+        if ($name === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL) || ! preg_match('/^0\\d{8,14}$/', $phone)) {
+            throw new RuntimeException('Set OWNER_ADMIN_NAME, OWNER_ADMIN_EMAIL, dan OWNER_ADMIN_PHONE yang valid sebelum menjalankan production seeder.');
+        }
+
+        $exists = DB::table('users')->where('email', $email)->exists();
 
         if (! $exists) {
             DB::table('users')->insert([
-                'name' => self::OWNER['name'],
-                'email' => self::OWNER['email'],
-                'phone' => self::OWNER['phone'],
+                'name' => $name,
+                'email' => $email,
+                'phone' => $phone,
                 'password_hash' => Hash::make(bin2hex(random_bytes(32))),
                 'role' => 'admin',
                 'balance' => 0,

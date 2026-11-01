@@ -1,9 +1,11 @@
+# Never bake secrets or local runtime state into image layers.
+.env*
 .git
 .gitignore
-.env.base44-defaults
 vendor
 **/node_modules
 web/dist
 public/app
 storage/logs/*.log
+backups
 *.log

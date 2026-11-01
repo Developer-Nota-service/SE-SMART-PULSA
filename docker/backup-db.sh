@@ -1,11 +1,12 @@
 #!/bin/sh
-# Backup PostgreSQL ke arsip SQL gzip. Gunakan pgpass mode 0600 atau secret manager.
+# Create a PostgreSQL logical backup. Keep credentials in a mode-0600 pgpass
+# file or inject PGPASSWORD through a protected service environment.
 set -eu
 
 BACKUP_DIR=${BACKUP_DIR:-./backups}
 KEEP_DAYS=${KEEP_DAYS:-14}
-COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.yml}
-DB_SERVICE=${DB_SERVICE:-db}
+COMPOSE_FILE=${COMPOSE_FILE:-compose.production.yaml}
+DB_SERVICE=${DB_SERVICE:-postgres}
 DB_HOST=${DB_HOST:-127.0.0.1}
 DB_PORT=${DB_PORT:-5432}
 DB_USER=${DB_USER:-se_smart_pulsa}
@@ -34,5 +35,5 @@ mv "$file.tmp" "$file"
 rm -f "$tmp"
 trap - EXIT HUP INT TERM
 
-find "$BACKUP_DIR" -name 'se-smart-pulsa-*.sql.gz' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -type f -name 'se-smart-pulsa-*.sql.gz' -mtime +"$KEEP_DAYS" -delete
 echo "Backup selesai: $file ($(du -h "$file" | cut -f1))"
