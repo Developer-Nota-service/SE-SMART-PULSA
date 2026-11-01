@@ -1,0 +1,144 @@
+name: se-smart-pulsa
+
+x-app-env: &app-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY:?APP_KEY wajib diisi}
+  APP_URL: ${APP_URL:?APP_URL wajib diisi}
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD wajib diisi}
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: file
+  MIDTRANS_IS_PRODUCTION: "true"
+  DIGIFLAZZ_TESTING: "false"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?DB_DATABASE wajib diisi}
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME wajib diisi}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD wajib diisi}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: 128mb
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD wajib diisi}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\" --maxmemory 192mb --maxmemory-policy noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  migrate:
+    image: se-smart-pulsa-app:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    env_file:
+      - .env
+    environment: *app-env
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >-
+      php artisan migrate --force --no-interaction
+      && php artisan db:seed --force --no-interaction
+      && php artisan optimize --no-interaction
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
+  app:
+    image: se-smart-pulsa-app:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment: *app-env
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - app-storage:/var/www/html/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "php", "/var/www/html/docker/health.php"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks:
+      - internal
+
+  worker:
+    image: se-smart-pulsa-app:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment: *app-env
+    entrypoint: ["php", "artisan"]
+    command: ["queue:work", "redis", "--sleep=3", "--tries=3", "--timeout=90", "--max-time=3600"]
+    volumes:
+      - app-storage:/var/www/html/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 110s
+    networks:
+      - internal
+
+  scheduler:
+    image: se-smart-pulsa-app:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment: *app-env
+    entrypoint: ["php", "artisan"]
+    command: ["schedule:work"]
+    volumes:
+      - app-storage:/var/www/html/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - internal
+
+volumes:
+  postgres-data:
+  redis-data:
+  app-storage:
+
+networks:
+  internal:
+    driver: bridge

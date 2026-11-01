@@ -8,6 +8,7 @@ on:
       - "feature/**"
       - "fix/**"
       - "audit/**"
+      - "production/**"
   pull_request:
     branches:
       - main
@@ -30,7 +31,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
-          extensions: bcmath, curl, gd, intl, mbstring, pdo_pgsql, pdo_sqlite, pgsql, xml, zip
+          extensions: bcmath, curl, gd, intl, mbstring, pdo_pgsql, pdo_sqlite, pgsql, redis, xml, zip
           coverage: none
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
@@ -38,7 +39,50 @@ jobs:
         run: find app bootstrap config database routes tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Verify admin API routes
         run: php artisan route:list --path=api/v1/admin
-      - name: Run Laravel tests
+      - name: Run Laravel tests (SQLite)
+        run: php artisan test
+
+  backend-postgres:
+    name: Laravel integration tests (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: se_smart_pulsa_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d se_smart_pulsa_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: se_smart_pulsa_test
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: bcmath, curl, gd, intl, mbstring, pdo_pgsql, pgsql, xml, zip
+          coverage: none
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Run Laravel tests against PostgreSQL
         run: php artisan test
 
   frontend:

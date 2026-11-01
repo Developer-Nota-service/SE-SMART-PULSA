@@ -22,6 +22,11 @@ class ProductionIntegrationModeTest extends TestCase
         parent::setUp();
 
         $this->app->detectEnvironment(fn () => 'production');
+        config(['app.owner_admin' => [
+            'name' => 'Production Test Owner',
+            'email' => 'owner@example.test',
+            'phone' => '081234567890',
+        ]]);
     }
 
     public function test_digiflazz_never_sends_development_flag_from_production(): void

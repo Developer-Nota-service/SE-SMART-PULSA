@@ -99,6 +99,13 @@ return [
 
     'key' => env('APP_KEY'),
 
+    // Owner admin identity is injected only by the server environment.
+    'owner_admin' => [
+        'name' => env('OWNER_ADMIN_NAME'),
+        'email' => env('OWNER_ADMIN_EMAIL'),
+        'phone' => env('OWNER_ADMIN_PHONE'),
+    ],
+
     'previous_keys' => [
         ...array_filter(
             explode(',', (string) env('APP_PREVIOUS_KEYS', ''))

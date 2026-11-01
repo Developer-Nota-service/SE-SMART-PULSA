@@ -6,88 +6,57 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Pengembalian dana transaksi berbayar Midtrans yang gagal di supplier.
+ * Refund transaksi Midtrans yang gagal di supplier.
  *
- * Dana pembeli langsung dikreditkan ke saldo aplikasi — berlaku untuk **semua
- * tipe akun**, termasuk akun pribadi yang membayar langsung lewat Midtrans — dan
- * bisa ditarik lewat menu Penarikan. Midtrans tidak dipanggil untuk refund, jadi
- * pengembaliannya selesai saat itu juga dan tidak bergantung pada metode
- * pembayaran yang dipakai (VA/transfer bank tidak mendukung refund Midtrans).
- *
- * Bila kredit saldo gagal, refund ditandai `refund_status = failed` agar admin
- * mengembalikan dananya secara manual ke rekening pengguna. Kolom `refund_status`
- * membuat proses ini idempoten: webhook/cek berulang tidak pernah membayar dua
- * kali.
- *
- * Transaksi saldo (reseller) tidak disentuh di sini; pengembaliannya sudah
- * dilakukan `TransactionFulfillment::refundBalance()`.
+ * Saldo, ledger, dan status refund diselesaikan dalam satu transaksi database:
+ * proses yang mati di tengah tidak dapat meninggalkan kredit tanpa status
+ * settlement, dan webhook berulang tidak dapat mengkreditkan dua kali.
  */
 class TransactionRefund
 {
-    /**
-     * Kembalikan dana transaksi yang gagal. Aman dipanggil berkali-kali.
-     */
     public function refundFailed(object $transaction): void
     {
-        if ((string) ($transaction->payment_method ?? '') !== 'midtrans' || ($transaction->paid_at ?? null) === null) {
+        if ((string) ($transaction->payment_method ?? '') !== 'midtrans'
+            || ($transaction->paid_at ?? null) === null) {
             return;
         }
 
-        // Klaim baris ini dulu supaya dua proses (webhook + admin) tidak
-        // mengembalikan dana bersamaan.
-        $claimed = DB::table('transactions')
-            ->where('id', $transaction->id)
-            ->where(function ($query) {
-                $query->whereNull('refund_status')->orWhere('refund_status', 'failed');
-            })
-            ->update(['refund_status' => 'processing']);
+        $transactionId = (int) $transaction->id;
 
-        if ($claimed === 0) {
-            return;
-        }
-
-        if ($this->creditBalance((int) $transaction->id)) {
-            $this->settle((int) $transaction->id, 'balance', 'Dana dikembalikan ke saldo akun.');
-
-            return;
-        }
-
-        DB::table('transactions')->where('id', $transaction->id)->update([
-            'refund_status' => 'failed',
-            'refund_message' => 'Perlu pengembalian manual ke rekening pengguna.',
-        ]);
-    }
-
-    private function settle(int $transactionId, string $status, string $message): void
-    {
-        DB::table('transactions')->where('id', $transactionId)->update([
-            'refund_status' => $status,
-            'refund_message' => $message !== '' ? $message : null,
-            'refunded_at' => now(),
-        ]);
-    }
-
-    /**
-     * Kredit saldo pengguna sebesar nominal transaksi.
-     */
-    private function creditBalance(int $transactionId): bool
-    {
         try {
-            return DB::transaction(function () use ($transactionId): bool {
-                $current = DB::table('transactions')->where('id', $transactionId)->lockForUpdate()->first();
+            DB::transaction(function () use ($transactionId): void {
+                $current = DB::table('transactions')
+                    ->where('id', $transactionId)
+                    ->lockForUpdate()
+                    ->first();
 
-                if ($current === null || $current->refund_status !== 'processing') {
-                    return false;
+                if ($current === null
+                    || $current->payment_method !== 'midtrans'
+                    || $current->paid_at === null
+                    || ! in_array($current->refund_status, [null, 'failed'], true)) {
+                    return;
                 }
 
-                $user = DB::table('users')->where('id', $current->user_id)->lockForUpdate()->first();
+                DB::table('transactions')->where('id', $transactionId)->update([
+                    'refund_status' => 'processing',
+                    'refund_message' => null,
+                ]);
+
+                $user = DB::table('users')
+                    ->where('id', $current->user_id)
+                    ->lockForUpdate()
+                    ->first();
 
                 if ($user === null) {
-                    return false;
+                    DB::table('transactions')->where('id', $transactionId)->update([
+                        'refund_status' => 'failed',
+                        'refund_message' => 'Pengguna tidak ditemukan; perlu pemeriksaan admin.',
+                    ]);
+
+                    return;
                 }
 
-                // Biaya layanan Midtrans ikut dikembalikan: pembeli sudah membayarnya,
-                // jadi transaksi yang gagal tidak boleh menyisakan kerugian fee.
+                // Nominal transaksi dan biaya pembayaran yang benar-benar ditagihkan.
                 $refundAmount = (int) $current->amount + (int) ($current->fee_amount ?? 0);
                 $balance = (int) $user->balance + $refundAmount;
 
@@ -103,14 +72,27 @@ class TransactionRefund
                     'created_at' => now(),
                 ]);
 
-                return true;
-            });
+                DB::table('transactions')->where('id', $transactionId)->update([
+                    'refund_status' => 'balance',
+                    'refund_message' => 'Dana dikembalikan ke saldo akun.',
+                    'refunded_at' => now(),
+                ]);
+            }, 3);
         } catch (\Throwable $error) {
-            Log::error('Pengembalian dana ke saldo gagal: '.$error->getMessage(), [
+            Log::error('Pengembalian dana ke saldo gagal.', [
                 'transaction_id' => $transactionId,
+                'error' => $error->getMessage(),
             ]);
 
-            return false;
+            // Transaksi kredit di atas sudah rollback. Tandai agar admin dapat
+            // mencoba ulang atau menyelesaikan pengembalian secara manual.
+            DB::table('transactions')
+                ->where('id', $transactionId)
+                ->whereIn('refund_status', [null, 'failed', 'processing'])
+                ->update([
+                    'refund_status' => 'failed',
+                    'refund_message' => 'Kredit saldo gagal; perlu pemeriksaan admin.',
+                ]);
         }
     }
 }

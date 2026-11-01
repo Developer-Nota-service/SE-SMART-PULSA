@@ -132,6 +132,18 @@ class AuthLoginTest extends TestCase
         $this->assertSame('Permintaan lintas asal ditolak.', $response->getData(true)['message']);
     }
 
+    protected function tearDown(): void
+    {
+        // These tests build a minimal schema manually. Remove it so the
+        // PostgreSQL integration suite can run the real Laravel migrations.
+        Schema::dropIfExists('audit_logs');
+        Schema::dropIfExists('login_attempts');
+        Schema::dropIfExists('auth_sessions');
+        Schema::dropIfExists('users');
+
+        parent::tearDown();
+    }
+
     private function createAuthTables(): void
     {
         Schema::dropIfExists('login_attempts');
