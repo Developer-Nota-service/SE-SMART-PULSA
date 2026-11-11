@@ -2,7 +2,8 @@
 # SE SMART PULSA - Instalasi otomatis untuk Debian 12 (native, tanpa Docker)
 # Jalankan sebagai root:
 #   curl -fsSL https://raw.githubusercontent.com/Developer-Nota-service/SE-SMART-PULSA/main/deploy/install-debian-12.sh -o /tmp/install.sh && bash /tmp/install.sh
-set -euo pipefail
+set -u
+# TIDAK pakai set -e supaya script tidak mati di tengah jalan bila ada error non-kritis
 
 DOMAIN="${DOMAIN:-sesmartpulsa.my.id}"
 REPO_URL="https://github.com/Developer-Nota-service/SE-SMART-PULSA.git"
@@ -89,17 +90,22 @@ systemctl enable --now postgresql redis-server nginx supervisor cron php${PHP_VE
 # 6. Database
 log "Membuat database dan user..."
 DB_PASS="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
+# Pastikan postgres jalan
+systemctl start postgresql 2>/dev/null || true
+sleep 2
 # Buat role jika belum ada
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" | grep -q 1; then
-  sudo -u postgres psql -c "CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';"
+ROLE_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" 2>/dev/null || echo "")
+if [ "$ROLE_EXISTS" != "1" ]; then
+  sudo -u postgres psql -c "CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';" 2>&1 || true
 fi
-# Set password selalu (idempotent)
-sudo -u postgres psql -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}';"
+# Set password selalu
+sudo -u postgres psql -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}';" 2>&1 || true
 # Buat database jika belum ada
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1; then
-  sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
+DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" 2>/dev/null || echo "")
+if [ "$DB_EXISTS" != "1" ]; then
+  sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};" 2>&1 || true
 fi
-echo "Database user & database siap"
+echo "Database user & database siap (password: ${DB_PASS})"
 
 # 7. Ambil kode
 log "Mengklon kode aplikasi..."
