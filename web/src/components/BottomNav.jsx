@@ -19,7 +19,10 @@ export default function BottomNav() {
       : items
 
   return (
-    <nav className="bottom-nav" aria-label="Navigasi utama">
+      <nav
+        className={`bottom-nav${user?.role === 'admin' ? ' bottom-nav--admin' : ''}`}
+        aria-label="Navigasi utama"
+      >
       {links.map(({ to, label, Icon }) => (
         <NavLink
           key={to}

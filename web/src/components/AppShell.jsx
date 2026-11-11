@@ -1,5 +1,6 @@
 import { Link, Outlet } from 'react-router-dom'
 import BottomNav from './BottomNav.jsx'
+import DesktopNav from './DesktopNav.jsx'
 import NotificationBell from './NotificationBell.jsx'
 
 export default function AppShell() {
@@ -17,6 +18,8 @@ export default function AppShell() {
           <NotificationBell />
         </div>
       </header>
+
+      <DesktopNav />
 
       <main className="content">
         <Outlet />

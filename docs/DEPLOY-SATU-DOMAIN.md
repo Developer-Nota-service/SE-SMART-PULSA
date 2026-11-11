@@ -9,8 +9,10 @@ Aplikasi melayani frontend React dan API Laravel pada satu domain:
 | `/api/v1/*` | Laravel API |
 | `/up` | Health check Laravel |
 
-Untuk deployment langsung pada VPS Ubuntu, ikuti panduan utama:
-[DEPLOY-VPS-UBUNTU.md](DEPLOY-VPS-UBUNTU.md).
+Untuk instalasi native di VPS, pilih panduan sesuai sistem operasi:
+
+- Debian 12: [DEPLOY-VPS-DEBIAN-12.md](DEPLOY-VPS-DEBIAN-12.md)
+- Ubuntu 24.04: [DEPLOY-VPS-UBUNTU.md](DEPLOY-VPS-UBUNTU.md)
 
 ## Web server
 
