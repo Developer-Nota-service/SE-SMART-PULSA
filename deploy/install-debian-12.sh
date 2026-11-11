@@ -20,9 +20,22 @@ if [ "$(id -u)" -ne 0 ]; then echo "Jalankan sebagai root."; exit 1; fi
 
 export DEBIAN_FRONTEND=noninteractive
 
+# DNS fallback (jika DNS VPS tidak stabil)
+if ! grep -q '8.8.8.8' /etc/resolv.conf 2>/dev/null; then
+  echo "nameserver 8.8.8.8" > /etc/resolv.conf.d/head 2>/dev/null || true
+fi
+
+# Apt: timeout pendek + retry + paksa IPv4
+cat > /etc/apt/apt.conf.d/99sesp <<'EOF'
+Acquire::http::Timeout "20";
+Acquire::https::Timeout "20";
+Acquire::Retries "5";
+Acquire::ForceIPv4 "true";
+EOF
+
 # 1. Update sistem
 log "Memperbarui sistem..."
-apt update
+for i in 1 2 3; do apt update && break || sleep 5; done
 apt full-upgrade -y
 apt install -y ca-certificates curl gnupg lsb-release apt-transport-https \
   git unzip supervisor nginx cron certbot python3-certbot-nginx acl
@@ -41,19 +54,35 @@ curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/post
 echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
   > /etc/apt/sources.list.d/pgdg.list
 
-# 4. Node.js 22
-log "Menambah repositori Node.js 22..."
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+# 4. Node.js 22 (direct binary dari nodejs.org, lebih andal daripada nodesource)
+log "Menginstal Node.js 22..."
+NODE_VERSION="22.11.0"
+NODE_DIST="node-v${NODE_VERSION}-linux-x64"
+if ! command -v node >/dev/null 2>&1 || [ "$(node -v 2>/dev/null | cut -d. -f1 | tr -d v)" -lt 20 ]; then
+  for attempt in 1 2 3 4 5; do
+    if curl -fsSL --connect-timeout 20 --max-time 120 \
+      "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_DIST}.tar.xz" \
+      -o /tmp/node.tar.xz 2>/dev/null; then
+      break
+    fi
+    warn "  percobaan $attempt gagal, retry..."
+    sleep 3
+  done
+  [ -f /tmp/node.tar.xz ] || { echo "Gagal download Node.js"; exit 1; }
+  tar -C /usr/local --strip-components=1 -xf /tmp/node.tar.xz
+  rm -f /tmp/node.tar.xz
+  node -v && npm -v
+fi
 
 # 5. Install semua paket
-log "Menginstal PHP, PostgreSQL, Redis, Node.js..."
-apt update
+log "Menginstal PHP, PostgreSQL, Redis..."
+for i in 1 2 3; do apt update && break || sleep 5; done
 apt install -y \
   php${PHP_VER}-cli php${PHP_VER}-fpm php${PHP_VER}-common php${PHP_VER}-bcmath php${PHP_VER}-curl \
   php${PHP_VER}-gd php${PHP_VER}-intl php${PHP_VER}-mbstring php${PHP_VER}-opcache php${PHP_VER}-pgsql \
   php${PHP_VER}-redis php${PHP_VER}-xml php${PHP_VER}-zip \
   postgresql-16 postgresql-client-16 redis-server \
-  nodejs composer
+  composer
 
 systemctl enable --now postgresql redis-server nginx supervisor cron php${PHP_VER}-fpm
 
