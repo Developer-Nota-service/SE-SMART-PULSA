@@ -9,6 +9,7 @@ import HomePromos from '../components/HomePromos.jsx'
 import TransactionItem from '../components/TransactionItem.jsx'
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews.jsx'
 import { api } from '../lib/api.js'
+import { CATEGORIES } from '../lib/format.js'
 
 // Beranda menampilkan konten yang diatur admin (banner, promo, peringkat),
 // kategori, dan transaksi terbaru; daftar produk muncul di halaman kategori.
@@ -38,15 +39,35 @@ export default function HomePage() {
   }, [load])
 
   return (
-    <div className="stack">
+    <div className="stack home-page">
+      <section
+        className={`home-page__hero${dashboard?.banners?.length ? ' has-banner' : ''}`}
+        aria-label="Layanan SE Smart Pulsa"
+      >
+        <div className="home-welcome">
+          <span className="home-welcome__eyebrow">SE SMART PULSA · CEPAT · AMAN</span>
+          <h1>
+            Top Up &amp; Bayar Tagihan <span>Jadi Lebih Mudah.</span>
+          </h1>
+          <p>Semua kebutuhan digital Anda, praktis dalam satu tempat.</p>
+          <Link to="/kategori/pulsa" className="btn home-welcome__action">
+            Mulai Transaksi <span aria-hidden="true">→</span>
+          </Link>
+          <div className="home-welcome__proof" aria-label="Layanan terpercaya">
+            <span>Transaksi aman</span>
+            <span>Proses cepat</span>
+            <span>Layanan 24 jam</span>
+          </div>
+        </div>
+        <HomeBanners banners={dashboard?.banners} />
+      </section>
+
       <BalanceCard account={user} />
 
-      <HomeBanners banners={dashboard?.banners} />
-
-      <section>
+      <section className="home-page__categories">
         <div className="section-head">
           <h2 className="section-title">Kategori</h2>
-          <span className="section-hint">7 layanan</span>
+          <span className="section-hint">{CATEGORIES.length} layanan</span>
         </div>
         <CategoryGrid />
       </section>
