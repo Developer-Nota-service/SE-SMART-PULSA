@@ -89,16 +89,17 @@ systemctl enable --now postgresql redis-server nginx supervisor cron php${PHP_VE
 # 6. Database
 log "Membuat database dan user..."
 DB_PASS="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
-sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO \$\$
-BEGIN;
-CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';
-EXCEPTION WHEN duplicate_object THEN NULL;
-END
-\$\$;
-SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}')\gexec
-SQL
+# Buat role jika belum ada
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" | grep -q 1; then
+  sudo -u postgres psql -c "CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';"
+fi
+# Set password selalu (idempotent)
+sudo -u postgres psql -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}';"
+# Buat database jika belum ada
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | grep -q 1; then
+  sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
+fi
+echo "Database user & database siap"
 
 # 7. Ambil kode
 log "Mengklon kode aplikasi..."
