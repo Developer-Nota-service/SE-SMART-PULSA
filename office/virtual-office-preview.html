@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SE SMART PULSA — Virtual AI Office Preview</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1421;--panel:#142235;--line:#2a4059;--muted:#9eb1c8;--mint:#65e2c2;--gold:#f2c879}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 48% -10%,#203b59 0,#0b1421 55%);color:#edf5ff;font:14px Inter,system-ui,sans-serif}
+header{height:74px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;border-bottom:1px solid #25384d;background:#0b1421cc}
+.brand{font-weight:900;letter-spacing:.12em}.brand b{color:var(--mint)}.sub{color:var(--muted);font-size:12px;margin-top:4px}
+main{max-width:1440px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;align-items:end;gap:16px;margin-bottom:16px}.top h1{font-size:25px;margin:0}.top p{margin:5px 0 0;color:var(--muted)}.pill{border:1px solid #386456;color:#8ef0ce;border-radius:30px;padding:8px 12px;font-size:12px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px}.scene{border:1px solid var(--line);border-radius:18px;background:#101e2e;overflow:hidden;box-shadow:0 20px 60px #0005}
+.scenehead{display:flex;justify-content:space-between;padding:14px 17px;border-bottom:1px solid var(--line);color:#b9cbe0;font-size:12px}.world{position:relative;min-height:590px;overflow:hidden;background:linear-gradient(180deg,#152b3e,#102437 62%,#142b39)}
+.world:before{content:"";position:absolute;inset:0;background-image:linear-gradient(30deg,#ffffff08 1px,transparent 1px),linear-gradient(150deg,#ffffff08 1px,transparent 1px);background-size:68px 39px;background-position:center 15px;opacity:.7}
+.floor{position:absolute;left:7%;right:7%;top:16%;height:74%;background:#1c3a48;clip-path:polygon(50% 0,100% 27%,50% 100%,0 27%);border:1px solid #426b70;filter:drop-shadow(0 15px 15px #0008)}
+.zone{position:absolute;color:#9cb9c3;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.desk{position:absolute;width:112px;height:58px;background:#815c42;transform:skewY(-27deg) rotate(27deg);border:3px solid #bb9060;box-shadow:0 12px 0 #49372f,0 16px 18px #0006;border-radius:4px}
+.monitor{position:absolute;width:25px;height:19px;background:#20394b;border:3px solid #7ba7ad;left:42px;top:-17px;transform:skewY(27deg) rotate(-27deg);box-shadow:inset 0 0 8px #6de4db66}
+.person{position:absolute;width:28px;height:43px;z-index:4;image-rendering:pixelated;filter:drop-shadow(2px 4px 0 #0006);animation:bob 1.7s steps(2,end) infinite}
+.person .head{position:absolute;left:7px;top:0;width:15px;height:14px;background:#d99e76;border:2px solid #513b38}
+.person .hair{position:absolute;left:6px;top:-2px;width:17px;height:7px;background:var(--hair,#352b2b);z-index:2}
+.person .body{position:absolute;left:4px;top:14px;width:21px;height:20px;background:var(--shirt,#438b9b);border:2px solid #18313e}
+.person .legs{position:absolute;left:6px;top:33px;width:7px;height:9px;background:#34475b;box-shadow:9px 0 #34475b}
+.person .arm{position:absolute;left:0;top:18px;width:7px;height:13px;background:#d99e76;transform:rotate(25deg)}
+.person .tag{position:absolute;top:-17px;left:-14px;white-space:nowrap;font-size:9px;background:#0b1724;border:1px solid #456078;padding:3px 5px;border-radius:4px;color:#e9f6ff}
+@keyframes bob{50%{translate:0 -2px}}
+.plant{position:absolute;width:27px;height:37px;border-bottom:8px solid #76563f}.plant:before,.plant:after{content:"";position:absolute;background:#4ba77d;width:13px;height:20px;border-radius:90% 0;top:0;left:3px;transform:rotate(-25deg)}.plant:after{left:13px;transform:rotate(35deg)}
+.board{position:absolute;left:42%;top:9%;width:142px;height:82px;background:#254353;border:5px solid #805f43;box-shadow:0 6px #4b3b31;transform:skewY(-25deg) rotate(25deg);padding:9px;color:#cce8dc;font-size:9px;line-height:1.7}
+.side{display:flex;flex-direction:column;gap:14px}.panel{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:16px}.panel h2{font-size:14px;margin:0 0 13px}.agent{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #2a4059}.agent:last-child{border:0}.avatar{width:34px;height:38px;position:relative;background:#20384b;border:1px solid #46647b;border-radius:7px}.avatar:before{content:"";position:absolute;width:12px;height:12px;top:5px;left:10px;background:#d99e76;border:2px solid #493735}.avatar:after{content:"";position:absolute;width:19px;height:13px;top:20px;left:7px;background:var(--shirt,#4e9b9c);border:2px solid #193443}.agent strong{display:block;font-size:12px}.agent small{color:var(--muted);font-size:10px}.status{margin-left:auto;color:var(--mint);font-size:10px}.feed{font-size:11px;color:#bdcde0;line-height:1.55}.feed div{padding:8px 0;border-bottom:1px solid #2a4059}.feed span{color:var(--gold)}.footnote{color:#93a8bd;font-size:11px;margin:14px 2px 0;line-height:1.6}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.world{min-height:520px}.side{display:grid;grid-template-columns:1fr 1fr}}@media(max-width:560px){main{padding:13px}.side{grid-template-columns:1fr}.world{min-height:450px}.top{align-items:start;flex-direction:column}.scenehead{font-size:10px}.desk{scale:.75}.board{scale:.75}}
+</style></head>
+<body>
+<header><div><div class="brand">SE SMART <b>PULSA</b></div><div class="sub">VIRTUAL AI OFFICE · OPERATIONS CENTER</div></div><div class="pill">● PRATINJAU DESAIN</div></header>
+<main>
+<div class="top"><div><h1>Kantor Agent AI</h1><p>Ruang kerja virtual untuk tim AI SE SMART PULSA</p></div><div class="sub">MODE DESAIN · BELUM TERHUBUNG KE AGEN AKTIF</div></div>
+<div class="grid"><section class="scene"><div class="scenehead"><span>LANTAI UTAMA · RUANG OPERASIONAL</span><span>ISOMETRIC PIXEL OFFICE</span></div>
+<div class="world"><div class="floor"></div>
+<div class="zone" style="left:13%;top:19%">RUANG KOORDINASI</div><div class="zone" style="right:13%;top:25%">TIM TEKNIS</div><div class="zone" style="left:27%;bottom:12%">OPERASIONAL PPOB</div>
+<div class="board">PAPAN TUGAS<br>──────────<br>• Pantau server<br>• Cek transaksi<br>• Laporan harian</div>
+<div class="desk" style="left:16%;top:34%"><i class="monitor"></i></div><div class="person" style="left:23%;top:31%;--shirt:#367c88;--hair:#302a2a"><i class="head"></i><i class="hair"></i><i class="body"></i><i class="arm"></i><i class="legs"></i><span class="tag">HERMES</span></div>
+<div class="desk" style="right:15%;top:39%"><i class="monitor"></i></div><div class="person" style="right:23%;top:36%;--shirt:#526fbd;--hair:#49372c"><i class="head"></i><i class="hair"></i><i class="body"></i><i class="arm"></i><i class="legs"></i><span class="tag">MONITORING</span></div>
+<div class="desk" style="left:28%;bottom:24%"><i class="monitor"></i></div><div class="person" style="left:35%;bottom:26%;--shirt:#9b7545;--hair:#25252a"><i class="head"></i><i class="hair"></i><i class="body"></i><i class="arm"></i><i class="legs"></i><span class="tag">TEKNISI</span></div>
+<div class="desk" style="right:29%;bottom:20%"><i class="monitor"></i></div><div class="person" style="right:36%;bottom:23%;--shirt:#5d916b;--hair:#392b25"><i class="head"></i><i class="hair"></i><i class="body"></i><i class="arm"></i><i class="legs"></i><span class="tag">PENJUALAN</span></div>
+<div class="plant" style="left:11%;bottom:23%"></div><div class="plant" style="right:12%;bottom:17%"></div>
+</div></section>
+<aside class="side"><div class="panel"><h2>ANGGOTA TIM</h2>
+<div class="agent"><div class="avatar" style="--shirt:#367c88"></div><div><strong>Hermes</strong><small>Kepala Koordinator</small></div><span class="status">KOORD.</span></div>
+<div class="agent"><div class="avatar" style="--shirt:#526fbd"></div><div><strong>Agent Monitoring</strong><small>Server & website</small></div><span class="status">SIAP</span></div>
+<div class="agent"><div class="avatar" style="--shirt:#9b7545"></div><div><strong>Agent Teknisi</strong><small>Diagnosis & perbaikan</small></div><span class="status">SIAP</span></div>
+<div class="agent"><div class="avatar" style="--shirt:#5d916b"></div><div><strong>Agent Penjualan</strong><small>Operasional PPOB</small></div><span class="status">SIAP</span></div>
+<div class="agent"><div class="avatar" style="--shirt:#9b5d78"></div><div><strong>Agent Keamanan</strong><small>Keamanan sistem</small></div><span class="status">SIAP</span></div>
+<div class="agent"><div class="avatar" style="--shirt:#9b8b50"></div><div><strong>Agent Laporan</strong><small>Ringkasan & laporan</small></div><span class="status">SIAP</span></div>
+</div><div class="panel"><h2>AKTIVITAS KANTOR</h2><div class="feed"><div><span>DESAIN</span> · Tata ruang kantor sedang dipersiapkan</div><div><span>DESAIN</span> · Enam meja agen direncanakan</div><div><span>TAHAP BERIKUTNYA</span> · Hubungkan event Hermes dan agen</div></div></div></aside></div>
+<p class="footnote">Ini pratinjau visual statis untuk menyepakati gaya kantor. Label dan karakter di sini bukan bukti agen sedang aktif. Pada versi terhubung, status, gerakan, dan aktivitas akan berasal dari event nyata Hermes dan agen spesialis.</p>
+</main></body></html>
