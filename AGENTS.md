@@ -745,7 +745,7 @@ docker build -t se-smart-pulsa:deploy-check .
 `php artisan test` atau `./vendor/bin/phpunit` (sqlite in-memory, tanpa DB
 eksternal; `phpunit.xml` memakai `force="true"` pada `DB_*` sehingga environment
 container tidak bisa mengarahkannya ke database aplikasi). Suite integrasi
-PostgreSQL memakai `phpunit.pgsql.xml` (`php artisan test --configuration
+PostgreSQL memakai `phpunit.pgsql.xml` (`./vendor/bin/phpunit --configuration
 phpunit.pgsql.xml`) dan hanya boleh diarahkan ke database uji `*_test`. Gaya kode:
 `./vendor/bin/pint --test`. Test yang ada: aturan harga
 (`Pricing`), status gangguan produk (`ProductAvailability`), signature webhook
