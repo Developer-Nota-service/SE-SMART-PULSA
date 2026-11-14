@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Kantor Agent AI</title>
+  <meta name="description" content="Kantor virtual agent AI: pantau, beri tugas, dan kendalikan Claude Code di VPS Anda dari HP." />
+  <meta name="theme-color" content="#0a1422" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kantor AI" />
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">AI</span>
+        <div class="brand__text">
+          <strong>KANTOR AGENT AI</strong>
+          <small>VIRTUAL OFFICE · DIREKTUR</small>
+        </div>
+      </div>
+      <button class="conn" id="connPill" type="button" title="Status koneksi">
+        <i aria-hidden="true"></i><span id="connText">DEMO</span>
+      </button>
+    </header>
+
+    <main class="main">
+      <!-- KANTOR -->
+      <section class="view" data-view="office">
+        <div class="stats" id="stats" aria-live="polite"></div>
+
+        <section class="scene-card">
+          <div class="scene-head">
+            <span>LANTAI UTAMA · RUANG OPERASIONAL</span>
+            <span id="liveTag">DEMO</span>
+          </div>
+          <div class="scene" id="scene">
+            <div class="world" id="world">
+              <div class="ground" aria-hidden="true"></div>
+              <div class="zone" style="left:7%;top:9%">KOORDINASI</div>
+              <div class="zone" style="right:8%;top:15%">TIM TEKNIS</div>
+              <div class="zone" style="left:22%;bottom:9%">OPERASIONAL</div>
+              <div class="zone" style="right:24%;bottom:7%">LAPORAN</div>
+              <div class="board" id="board">PAPAN TUGAS<br />──────────<br />Memuat antrean…</div>
+              <div class="plant" style="left:7%;bottom:26%"></div>
+              <div class="plant" style="right:8%;bottom:20%"></div>
+              <div class="bubble" id="bubble" hidden></div>
+              <div id="stations"></div>
+            </div>
+          </div>
+          <div class="scene-foot">
+            <span id="sceneHint">Ketuk karakter untuk melihat detail</span>
+            <button class="ghost-btn" id="btnPrompt" type="button">Beri perintah</button>
+          </div>
+        </section>
+
+        <section class="panel" id="agentPanel"></section>
+      </section>
+
+      <!-- TUGAS -->
+      <section class="view" data-view="tasks" hidden>
+        <section class="panel">
+          <h2>Berikan tugas ke kantor</h2>
+          <form id="taskForm" class="form">
+            <label>Judul tugas
+              <input id="taskTitle" maxlength="160" placeholder="Contoh: periksa log Nginx" required autocomplete="off" />
+            </label>
+            <label>Detail dan hasil yang diharapkan
+              <textarea id="taskDetail" maxlength="2000" rows="3" placeholder="Jelaskan langkah atau hasil yang diinginkan"></textarea>
+            </label>
+            <label>Dikerjakan oleh
+              <select id="taskAgent"></select>
+            </label>
+            <button class="primary-btn" id="taskSubmit" type="submit">Masukkan ke antrean</button>
+          </form>
+          <p class="hint" id="taskHint">Tugas dikirim ke bridge di VPS. Eksekusi Claude Code mengikuti setelan bridge.</p>
+        </section>
+        <section class="panel">
+          <h2>Papan tugas · antrean</h2>
+          <div id="taskList" class="list"></div>
+        </section>
+      </section>
+
+      <!-- AKTIVITAS -->
+      <section class="view" data-view="feed" hidden>
+        <section class="panel">
+          <h2>Aktivitas terbaru</h2>
+          <div id="feed" class="feed"></div>
+        </section>
+        <section class="panel">
+          <h2>Status agen</h2>
+          <div id="agentList" class="agent-list"></div>
+        </section>
+      </section>
+
+      <!-- SETELAN -->
+      <section class="view" data-view="settings" hidden>
+        <section class="panel">
+          <h2>Hubungkan ke VPS</h2>
+          <p class="hint">Pasang bridge Kantor Agent AI di VPS Anda (lihat perintah di bawah), lalu isi alamat dan token bridge-nya. Setelah tersambung, kantor ini menampilkan sesi Claude Code yang benar-benar berjalan di sana.</p>
+          <form id="bridgeForm" class="form">
+            <label>Alamat bridge
+              <input id="bridgeUrl" inputmode="url" placeholder="https://kantor.domainanda.com" autocomplete="off" spellcheck="false" />
+            </label>
+            <label>Token bridge
+              <input id="bridgeToken" type="password" placeholder="token dari installer" autocomplete="off" spellcheck="false" />
+            </label>
+            <div class="row">
+              <button class="primary-btn" id="bridgeSave" type="submit">Uji &amp; simpan</button>
+              <button class="ghost-btn" id="bridgeDisconnect" type="button">Putuskan</button>
+            </div>
+          </form>
+          <p class="hint" id="bridgeMsg"></p>
+          <p class="hint">Percobaan memakai mode demo bawaan, jadi kantor tetap bisa dilihat tanpa VPS. Mode demo tidak menjalankan Claude Code.</p>
+        </section>
+
+        <section class="panel">
+          <h2>Pasang di HP</h2>
+          <p class="hint">Buka halaman ini di Chrome (Android) atau Safari (iPhone), lalu pilih <b>Instal aplikasi</b> / <b>Tambahkan ke Layar Utama</b>. Aplikasi berjalan layar penuh seperti aplikasi biasa.</p>
+          <button class="primary-btn" id="installBtn" type="button" hidden>Pasang aplikasi</button>
+        </section>
+
+        <section class="panel">
+          <h2>Server di VPS (Claude Code)</h2>
+          <ol class="steps">
+            <li>Unduh repo ini di VPS, lalu jalankan sebagai root:
+              <code>sudo bash office/install-kantor-bridge.sh</code></li>
+            <li>Installer membuat service systemd, token, dan (opsional) vhost Nginx + HTTPS.</li>
+            <li>Aktifkan eksekusi: <code>sudo bash office/install-kantor-bridge.sh --enable-run</code></li>
+            <li>Pasang hook Claude Code supaya aktivitas sesi tampil di kantor ini:
+              <code>node office/bridge/install-claude-hooks.mjs</code></li>
+          </ol>
+          <p class="hint">Panduan lengkap: <code>docs/KANTOR-OFFICE-MOBILE.md</code></p>
+        </section>
+
+        <section class="panel">
+          <h2>Tentang</h2>
+          <p class="hint" id="aboutText">Kantor Agent AI · memantau sesi Claude Code melalui bridge lokal di VPS.</p>
+        </section>
+      </section>
+    </main>
+
+    <nav class="tabbar" aria-label="Navigasi utama">
+      <button type="button" data-tab="office" class="active"><b aria-hidden="true">▣</b><span>Kantor</span></button>
+      <button type="button" data-tab="tasks"><b aria-hidden="true">▤</b><span>Tugas</span></button>
+      <button type="button" data-tab="feed"><b aria-hidden="true">◉</b><span>Aktivitas</span></button>
+      <button type="button" data-tab="settings"><b aria-hidden="true">⚙</b><span>Setelan</span></button>
+    </nav>
+  </div>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet__backdrop" data-close-sheet></div>
+    <div class="sheet__body" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="sheet__grab" aria-hidden="true"></div>
+      <div id="sheetContent"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

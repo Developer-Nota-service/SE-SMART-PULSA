@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext.jsx'
 import AppShell from './components/AppShell.jsx'
@@ -23,6 +23,16 @@ function Boot() {
       <p>Memuat SE SMART PULSA…</p>
     </div>
   )
+}
+
+// Kantor Agent AI adalah PWA statis (public/kantor), bukan halaman React.
+// Rute ini hanya memindahkan peramban ke berkasnya tanpa meminta login.
+function KantorRedirect() {
+  useEffect(() => {
+    window.location.replace('/kantor/')
+  }, [])
+
+  return <Boot />
 }
 
 function Protected() {
@@ -51,6 +61,7 @@ export default function App() {
     <Suspense fallback={<Boot />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/kantor" element={<KantorRedirect />} />
 
         <Route element={<Protected />}>
           <Route path="/" element={<HomePage />} />

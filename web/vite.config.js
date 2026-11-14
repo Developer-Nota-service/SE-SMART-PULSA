@@ -9,10 +9,25 @@ if (process.env.BASE44_PREVIEW_MODE === '1' && process.env.BASE44_SANDBOX_HOST_D
   previewHosts.push(`.${process.env.BASE44_SANDBOX_HOST_DOMAIN}`)
 }
 
+// Aplikasi Kantor Agent AI adalah PWA statis di public/kantor. Dev server Vite
+// tidak menebak index.html untuk direktori public, jadi `/kantor/` diarahkan ke
+// berkasnya (produksi dilayani Apache/artisan serve sebagai direktori biasa).
+function kantorIndex() {
+  return {
+    name: 'kantor-index',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url === '/kantor' || req.url === '/kantor/') req.url = '/kantor/index.html'
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig(({ command }) => ({
   // Produksi disajikan Laravel dari public/app, jadi aset memakai prefiks /app/.
   base: command === 'build' ? '/app/' : '/',
-  plugins: [react()],
+  plugins: [react(), kantorIndex()],
   build: {
     outDir: '../public/app',
     emptyOutDir: true,

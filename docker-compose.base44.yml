@@ -1,0 +1,154 @@
+# Lingkungan pengembangan Base44.
+#
+# Menjalankan source yang di-bind-mount (bukan image hasil build produksi):
+#   - web     : Vite dev server React di host port 3000 (entry preview)
+#   - laravel : php artisan serve di 8000, diproksi Vite lewat /api
+#   - office-bridge : bridge Kantor Agent AI (sisi VPS) untuk uji lokal
+#   - postgres: database lokal, tidak dipublikasikan ke host
+#
+# Mulai: docker compose -f docker-compose.base44.yml up -d --build
+
+name: se-smart-pulsa-base44
+
+x-app-env: &app-env
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: pulsa
+  DB_USERNAME: pulsa
+  DB_PASSWORD: pulsa_dev_only
+  APP_URL: https://3000-${BASE44_PUBLIC_HOST_SUFFIX:-localhost}
+
+x-app-files: &app-files
+  volumes:
+    - ./:/app
+  env_file:
+    - ./.env.base44-defaults
+    - /run/base44/app.env
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: on-failure
+    environment:
+      POSTGRES_DB: pulsa
+      POSTGRES_USER: pulsa
+      POSTGRES_PASSWORD: pulsa_dev_only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulsa -d pulsa"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  setup:
+    build:
+      context: .
+      dockerfile: docker/base44/php.Dockerfile
+    <<: *app-files
+    environment:
+      <<: *app-env
+    working_dir: /app
+    command:
+      - sh
+      - -ec
+      - |
+        composer install --no-interaction --prefer-dist --no-progress
+        php artisan migrate --force
+        php artisan db:seed --force
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  laravel:
+    build:
+      context: .
+      dockerfile: docker/base44/php.Dockerfile
+    <<: *app-files
+    environment:
+      <<: *app-env
+    working_dir: /app
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  web:
+    image: node:22
+    working_dir: /app
+    command:
+      - sh
+      - -ec
+      - |
+        npm --prefix web ci --no-audit --no-fund
+        exec npm --prefix web run dev
+    volumes:
+      - ./:/app
+    environment:
+      - VITE_API_PROXY=http://laravel:8000
+      # Vite dev server harus menerima host preview (sandbox id berubah-ubah).
+      - BASE44_PREVIEW_MODE
+      - BASE44_SANDBOX_HOST_DOMAIN
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+    ports:
+      - "3000:5173"
+    restart: on-failure
+    depends_on:
+      laravel:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+
+  # Bridge sisi VPS, dijalankan lokal untuk uji alur end-to-end.
+  # Di VPS sungguhan: office/install-kantor-bridge.sh (Claude Code asli).
+  # Di sandbox ini perintah Claude diganti /bin/echo (tidak ada Claude CLI).
+  office-bridge:
+    image: node:22
+    working_dir: /app
+    command:
+      - node
+      - office/bridge/agent-office-bridge.mjs
+      - --host
+      - 0.0.0.0
+      - --port
+      - "3334"
+      - --allow-origin
+      - "*"
+    volumes:
+      - ./:/app
+      - bridge-state:/data
+    environment:
+      - KANTOR_TOKEN=base44_sandbox_bridge_token
+      - KANTOR_STATE_DIR=/data
+      - KANTOR_WORKSPACE=/app
+      - KANTOR_ALLOW_RUN=1
+      - KANTOR_CLAUDE_CMD=/bin/echo
+    ports:
+      - "3334:3334"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3334/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+volumes:
+  pgdata:
+  bridge-state:

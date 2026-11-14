@@ -832,3 +832,49 @@ sedangkan di produksi (Apache + `public/.htaccess`) semuanya jatuh ke Laravel.
   Semua selain `/login` butuh sesi; `/admin` dan sub-rutenya hanya untuk akun
   `role = admin` — akun lain dialihkan ke beranda, dan menu Admin tidak muncul di
   navigasi bawah.
+
+## Kantor Agent AI (PWA + bridge VPS)
+
+Aplikasi terpisah dari alur PPOB: kantor pixel-art untuk memantau dan memberi
+tugas ke sesi Claude Code di VPS. **Tidak memakai sesi Laravel** dan tidak menulis
+ke database aplikasi — datanya ada di bridge.
+
+- `web/public/kantor/` — PWA mandiri (HTML/CSS/JS tanpa build tool). Vite dev
+  melayaninya di `/kantor/`; `npm run build` menyalinnya ke `public/app/kantor/`.
+  Manifest + service worker network-first; ikon dibuat
+  `office/tools/generate-kantor-icons.mjs` (PNG encoder bawaan Node, tanpa alat
+  gambar). Tanpa bridge aplikasi berjalan mode demo lokal.
+- `routes/web.php` — `GET /kantor` → redirect `/app/kantor/` untuk dipasang di HP.
+  File statis dilayani Apache/`artisan serve` sebelum route SPA, jadi `/app/kantor/`
+  tidak jatuh ke index React.
+- `office/bridge/agent-office-bridge.mjs` — server Node tanpa dependensi (HTTP,
+  state JSON atomik, runner `claude -p`, hook ingestion, token Bearer, CORS).
+  Semua `/api/*` wajib token; bind default `127.0.0.1`.
+- `office/install-kantor-bridge.sh` — installer VPS Debian/Ubuntu (user `kantor`,
+  `/opt/kantor-office`, `/etc/kantor-office/bridge.env`, unit `kantor-office`,
+  vhost Nginx opsional, hook opsional). Jangan mengubah SSH/firewall dari script
+  ini. `--enable-run` mengaktifkan eksekusi `claude -p` di `--workspace`.
+- `office/bridge/install-claude-hooks.mjs` — menggabungkan hook Claude Code
+  (SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Notification/Stop/
+  SessionEnd) ke `~/.claude/settings.json` dengan cadangan; `claude-hook.mjs`
+  tidak pernah menggagalkan sesi Claude.
+- Panduan pengguna: `docs/KANTOR-OFFICE-MOBILE.md`.
+
+Sandbox (`docker-compose.base44.yml`): service `office-bridge` di port host 3334
+memakai token `base44_sandbox_bridge_token`, `KANTOR_ALLOW_RUN=1`, dan
+`KANTOR_CLAUDE_CMD=/bin/echo` (sandbox tidak punya Claude CLI). Ini **hanya** untuk
+menguji alur aplikasi → bridge → tugas selesai; jangan menghardcode nilai ini ke
+konfigurasi produksi atau installer.
+
+Verifikasi cepat:
+
+```bash
+curl -s localhost:3334/health
+curl -s -H 'Authorization: Bearer base44_sandbox_bridge_token' localhost:3334/api/state
+curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/kantor/
+docker run --rm -v "$PWD":/w -w /w node:22 node --test office/bridge/bridge.test.mjs
+# Test PHP memakai sqlite in-memory; environment compose membawa DB pgsql, jadi
+# kosongkan dulu agar phpunit.xml bisa memakai sqlite:
+docker compose -f docker-compose.base44.yml exec -T laravel \
+  env -u DB_CONNECTION -u DB_DATABASE -u DB_HOST php artisan test
+```

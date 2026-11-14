@@ -1,0 +1,22 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/kantor/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d --build",
+  "notes": "Laravel + Vite (web). Kantor Agent AI PWA ada di /kantor/ (dev) dan /app/kantor/ (build). Bridge sisi VPS: office/bridge, dipasang dengan office/install-kantor-bridge.sh.",
+  "secrets": [
+    { "name": "MIDTRANS_SERVER_KEY", "description": "Server Key Midtrans (Dashboard Midtrans > Settings > Access Keys).", "requiredAtBoot": false },
+    { "name": "MIDTRANS_CLIENT_KEY", "description": "Client Key Midtrans untuk Snap.js.", "requiredAtBoot": false },
+    { "name": "DIGIFLAZZ_USERNAME", "description": "Username buyer API Digiflazz (Atur Koneksi > API).", "requiredAtBoot": false },
+    { "name": "DIGIFLAZZ_API_KEY", "description": "API key buyer Digiflazz.", "requiredAtBoot": false },
+    { "name": "DIGIFLAZZ_WEBHOOK_SECRET", "description": "Secret signature webhook Digiflazz.", "requiredAtBoot": false },
+    { "name": "DIGIFLAZZ_TESTING", "description": "true = mode development Digiflazz.", "requiredAtBoot": false },
+    { "name": "FONNTE_TOKEN", "description": "Token perangkat Fonnte untuk OTP WhatsApp.", "requiredAtBoot": false },
+    { "name": "MAIL_MAILER", "description": "Transport email (log/smtp/kirisan).", "requiredAtBoot": false },
+    { "name": "MAIL_HOST", "description": "Host SMTP pengirim email verifikasi.", "requiredAtBoot": false },
+    { "name": "MAIL_PORT", "description": "Port SMTP.", "requiredAtBoot": false },
+    { "name": "MAIL_USERNAME", "description": "Username SMTP.", "requiredAtBoot": false },
+    { "name": "MAIL_PASSWORD", "description": "Password / App Password SMTP.", "requiredAtBoot": false },
+    { "name": "MAIL_FROM_ADDRESS", "description": "Alamat pengirim email.", "requiredAtBoot": false },
+    { "name": "MAIL_FROM_NAME", "description": "Nama pengirim email.", "requiredAtBoot": false }
+  ]
+}
