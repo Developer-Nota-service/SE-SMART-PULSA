@@ -83,7 +83,7 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist
       - name: Run Laravel tests against PostgreSQL
-        run: php artisan test
+        run: php artisan test --configuration phpunit.pgsql.xml
 
   frontend:
     name: React production build

@@ -743,7 +743,11 @@ docker build -t se-smart-pulsa:deploy-check .
 ## Test otomatis
 
 `php artisan test` atau `./vendor/bin/phpunit` (sqlite in-memory, tanpa DB
-eksternal). Gaya kode: `./vendor/bin/pint --test`. Test yang ada: aturan harga
+eksternal; `phpunit.xml` memakai `force="true"` pada `DB_*` sehingga environment
+container tidak bisa mengarahkannya ke database aplikasi). Suite integrasi
+PostgreSQL memakai `phpunit.pgsql.xml` (`php artisan test --configuration
+phpunit.pgsql.xml`) dan hanya boleh diarahkan ke database uji `*_test`. Gaya kode:
+`./vendor/bin/pint --test`. Test yang ada: aturan harga
 (`Pricing`), status gangguan produk (`ProductAvailability`), signature webhook
 Digiflazz, dan validasi login.
 
@@ -873,8 +877,7 @@ curl -s localhost:3334/health
 curl -s -H 'Authorization: Bearer base44_sandbox_bridge_token' localhost:3334/api/state
 curl -s -o /dev/null -w '%{http_code}\n' localhost:3000/kantor/
 docker run --rm -v "$PWD":/w -w /w node:22 node --test office/bridge/bridge.test.mjs
-# Test PHP memakai sqlite in-memory; environment compose membawa DB pgsql, jadi
-# kosongkan dulu agar phpunit.xml bisa memakai sqlite:
-docker compose -f docker-compose.base44.yml exec -T laravel \
-  env -u DB_CONNECTION -u DB_DATABASE -u DB_HOST php artisan test
+# Test PHP selalu memakai sqlite in-memory: phpunit.xml memaksa DB_CONNECTION/
+# DB_DATABASE (force="true"), jadi DB_* dari environment container tidak dipakai.
+docker compose -f docker-compose.base44.yml exec -T laravel php artisan test
 ```
